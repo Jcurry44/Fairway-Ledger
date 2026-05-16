@@ -109,6 +109,12 @@
         reject(new Error("Your device does not support location."));
         return;
       }
+      // Modern browsers require a "secure context" (HTTPS or localhost) for
+      // geolocation. file:// and plain HTTP usually fail or get blocked.
+      if (typeof window !== "undefined" && window.isSecureContext === false) {
+        reject(new Error("INSECURE_CONTEXT"));
+        return;
+      }
       navigator.geolocation.getCurrentPosition(
         (position) => resolve(position),
         (error) => reject(error),
@@ -625,10 +631,13 @@
     return `${Math.round((made / total) * 100)}%`;
   }
 
-  // PGA Tour scratch baseline expected strokes by par and yardage.
+  // PGA Tour benchmark expected strokes by par and yardage.
   // Source: Mark Broadie, "Every Shot Counts" tour averages; intermediate
   // points interpolated linearly. Used as the anchor for Strokes Gained.
-  const SCRATCH_BASELINE_TABLES = {
+  // Note: this is a TOUR baseline, not a "scratch" baseline — tour pros
+  // average ~70-71, scratch golfers average ~73-74, so amateur SG vs tour
+  // skews more negative than vs true scratch.
+  const TOUR_BENCHMARK_TABLES = {
     3: [
       { yards: 100, strokes: 2.92 },
       { yards: 125, strokes: 2.97 },
@@ -671,8 +680,8 @@
     ]
   };
 
-  function scratchExpectedStrokes(par, yards) {
-    const table = SCRATCH_BASELINE_TABLES[par];
+  function tourExpectedStrokes(par, yards) {
+    const table = TOUR_BENCHMARK_TABLES[par];
     if (!table) return Number(par);
     const numericYards = Number(yards);
     if (!Number.isFinite(numericYards) || numericYards <= 0) {
@@ -694,7 +703,7 @@
 
   function holeStrokesGained(hole) {
     if (!hole || !Number.isFinite(hole.score) || hole.score <= 0) return null;
-    return scratchExpectedStrokes(hole.par, hole.yards) - hole.score;
+    return tourExpectedStrokes(hole.par, hole.yards) - hole.score;
   }
 
   function roundStrokesGained(round) {
@@ -1012,10 +1021,13 @@
   }
 
   function describeGeolocationError(error) {
+    if (error && error.message === "INSECURE_CONTEXT") {
+      return "Shot tracking needs a secure (https://) page. The deployed app on GitHub Pages works; opening index.html directly from disk does not.";
+    }
     if (!error || typeof error.code !== "number") return "Could not get location. Try again outdoors with a clear sky view.";
-    if (error.code === 1) return "Location permission denied. Enable it in your browser settings to track shots.";
-    if (error.code === 2) return "GPS unavailable right now. Try again in a moment.";
-    if (error.code === 3) return "GPS read timed out. Try again — sometimes the first read is slow.";
+    if (error.code === 1) return "Location permission denied. Enable it in your browser settings (or your phone's Settings → Safari/Chrome → Location) to track shots.";
+    if (error.code === 2) return "GPS unavailable right now. Try again in a moment — sometimes a cloudy sky or being indoors blocks the signal.";
+    if (error.code === 3) return "GPS read timed out. Try again — sometimes the first read is slow, especially indoors.";
     return error.message || "Could not get location.";
   }
 
@@ -1392,7 +1404,7 @@
       <div class="live-summary-card"><span>FIR</span><strong>${fairwayHoles.length ? percentage(fairwaysHit, fairwayHoles.length) : "--"}</strong></div>
       <div class="live-summary-card"><span>GIR</span><strong>${girMade ? percentage(girMade, entered.length) : "--"}</strong></div>
       <div class="live-summary-card"><span>Pen</span><strong>${penalties}</strong></div>
-      <div class="live-summary-card"><span>SG vs scratch</span><strong>${formatSigned(sgTotal)}</strong></div>
+      <div class="live-summary-card"><span>SG vs Tour</span><strong>${formatSigned(sgTotal)}</strong></div>
       <div class="live-summary-card accent"><span>Diff est.</span><strong>${differential === null ? "--" : differential.toFixed(1)}</strong></div>
     `;
   }
@@ -1915,7 +1927,7 @@
       const course = getCourse(group.courseId);
       const courseHole = course && course.holes.find((hole) => hole.number === group.number);
       const yards = courseHole ? Number(courseHole.yards || 0) : 0;
-      const expected = scratchExpectedStrokes(group.par, yards);
+      const expected = tourExpectedStrokes(group.par, yards);
       return { ...group, sgPerHole: expected - group.avgScore };
     });
     const bestSg = [...holeGroupsWithSg].sort((a, b) => b.sgPerHole - a.sgPerHole).slice(0, 3);
@@ -2001,7 +2013,7 @@
       <svg class="sg-trend-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Strokes Gained trend">
         <rect x="0" y="0" width="${width}" height="${height}" rx="8" fill="#fbfcfa"></rect>
         <line x1="20" y1="${zeroY}" x2="${width - 20}" y2="${zeroY}" stroke="#cfd9d2" stroke-width="1" stroke-dasharray="4 4"></line>
-        <text x="${width - 20}" y="${zeroY - 4}" text-anchor="end" font-size="10" font-weight="700" fill="#7a8780">scratch</text>
+        <text x="${width - 20}" y="${zeroY - 4}" text-anchor="end" font-size="10" font-weight="700" fill="#7a8780">tour baseline</text>
         <polyline points="${path}" fill="none" stroke="#2f6f9f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></polyline>
         ${circles}
       </svg>`;
@@ -2116,7 +2128,7 @@
 
     // 4. SG signal (optional, if we have it).
     if (sg && Number.isFinite(sg.total)) {
-      pieces.push(`Strokes Gained: ${formatSigned(sg.total)} vs PGA Tour scratch baseline.`);
+      pieces.push(`Strokes Gained: ${formatSigned(sg.total)} vs PGA Tour benchmark.`);
     }
 
     return pieces.join(" ");
@@ -3242,7 +3254,11 @@
         if (!imported || !Array.isArray(imported.courses) || !Array.isArray(imported.rounds)) {
           throw new Error("That file is not a Fairway Ledger export.");
         }
-        state = imported;
+        // Run imports through the same migration pipeline as loadState
+        // so older exports pick up new Deerwood layouts, hazards arrays,
+        // and any future normalization. Otherwise stale exports silently
+        // miss fields the rest of the app assumes exist.
+        state = ensureCourseDataShape(mergeNewDefaultCourses(imported));
         clearEditState({ rerender: false });
         const previousMeta = readBackupMeta();
         writeBackupMeta({

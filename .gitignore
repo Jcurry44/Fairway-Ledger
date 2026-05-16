@@ -10,3 +10,6 @@ fairway-ledger-*.json
 # Editor / IDE
 .vscode/
 .idea/
+
+# Local Claude Code preview config — per-environment, not shared
+.claude/
