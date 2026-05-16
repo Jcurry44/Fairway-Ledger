@@ -217,15 +217,93 @@
 
   function toHole(item) {
     if (Array.isArray(item)) {
-      return { number: item[0], par: item[1], yards: item[2], hcp: item[3] || null };
+      return { number: item[0], par: item[1], yards: item[2], hcp: item[3] || null, hazards: [] };
     }
     return {
       number: Number(item.number),
       label: item.label || String(item.number),
       par: Number(item.par),
       yards: Number(item.yards || 0),
-      hcp: item.hcp ? Number(item.hcp) : null
+      hcp: item.hcp ? Number(item.hcp) : null,
+      hazards: Array.isArray(item.hazards) ? item.hazards.map(normalizeHazard).filter(Boolean) : []
     };
+  }
+
+  const HAZARD_TYPES = [
+    { value: "water", label: "Water", icon: "💧" },
+    { value: "bunker", label: "Bunker", icon: "🪨" },
+    { value: "ob", label: "OB", icon: "🚫" },
+    { value: "trees", label: "Trees", icon: "🌲" },
+    { value: "hill", label: "Hill", icon: "📈" },
+    { value: "other", label: "Other", icon: "⚠️" }
+  ];
+
+  const HAZARD_SIDES = [
+    { value: "left", label: "Left" },
+    { value: "right", label: "Right" },
+    { value: "center", label: "Center" },
+    { value: "long", label: "Long" },
+    { value: "short", label: "Short" }
+  ];
+
+  function hazardTypeMeta(type) {
+    return HAZARD_TYPES.find((entry) => entry.value === type) || HAZARD_TYPES[HAZARD_TYPES.length - 1];
+  }
+
+  function hazardSideMeta(side) {
+    return HAZARD_SIDES.find((entry) => entry.value === side) || null;
+  }
+
+  function normalizeHazard(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    const type = HAZARD_TYPES.some((t) => t.value === raw.type) ? raw.type : "other";
+    const side = HAZARD_SIDES.some((s) => s.value === raw.side) ? raw.side : null;
+    const carryYards = Number.isFinite(Number(raw.carryYards)) ? Number(raw.carryYards) : null;
+    const startYards = Number.isFinite(Number(raw.startYards)) ? Number(raw.startYards) : null;
+    const note = typeof raw.note === "string" ? raw.note.trim() : "";
+    return {
+      id: typeof raw.id === "string" && raw.id ? raw.id : makeId("haz"),
+      type,
+      side,
+      carryYards,
+      startYards,
+      note
+    };
+  }
+
+  function renderHazardChip(hazard, { editable = false } = {}) {
+    const meta = hazardTypeMeta(hazard.type);
+    const sideMeta = hazardSideMeta(hazard.side);
+    const detailsParts = [];
+    if (sideMeta) detailsParts.push(sideMeta.label);
+    if (Number.isFinite(hazard.carryYards)) detailsParts.push(`${hazard.carryYards}y`);
+    const details = detailsParts.length ? `<span class="hazard-chip-details">${escapeHtml(detailsParts.join(" · "))}</span>` : "";
+    const noteHtml = hazard.note ? `<span class="hazard-chip-note">${escapeHtml(hazard.note)}</span>` : "";
+    const deleteBtn = editable ? `<button type="button" class="hazard-chip-delete" data-delete-hazard="${escapeHtml(hazard.id)}" aria-label="Delete hazard">×</button>` : "";
+    return `
+      <li class="hazard-chip hazard-chip-${meta.value}">
+        <span class="hazard-chip-icon" aria-hidden="true">${meta.icon}</span>
+        <span class="hazard-chip-body">
+          <span class="hazard-chip-type">${meta.label}</span>
+          ${details}
+          ${noteHtml}
+        </span>
+        ${deleteBtn}
+      </li>`;
+  }
+
+  function describeHazard(hazard) {
+    const parts = [];
+    const sideMeta = hazardSideMeta(hazard.side);
+    if (sideMeta) parts.push(sideMeta.label);
+    if (Number.isFinite(hazard.startYards) && Number.isFinite(hazard.carryYards)) {
+      parts.push(`${hazard.startYards}-${hazard.carryYards}y carry`);
+    } else if (Number.isFinite(hazard.carryYards)) {
+      parts.push(`${hazard.carryYards}y carry`);
+    } else if (Number.isFinite(hazard.startYards)) {
+      parts.push(`from ${hazard.startYards}y`);
+    }
+    return parts.join(" · ");
   }
 
   function normalizeCourse(course) {
@@ -294,22 +372,45 @@
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
       if (saved && Array.isArray(saved.courses) && Array.isArray(saved.rounds)) {
-        return mergeNewDefaultCourses(saved);
+        return ensureCourseDataShape(mergeNewDefaultCourses(saved));
       }
     } catch (error) {
       console.warn("Could not load saved golf data", error);
     }
-    return {
+    return ensureCourseDataShape({
       courses: structuredClone(sampleCourses),
       rounds: structuredClone(sampleRounds)
-    };
+    });
+  }
+
+  function ensureCourseDataShape(stateValue) {
+    if (!stateValue || !Array.isArray(stateValue.courses)) return stateValue;
+    stateValue.courses.forEach((course) => {
+      if (!Array.isArray(course.holes)) return;
+      course.holes.forEach((hole) => {
+        if (!Array.isArray(hole.hazards)) hole.hazards = [];
+        hole.hazards = hole.hazards.map(normalizeHazard).filter(Boolean);
+      });
+    });
+    return stateValue;
   }
 
   function mergeNewDefaultCourses(saved) {
     const defaultDeerwoodCourses = sampleCourses.filter((course) => isDeerwoodCourseId(course.id));
     const defaultDeerwoodById = new Map(defaultDeerwoodCourses.map((course) => [course.id, course]));
     const updatedCourses = saved.courses.map((course) => {
-      return defaultDeerwoodById.has(course.id) ? structuredClone(defaultDeerwoodById.get(course.id)) : course;
+      if (!defaultDeerwoodById.has(course.id)) return course;
+      const fresh = structuredClone(defaultDeerwoodById.get(course.id));
+      // Preserve any user-entered hazards from the existing course copy.
+      fresh.holes = fresh.holes.map((hole) => {
+        const existing = (course.holes || []).find((h) => h.number === hole.number);
+        const userHazards = existing && Array.isArray(existing.hazards) ? existing.hazards : null;
+        return {
+          ...hole,
+          hazards: userHazards && userHazards.length ? userHazards : (hole.hazards || [])
+        };
+      });
+      return fresh;
     });
     const existingCourseIds = new Set(updatedCourses.map((course) => course.id));
     const missingDefaultCourses = defaultDeerwoodCourses.filter((course) => {
@@ -901,6 +1002,7 @@
               <span>${hole.yards ? `${hole.yards} yds` : "no yardage"}</span>
               <span>HCP ${hole.hcp || "--"}</span>
             </div>
+            ${Array.isArray(hole.hazards) && hole.hazards.length ? `<ul class="hazard-chip-list hazard-chip-list-compact">${hole.hazards.map((h) => renderHazardChip(h)).join("")}</ul>` : ""}
           </div>
           <div class="card-score-row">
             <button type="button" class="card-score-shortcut" data-score-delta="-1" aria-label="Decrease score for ${escapeHtml(hole.label || `hole ${hole.number}`)}">−</button>
@@ -2009,12 +2111,14 @@
       };
     });
 
+    const courseHoleByNumber = new Map(course.holes.map((hole) => [hole.number, hole]));
     const holeStatsMap = new Map();
     courseRounds.forEach((round) => {
       round.holes.forEach((hole) => {
         if (!Number.isFinite(hole.score) || hole.score <= 0) return;
         let entry = holeStatsMap.get(hole.number);
         if (!entry) {
+          const courseHole = courseHoleByNumber.get(hole.number);
           entry = {
             number: hole.number,
             label: hole.label || `#${hole.number}`,
@@ -2022,7 +2126,8 @@
             yards: hole.yards,
             scores: [],
             sgs: [],
-            notes: []
+            notes: [],
+            hazards: courseHole && Array.isArray(courseHole.hazards) ? courseHole.hazards : []
           };
           holeStatsMap.set(hole.number, entry);
         }
@@ -2197,15 +2302,40 @@
     const holeGroups = getHoleGroups(rounds);
     const holeRows = course.holes.map((hole) => {
       const stats = holeGroups.find((group) => group.number === hole.number);
+      const hazards = Array.isArray(hole.hazards) ? hole.hazards : [];
+      const hazardCountLabel = hazards.length
+        ? `<span class="hazard-count">${hazards.length} hazard${hazards.length === 1 ? "" : "s"}</span>`
+        : `<span class="hazard-count hazard-count-empty">+ add hazard</span>`;
+      const chipsHtml = hazards.length
+        ? `<ul class="hazard-chip-list">${hazards.map((hazard) => renderHazardChip(hazard, { editable: true })).join("")}</ul>`
+        : `<p class="hazard-empty">No hazards recorded yet. Add water, bunkers, OB, or strategy notes that you want to see every time you play this hole.</p>`;
       return `
-        <div class="course-hole-row">
-          <strong>${escapeHtml(hole.label || `#${hole.number}`)}</strong>
-          <span>Par ${hole.par}</span>
-          <span>${hole.yards || "--"} yds</span>
-          <span>HCP ${hole.hcp || "--"}</span>
-          <span>${stats ? `${stats.avgScore.toFixed(2)} avg` : "-- avg"}</span>
-          <span>${stats ? `${formatSigned(stats.avgToPar)} to par` : "--"}</span>
-        </div>`;
+        <details class="course-hole-block" data-hole-number="${hole.number}">
+          <summary class="course-hole-row">
+            <strong>${escapeHtml(hole.label || `#${hole.number}`)}</strong>
+            <span>Par ${hole.par}</span>
+            <span>${hole.yards || "--"} yds</span>
+            <span>HCP ${hole.hcp || "--"}</span>
+            <span>${stats ? `${stats.avgScore.toFixed(2)} avg` : "-- avg"}</span>
+            <span>${stats ? `${formatSigned(stats.avgToPar)} to par` : "--"}</span>
+            ${hazardCountLabel}
+          </summary>
+          <div class="course-hole-hazards">
+            ${chipsHtml}
+            <form class="hazard-form" data-add-hazard data-hole-number="${hole.number}">
+              <select class="hazard-form-type" name="type" aria-label="Hazard type" required>
+                ${HAZARD_TYPES.map((t) => `<option value="${t.value}">${t.icon} ${t.label}</option>`).join("")}
+              </select>
+              <select class="hazard-form-side" name="side" aria-label="Side">
+                <option value="">Side…</option>
+                ${HAZARD_SIDES.map((s) => `<option value="${s.value}">${s.label}</option>`).join("")}
+              </select>
+              <input class="hazard-form-carry" name="carryYards" type="number" inputmode="numeric" min="0" max="700" placeholder="Carry yds">
+              <input class="hazard-form-note" name="note" type="text" maxlength="80" placeholder="Note (optional)">
+              <button class="hazard-form-add" type="submit">Add</button>
+            </form>
+          </div>
+        </details>`;
     }).join("");
 
     els.courseDetail.innerHTML = `
@@ -2602,7 +2732,10 @@
           const noteHtml = hole.latestNote
             ? `<p class="brief-list-note">"${escapeHtml(hole.latestNote.note)}" <span class="subtext">— ${escapeHtml(hole.latestNote.date)}</span></p>`
             : "";
-          return `<li><div class="brief-list-row"><strong>${escapeHtml(hole.label)}</strong> <span class="subtext">Par ${hole.par}</span><span class="score-chip bad">${formatSigned(hole.avgSg, 2)}/rd</span></div>${noteHtml}</li>`;
+          const hazardsHtml = Array.isArray(hole.hazards) && hole.hazards.length
+            ? `<ul class="hazard-chip-list hazard-chip-list-compact">${hole.hazards.map((h) => renderHazardChip(h)).join("")}</ul>`
+            : "";
+          return `<li><div class="brief-list-row"><strong>${escapeHtml(hole.label)}</strong> <span class="subtext">Par ${hole.par}</span><span class="score-chip bad">${formatSigned(hole.avgSg, 2)}/rd</span></div>${hazardsHtml}${noteHtml}</li>`;
         }).join("")
       : "<li class=\"subtext\">Need more SG-eligible rounds.</li>";
 
@@ -2611,7 +2744,10 @@
           const noteHtml = hole.latestNote
             ? `<p class="brief-list-note">"${escapeHtml(hole.latestNote.note)}" <span class="subtext">— ${escapeHtml(hole.latestNote.date)}</span></p>`
             : "";
-          return `<li><div class="brief-list-row"><strong>${escapeHtml(hole.label)}</strong> <span class="subtext">Par ${hole.par}</span><span class="score-chip">${formatSigned(hole.avgSg, 2)}/rd</span></div>${noteHtml}</li>`;
+          const hazardsHtml = Array.isArray(hole.hazards) && hole.hazards.length
+            ? `<ul class="hazard-chip-list hazard-chip-list-compact">${hole.hazards.map((h) => renderHazardChip(h)).join("")}</ul>`
+            : "";
+          return `<li><div class="brief-list-row"><strong>${escapeHtml(hole.label)}</strong> <span class="subtext">Par ${hole.par}</span><span class="score-chip">${formatSigned(hole.avgSg, 2)}/rd</span></div>${hazardsHtml}${noteHtml}</li>`;
         }).join("")
       : "<li class=\"subtext\">Need more SG-eligible rounds.</li>";
 
@@ -2788,6 +2924,57 @@
   }
 
   els.scorecardGrid.addEventListener("keydown", advanceScorecardOnEnter);
+
+  if (els.courseDetail) {
+    els.courseDetail.addEventListener("submit", (event) => {
+      const form = event.target.closest("[data-add-hazard]");
+      if (!form) return;
+      event.preventDefault();
+      const holeNumber = Number(form.dataset.holeNumber);
+      const formData = new FormData(form);
+      const hazard = normalizeHazard({
+        type: formData.get("type"),
+        side: formData.get("side") || null,
+        carryYards: formData.get("carryYards"),
+        note: formData.get("note")
+      });
+      if (!hazard) return;
+      const course = state.courses.find((c) => c.id === selectedCourseDetailId);
+      if (!course) return;
+      const hole = course.holes.find((h) => h.number === holeNumber);
+      if (!hole) return;
+      hole.hazards = Array.isArray(hole.hazards) ? [...hole.hazards, hazard] : [hazard];
+      saveState();
+      const openBlock = form.closest(".course-hole-block");
+      renderCourseDetail();
+      // Re-open the same hole's details after re-render.
+      if (openBlock) {
+        const reopened = els.courseDetail.querySelector(`.course-hole-block[data-hole-number="${holeNumber}"]`);
+        if (reopened) reopened.open = true;
+      }
+      showToast("Hazard added.");
+    });
+
+    els.courseDetail.addEventListener("click", (event) => {
+      const deleteBtn = event.target.closest("[data-delete-hazard]");
+      if (!deleteBtn) return;
+      event.preventDefault();
+      const hazardId = deleteBtn.dataset.deleteHazard;
+      const block = deleteBtn.closest(".course-hole-block");
+      if (!block) return;
+      const holeNumber = Number(block.dataset.holeNumber);
+      const course = state.courses.find((c) => c.id === selectedCourseDetailId);
+      if (!course) return;
+      const hole = course.holes.find((h) => h.number === holeNumber);
+      if (!hole || !Array.isArray(hole.hazards)) return;
+      hole.hazards = hole.hazards.filter((h) => h.id !== hazardId);
+      saveState();
+      renderCourseDetail();
+      const reopened = els.courseDetail.querySelector(`.course-hole-block[data-hole-number="${holeNumber}"]`);
+      if (reopened) reopened.open = true;
+      showToast("Hazard removed.");
+    });
+  }
 
   if (els.holePickerBackdrop) els.holePickerBackdrop.addEventListener("click", closeHolePicker);
   if (els.holePickerClose) els.holePickerClose.addEventListener("click", closeHolePicker);
