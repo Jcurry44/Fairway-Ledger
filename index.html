@@ -50,6 +50,8 @@
             <button class="primary-button tab-shortcut" type="button" data-tab-target="rounds">Add round</button>
           </section>
 
+          <section class="latest-narrative" id="latestNarrative" hidden aria-label="Latest round summary"></section>
+
           <section class="metrics-grid" aria-label="Score summary">
             <article class="metric-card">
               <span>Rounds</span>
@@ -134,6 +136,17 @@
                 <span class="panel-note">vs. PGA Tour scratch baseline</span>
               </div>
               <div id="strokesGainedPanel" class="strokes-gained-panel"></div>
+            </article>
+
+            <article class="panel wide-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Greens</p>
+                  <h2>Putting by Distance</h2>
+                </div>
+                <span class="panel-note">make % by first-putt length</span>
+              </div>
+              <div id="puttingPanel" class="putting-panel"></div>
             </article>
 
             <article class="panel wide-panel">

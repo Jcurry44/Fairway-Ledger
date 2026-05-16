@@ -109,6 +109,8 @@
     worstHoles: document.getElementById("worstHoles"),
     recentRounds: document.getElementById("recentRounds"),
     strokesGainedPanel: document.getElementById("strokesGainedPanel"),
+    puttingPanel: document.getElementById("puttingPanel"),
+    latestNarrative: document.getElementById("latestNarrative"),
     courseLookupForm: document.getElementById("courseLookupForm"),
     courseLookupQuery: document.getElementById("courseLookupQuery"),
     courseLookupResults: document.getElementById("courseLookupResults"),
@@ -647,6 +649,7 @@
       const fairwayCells = holes.map(fairwayInputCell).join("");
       const girCells = holes.map(girInputCell).join("");
       const penaltyCells = holes.map(penaltyInputCell).join("");
+      const firstPuttCells = holes.map(firstPuttInputCell).join("");
 
       return `
         <section class="scorecard-section">
@@ -661,6 +664,7 @@
             <div class="scorecard-label">HCP</div>${hcpCells}
             <div class="scorecard-label">Score</div>${scoreCells}
             <div class="scorecard-label">Putts</div>${puttCells}
+            <div class="scorecard-label">1st putt ft</div>${firstPuttCells}
             <div class="scorecard-label">Fairway</div>${fairwayCells}
             <div class="scorecard-label">GIR</div>${girCells}
             <div class="scorecard-label">Pen</div>${penaltyCells}
@@ -679,6 +683,10 @@
 
   function penaltyInputCell(hole) {
     return `<input class="penalty-input compact-input" data-hole="${hole.number}" type="number" min="0" max="8" inputmode="numeric" value="0" aria-label="${escapeHtml(hole.label || `Hole ${hole.number}`)} penalties">`;
+  }
+
+  function firstPuttInputCell(hole) {
+    return `<input class="first-putt-input compact-input" data-hole="${hole.number}" type="number" min="0" max="120" inputmode="numeric" placeholder="ft" aria-label="${escapeHtml(hole.label || `Hole ${hole.number}`)} first putt distance in feet">`;
   }
 
   function renderScorecardCardMode(course) {
@@ -716,6 +724,10 @@
             <label class="card-field">
               <span>Putts</span>
               ${puttsInputCell(hole)}
+            </label>
+            <label class="card-field">
+              <span>1st putt (ft)</span>
+              ${firstPuttInputCell(hole)}
             </label>
             <label class="card-field">
               <span>Fairway</span>
@@ -880,12 +892,14 @@
       const fairwayInput = els.scorecardGrid.querySelector(`.fairway-input[data-hole="${hole}"]`);
       const girInput = els.scorecardGrid.querySelector(`.gir-input[data-hole="${hole}"]`);
       const penaltyInput = els.scorecardGrid.querySelector(`.penalty-input[data-hole="${hole}"]`);
+      const firstPuttInput = els.scorecardGrid.querySelector(`.first-putt-input[data-hole="${hole}"]`);
       map.set(Number(hole), {
         score: scoreInput.value,
         putts: puttsInput ? puttsInput.value : "",
         fairway: fairwayInput ? fairwayInput.value : "",
         gir: girInput ? girInput.checked : false,
-        penalty: penaltyInput ? penaltyInput.value : ""
+        penalty: penaltyInput ? penaltyInput.value : "",
+        firstPutt: firstPuttInput ? firstPuttInput.value : ""
       });
     });
     return map;
@@ -900,6 +914,7 @@
       const fairwayInput = els.scorecardGrid.querySelector(`.fairway-input[data-hole="${hole}"]`);
       const girInput = els.scorecardGrid.querySelector(`.gir-input[data-hole="${hole}"]`);
       const penaltyInput = els.scorecardGrid.querySelector(`.penalty-input[data-hole="${hole}"]`);
+      const firstPuttInput = els.scorecardGrid.querySelector(`.first-putt-input[data-hole="${hole}"]`);
       if (scoreInput && values.score !== "") scoreInput.value = values.score;
       if (puttsInput && values.putts !== "") puttsInput.value = values.putts;
       if (fairwayInput && values.fairway && [...fairwayInput.options].some((option) => option.value === values.fairway)) {
@@ -907,6 +922,7 @@
       }
       if (girInput) girInput.checked = Boolean(values.gir);
       if (penaltyInput && values.penalty !== "") penaltyInput.value = values.penalty;
+      if (firstPuttInput && values.firstPutt !== "") firstPuttInput.value = values.firstPutt;
     });
   }
 
@@ -1028,10 +1044,13 @@
       const fairwayInput = els.scorecardGrid.querySelector(`.fairway-input[data-hole="${holeNumber}"]`);
       const girInput = els.scorecardGrid.querySelector(`.gir-input[data-hole="${holeNumber}"]`);
       const penaltyInput = els.scorecardGrid.querySelector(`.penalty-input[data-hole="${holeNumber}"]`);
+      const firstPuttInput = els.scorecardGrid.querySelector(`.first-putt-input[data-hole="${holeNumber}"]`);
       const scoreRaw = scoreInput.value.trim();
       const scoreValue = scoreRaw === "" ? null : Number(scoreRaw);
       const puttsValue = Number(puttsInput.value);
       const penaltyValue = Number(penaltyInput.value);
+      const firstPuttRaw = firstPuttInput ? firstPuttInput.value.trim() : "";
+      const firstPuttValue = firstPuttRaw === "" ? null : Number(firstPuttRaw);
       if (requireComplete) {
         if (!scoreValue || scoreValue < 1) {
           throw new Error(`Enter a score on ${scoreInput.dataset.label || `hole ${holeNumber}`} before saving.`);
@@ -1051,6 +1070,7 @@
         fairway: fairwayInput.value,
         gir: girInput.checked,
         penalties: Number.isFinite(penaltyValue) ? penaltyValue : 0,
+        firstPuttDistance: Number.isFinite(firstPuttValue) && firstPuttValue >= 0 ? firstPuttValue : null,
         note: getHoleNote(holeNumber)
       };
     });
@@ -1395,6 +1415,109 @@
     els.worstHoles.innerHTML = worst.length ? worst.map((group) => holeCard(group, true)).join("") : emptyState("No hole data yet.");
   }
 
+  const PUTT_DISTANCE_BUCKETS = [
+    { label: "Inside 3 ft", min: 0, max: 3 },
+    { label: "3-6 ft", min: 3, max: 6 },
+    { label: "6-10 ft", min: 6, max: 10 },
+    { label: "10-20 ft", min: 10, max: 20 },
+    { label: "20+ ft", min: 20, max: Infinity }
+  ];
+
+  function bucketForPuttDistance(distance) {
+    if (!Number.isFinite(distance) || distance < 0) return null;
+    return PUTT_DISTANCE_BUCKETS.find((bucket) => distance >= bucket.min && distance < bucket.max) || null;
+  }
+
+  function computePuttingStats(rounds) {
+    const buckets = PUTT_DISTANCE_BUCKETS.map((bucket) => ({
+      ...bucket,
+      attempts: 0,
+      makes: 0,
+      threeJacks: 0
+    }));
+    rounds.forEach((round) => {
+      round.holes.forEach((hole) => {
+        if (!Number.isFinite(hole.firstPuttDistance) || hole.firstPuttDistance < 0) return;
+        if (!Number.isFinite(hole.putts)) return;
+        const bucket = buckets.find((b) => hole.firstPuttDistance >= b.min && hole.firstPuttDistance < b.max);
+        if (!bucket) return;
+        bucket.attempts += 1;
+        if (Number(hole.putts) === 1) bucket.makes += 1;
+        if (Number(hole.putts) >= 3) bucket.threeJacks += 1;
+      });
+    });
+    const totalAttempts = buckets.reduce((sum, b) => sum + b.attempts, 0);
+    return { buckets, totalAttempts };
+  }
+
+  function renderPuttingPanel(rounds) {
+    if (!els.puttingPanel) return;
+    const { buckets, totalAttempts } = computePuttingStats(rounds);
+    if (!totalAttempts) {
+      els.puttingPanel.innerHTML = emptyState("No first-putt distances logged yet. Add them in the Add Round form to unlock make% by distance.");
+      return;
+    }
+    const headlineMakes = buckets.reduce((sum, b) => sum + b.makes, 0);
+    const totalThreeJacks = buckets.reduce((sum, b) => sum + b.threeJacks, 0);
+    const headlineRate = headlineMakes / totalAttempts;
+    const headline = `
+      <div class="putting-headline">
+        <div class="putting-kpi"><span>Total tracked greens</span><strong>${totalAttempts}</strong></div>
+        <div class="putting-kpi"><span>Overall make rate</span><strong>${(headlineRate * 100).toFixed(0)}%</strong></div>
+        <div class="putting-kpi"><span>Three-jacks</span><strong>${totalThreeJacks}</strong></div>
+      </div>`;
+    const rows = buckets.map((bucket) => {
+      const rate = bucket.attempts ? bucket.makes / bucket.attempts : 0;
+      const widthPct = bucket.attempts ? Math.max(4, rate * 100) : 0;
+      const meta = bucket.attempts
+        ? `${bucket.makes}/${bucket.attempts} made${bucket.threeJacks ? ` · ${bucket.threeJacks} three-jack${bucket.threeJacks === 1 ? "" : "s"}` : ""}`
+        : "No greens logged in this range yet.";
+      return `
+        <div class="putting-row${bucket.attempts === 0 ? " putting-row-empty" : ""}">
+          <div class="putting-row-top">
+            <span class="putting-row-label">${escapeHtml(bucket.label)}</span>
+            <strong class="putting-row-rate">${bucket.attempts ? `${(rate * 100).toFixed(0)}%` : "—"}</strong>
+          </div>
+          <div class="putting-row-track"><div class="putting-row-fill" style="width:${widthPct}%"></div></div>
+          <div class="putting-row-meta">${escapeHtml(meta)}</div>
+        </div>`;
+    }).join("");
+    els.puttingPanel.innerHTML = headline + `<div class="putting-rows">${rows}</div>`;
+  }
+
+  function renderLatestNarrative() {
+    if (!els.latestNarrative) return;
+    if (!state.rounds.length) {
+      els.latestNarrative.hidden = true;
+      els.latestNarrative.innerHTML = "";
+      return;
+    }
+    const latest = [...state.rounds].sort((a, b) => b.date.localeCompare(a.date))[0];
+    // Backfill narrative if a round was saved before this feature existed.
+    if (!latest.narrative) {
+      latest.narrative = generateRoundNarrative(latest, state.rounds);
+      if (latest.narrative) saveState();
+    }
+    if (!latest.narrative) {
+      els.latestNarrative.hidden = true;
+      els.latestNarrative.innerHTML = "";
+      return;
+    }
+    const course = getCourse(latest.courseId);
+    const courseLabel = course ? course.name : "Unknown course";
+    const totals = roundTotals(latest);
+    els.latestNarrative.hidden = false;
+    els.latestNarrative.innerHTML = `
+      <div class="latest-narrative-header">
+        <p class="eyebrow">Latest round</p>
+        <div class="latest-narrative-meta">
+          <strong>${totals.gross} (${formatSigned(totals.toPar, 0)})</strong>
+          <span>${escapeHtml(latest.date)} · ${escapeHtml(courseLabel)}</span>
+        </div>
+      </div>
+      <p class="latest-narrative-text">${escapeHtml(latest.narrative)}</p>`;
+  }
+
   function renderStrokesGained(rounds) {
     const sgRounds = rounds
       .map((round) => {
@@ -1533,6 +1656,116 @@
       </div>`;
   }
 
+  function generateRoundNarrative(round, allRounds) {
+    if (!round || !Array.isArray(round.holes) || !round.holes.length) return "";
+    const valid = round.holes.filter((hole) => Number.isFinite(hole.score) && hole.score > 0);
+    if (!valid.length) return "";
+
+    const course = getCourse(round.courseId);
+    const courseName = course ? course.name : "the course";
+    const totals = roundTotals(round);
+    const sg = roundStrokesGained(round);
+
+    const pieces = [];
+
+    // 1. Opening: score + course + how it compares to recent form.
+    const otherRounds = allRounds.filter((other) => other.id !== round.id);
+    const otherTotals = otherRounds
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 5)
+      .map(roundTotals);
+    const recentAvgToPar = otherTotals.length ? average(otherTotals.map((entry) => entry.toPar)) : null;
+    let opening = `Shot ${totals.gross} (${formatSigned(totals.toPar, 0)}) at ${courseName}`;
+    if (recentAvgToPar !== null && Number.isFinite(recentAvgToPar)) {
+      const delta = totals.toPar - recentAvgToPar;
+      if (delta <= -3) opening += ` — clearly better than your recent form (avg ${formatSigned(recentAvgToPar)}).`;
+      else if (delta <= -1) opening += ` — a bit better than your recent average (${formatSigned(recentAvgToPar)}).`;
+      else if (delta >= 3) opening += ` — tougher day than your recent form (avg ${formatSigned(recentAvgToPar)}).`;
+      else if (delta >= 1) opening += ` — a bit above your recent average (${formatSigned(recentAvgToPar)}).`;
+      else opening += ` — right around your recent average.`;
+    } else {
+      opening += `.`;
+    }
+    pieces.push(opening);
+
+    // 2. Theme: identify the dominant story (penalties, 3-putts, big leak hole, strength hole).
+    const penalties = valid.reduce((sum, hole) => sum + (Number(hole.penalties) || 0), 0);
+    const penaltyHoles = valid.filter((hole) => Number(hole.penalties) > 0).map((hole) => hole.label || `#${hole.number}`);
+    const threePuttHoles = valid.filter((hole) => Number(hole.putts) >= 3);
+    const fairwayHoles = valid.filter((hole) => hole.fairway && hole.fairway !== "na");
+    const fairwaysHit = fairwayHoles.filter((hole) => hole.fairway === "hit").length;
+    const fairwayRate = fairwayHoles.length ? fairwaysHit / fairwayHoles.length : null;
+    const girMade = valid.filter((hole) => hole.gir).length;
+    const girRate = valid.length ? girMade / valid.length : 0;
+    const totalPutts = valid.reduce((sum, hole) => sum + (Number(hole.putts) || 0), 0);
+    const avgPutts = totalPutts / valid.length;
+
+    const holesWithLoss = valid.map((hole) => ({ ...hole, loss: hole.score - hole.par }));
+    const worstHole = [...holesWithLoss].sort((a, b) => b.loss - a.loss)[0];
+    const bestHole = [...holesWithLoss].sort((a, b) => a.loss - b.loss)[0];
+
+    const themeBits = [];
+    if (penalties >= 2) {
+      const where = penaltyHoles.length ? ` (${penaltyHoles.slice(0, 3).map(escapeForText).join(", ")})` : "";
+      themeBits.push(`${penalties} penalty stroke${penalties === 1 ? "" : "s"}${where} hurt the round`);
+    }
+    if (threePuttHoles.length >= 2) {
+      themeBits.push(`${threePuttHoles.length} three-putts cost roughly ${threePuttHoles.length} stroke${threePuttHoles.length === 1 ? "" : "s"} on the greens`);
+    }
+    if (worstHole && worstHole.loss >= 3) {
+      themeBits.push(`a ${worstHole.score} on ${escapeForText(worstHole.label || `hole ${worstHole.number}`)} (${formatSigned(worstHole.loss, 0)}) was the standout leak`);
+    }
+    if (fairwayRate !== null && fairwayHoles.length >= 6 && fairwayRate >= 0.75) {
+      themeBits.push(`tee shots were dialed (${fairwaysHit}/${fairwayHoles.length} fairways)`);
+    }
+    if (fairwayRate !== null && fairwayHoles.length >= 6 && fairwayRate <= 0.35) {
+      themeBits.push(`driver missed often (${fairwaysHit}/${fairwayHoles.length} fairways)`);
+    }
+    if (girRate >= 0.45) {
+      themeBits.push(`iron play held up (${girMade}/${valid.length} GIR)`);
+    }
+    if (avgPutts <= 1.7 && valid.length >= 9) {
+      themeBits.push(`putter was hot (${avgPutts.toFixed(2)} putts/hole)`);
+    }
+    if (avgPutts >= 2.2 && valid.length >= 9) {
+      themeBits.push(`putting drifted (${avgPutts.toFixed(2)} putts/hole)`);
+    }
+    if (bestHole && bestHole.loss <= -1) {
+      const tag = bestHole.loss === -1 ? "birdie" : bestHole.loss === -2 ? "eagle" : "big number under";
+      themeBits.push(`a ${tag} on ${escapeForText(bestHole.label || `hole ${bestHole.number}`)} was the highlight`);
+    }
+
+    if (themeBits.length) {
+      const sentence = themeBits.slice(0, 2).join(" and ");
+      pieces.push(sentence.charAt(0).toUpperCase() + sentence.slice(1) + ".");
+    }
+
+    // 3. Counterfactual: drop the 3 worst holes.
+    const worstThree = [...holesWithLoss]
+      .filter((hole) => hole.loss > 0)
+      .sort((a, b) => b.loss - a.loss)
+      .slice(0, 3);
+    const savings = worstThree.reduce((sum, hole) => sum + hole.loss, 0);
+    if (savings >= 3 && worstThree.length >= 2) {
+      const adjusted = totals.gross - savings;
+      const labels = worstThree.map((hole) => escapeForText(hole.label || `#${hole.number}`)).join(", ");
+      pieces.push(`Without your three worst holes (${labels}) you'd have shot ${adjusted} — a ${savings}-stroke swing.`);
+    }
+
+    // 4. SG signal (optional, if we have it).
+    if (sg && Number.isFinite(sg.total)) {
+      pieces.push(`Strokes Gained: ${formatSigned(sg.total)} vs PGA Tour scratch baseline.`);
+    }
+
+    return pieces.join(" ");
+  }
+
+  function escapeForText(value) {
+    // Strings going into the narrative don't get HTML-escaped here because
+    // the renderer uses textContent. Returned as-is.
+    return String(value);
+  }
+
   function buildCourseBrief(courseId) {
     if (!courseId || courseId === DEERWOOD_COURSE_ID) return null;
     const course = getCourse(courseId);
@@ -1648,11 +1881,16 @@
         const sg = roundStrokesGained(round);
         const sgLabel = sg ? ` | SG ${formatSigned(sg.total)}` : "";
         const editingBadge = editingRoundId === round.id ? ' <span class="editing-pill">editing</span>' : "";
+        const narrative = round.narrative || (round.holes && round.holes.some((h) => Number.isFinite(h.score) && h.score > 0) ? generateRoundNarrative(round, state.rounds) : "");
+        const narrativeHtml = narrative
+          ? `<details class="round-row-summary"><summary>Summary</summary><p>${escapeHtml(narrative)}</p></details>`
+          : "";
         return `
           <div class="round-row${editingRoundId === round.id ? " editing" : ""}">
-            <div>
+            <div class="round-row-main">
               <strong>${totals.gross} (${formatSigned(totals.toPar, 0)})${editingBadge}</strong>
               <span class="subtext">${round.date} | ${escapeHtml(course ? course.name : "Unknown")}${sgLabel}</span>
+              ${narrativeHtml}
             </div>
             <div class="row-actions">
               <button type="button" data-edit-round="${round.id}">Edit</button>
@@ -2048,6 +2286,7 @@
     if (!els.roundCourse.value) els.roundCourse.value = DEERWOOD_COURSE_ID;
     renderScorecard(getSelectedRoundCourse());
     renderCourseBrief();
+    renderLatestNarrative();
     const rounds = getFilteredRounds();
     renderMetrics(rounds);
     renderHomeInsights(rounds);
@@ -2057,6 +2296,7 @@
     renderParStats(rounds);
     renderHoleLists(rounds);
     renderStrokesGained(rounds);
+    renderPuttingPanel(rounds);
     renderRecentRounds();
     updateBackupBadge();
     renderCourseList();
@@ -2287,9 +2527,11 @@
       const fairwayInput = els.scorecardGrid.querySelector(`.fairway-input[data-hole="${holeKey}"]`);
       const girInput = els.scorecardGrid.querySelector(`.gir-input[data-hole="${holeKey}"]`);
       const penaltyInput = els.scorecardGrid.querySelector(`.penalty-input[data-hole="${holeKey}"]`);
+      const firstPuttInput = els.scorecardGrid.querySelector(`.first-putt-input[data-hole="${holeKey}"]`);
       if (scoreInput && Number.isFinite(hole.score)) scoreInput.value = hole.score;
       if (puttsInput && Number.isFinite(hole.putts)) puttsInput.value = hole.putts;
       if (penaltyInput && Number.isFinite(hole.penalties)) penaltyInput.value = hole.penalties;
+      if (firstPuttInput && Number.isFinite(hole.firstPuttDistance)) firstPuttInput.value = hole.firstPuttDistance;
       if (fairwayInput && hole.fairway) {
         const hasOption = [...fairwayInput.options].some((option) => option.value === hole.fairway);
         if (hasOption) fairwayInput.value = hole.fairway;
@@ -2421,7 +2663,7 @@
           editingRoundId = null;
           throw new Error("Original round could not be found. Save again to create a new round.");
         }
-        state.rounds[existingIndex] = {
+        const updatedRound = {
           ...state.rounds[existingIndex],
           date,
           courseId: course.id,
@@ -2429,6 +2671,8 @@
           note,
           holes
         };
+        updatedRound.narrative = generateRoundNarrative(updatedRound, state.rounds);
+        state.rounds[existingIndex] = updatedRound;
         editingRoundId = null;
         resetHoleNotes();
         saveState();
@@ -2438,14 +2682,16 @@
         setActiveTab("home");
         showToast("Round updated.");
       } else {
-        state.rounds.push({
+        const newRound = {
           id: makeId("round"),
           date,
           courseId: course.id,
           tee: course.tee,
           note,
           holes
-        });
+        };
+        newRound.narrative = generateRoundNarrative(newRound, state.rounds);
+        state.rounds.push(newRound);
         resetHoleNotes();
         saveState();
         els.roundNote.value = "";
