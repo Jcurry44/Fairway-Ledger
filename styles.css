@@ -790,6 +790,15 @@ select:focus {
   align-items: center;
 }
 
+.scorecard.mode-card {
+  /* Grid-mode .scorecard uses overflow-x:auto + max-height for the wide */
+  /* 18-column scorecard. Card mode needs the page to scroll naturally so */
+  /* children stay within the viewport width. */
+  display: block;
+  max-height: none;
+  overflow: visible;
+}
+
 .scorecard.mode-card .scorecard-section {
   display: none;
 }
@@ -797,6 +806,13 @@ select:focus {
 .scorecard.mode-grid .scorecard-cards,
 .scorecard.mode-grid .scorecard-card-nav {
   display: none;
+}
+
+.scorecard-cards,
+.scorecard-card,
+.scorecard-card-nav {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .scorecard-cards {
@@ -904,7 +920,10 @@ select:focus {
 
 .card-secondary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  /* min(140px, 100%) prevents the grid from forcing its container wider */
+  /* than the viewport on narrow phones — it caps each column to the */
+  /* container width instead of the unconstrained 140px minimum. */
+  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
   gap: 12px;
 }
 
