@@ -177,6 +177,7 @@
 
               <div id="spotlightStats" class="spotlight-stats"></div>
               <div id="spotlightHistory" class="mini-chart"></div>
+              <div id="spotlightNotes" class="spotlight-notes"></div>
             </article>
 
             <article class="panel">
@@ -316,5 +317,17 @@
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <div id="holePickerOverlay" class="hole-picker-overlay" hidden>
+      <button id="holePickerBackdrop" class="hole-picker-backdrop" type="button" aria-label="Close hole picker"></button>
+      <div class="hole-picker-sheet" role="dialog" aria-modal="true" aria-labelledby="holePickerTitle">
+        <div class="hole-picker-handle" aria-hidden="true"></div>
+        <div class="hole-picker-header">
+          <h3 id="holePickerTitle">Jump to hole</h3>
+          <button id="holePickerClose" class="hole-picker-close" type="button" aria-label="Close">&times;</button>
+        </div>
+        <ul id="holePickerList" class="hole-picker-list"></ul>
+      </div>
+    </div>
   </body>
 </html>

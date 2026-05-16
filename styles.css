@@ -689,6 +689,32 @@ select:focus {
   margin-left: auto;
 }
 
+.brief-list-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.brief-list-note {
+  margin: 4px 0 0;
+  padding: 6px 10px;
+  background: rgba(255, 247, 227, 0.7);
+  border-left: 3px solid #e8c97a;
+  border-radius: 0 6px 6px 0;
+  color: #4a3503;
+  font-size: 0.82rem;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.brief-list-note .subtext {
+  margin-left: 4px;
+  font-style: normal;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
 .brief-counterfactual {
   margin: 14px 0 0;
   padding: 12px 14px;
@@ -883,6 +909,37 @@ select:focus {
   letter-spacing: 0.04em;
 }
 
+.card-position {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--line, #d6e2d9);
+  border-radius: 999px;
+  background: #f3f7f1;
+  color: var(--ink);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, transform 100ms ease;
+}
+
+.card-position:hover {
+  background: #e9f1e7;
+  border-color: #b8c8bd;
+}
+
+.card-position:active {
+  transform: scale(0.98);
+}
+
+.card-position-caret {
+  color: var(--green-dark, #15573c);
+  font-size: 0.8rem;
+}
+
 .card-headline {
   display: flex;
   flex-direction: column;
@@ -1000,84 +1057,371 @@ select:focus {
   height: 32px;
 }
 
+.card-note-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.card-note-input {
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 13px;
+  border: 1px solid var(--line, #d6e2d9);
+  border-radius: 10px;
+  background: #fbfdfa;
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 500;
+  font-family: inherit;
+  line-height: 1.5;
+  letter-spacing: normal;
+  text-transform: none;
+  resize: vertical;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.card-note-input::placeholder {
+  color: #9aab9d;
+  font-weight: 500;
+  font-style: italic;
+}
+
+.card-note-input:focus {
+  outline: none;
+  border-color: var(--green, #217a57);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(31, 122, 89, 0.15);
+}
+
+.spotlight-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.spotlight-section-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.spotlight-note-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.spotlight-note {
+  padding: 10px 12px;
+  border: 1px solid #e3ebe1;
+  border-radius: 10px;
+  background: #fbfdfa;
+}
+
+.spotlight-note-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.spotlight-note-meta strong {
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.spotlight-note-sg {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.spotlight-note-sg.good {
+  background: #d6eedf;
+  color: #15573c;
+}
+
+.spotlight-note-sg.bad {
+  background: #f8dad4;
+  color: #843c33;
+}
+
+.spotlight-note-text {
+  margin: 6px 0 0;
+  color: var(--ink);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.spotlight-note-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-style: italic;
+}
+
 .scorecard-card-nav {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 10px;
   margin-top: 14px;
 }
 
 .card-nav-button {
-  flex: 0 0 auto;
-  min-width: 96px;
-  min-height: 44px;
-  padding: 8px 14px;
-  border-radius: 8px;
+  flex: 1 1 0;
+  min-height: 48px;
+  padding: 10px 14px;
+  border-radius: 10px;
   border: 1px solid var(--line);
   background: #fff;
   color: var(--green-dark);
   font-weight: 800;
+  font-size: 0.95rem;
   cursor: pointer;
+  transition: transform 100ms ease, border-color 140ms ease, background 140ms ease;
 }
 
 .card-nav-button:hover {
   border-color: #a8b8ad;
 }
 
-.card-jump-strip {
-  flex: 1;
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  padding: 4px 2px;
-  scroll-behavior: smooth;
+.card-nav-button:active {
+  transform: scale(0.98);
 }
 
-.card-jump-strip::-webkit-scrollbar {
-  height: 4px;
-}
-
-.card-jump-strip::-webkit-scrollbar-thumb {
-  background: #cfdacf;
-  border-radius: 4px;
-}
-
-.card-jump-dot {
-  flex: 0 0 auto;
-  width: 36px;
-  min-width: 36px;
-  height: 36px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: #fff;
-  color: var(--ink);
-  font-size: 0.82rem;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.card-jump-dot:hover {
-  border-color: #a8b8ad;
-}
-
-.card-jump-dot.active {
-  background: var(--green);
-  border-color: var(--green);
+.card-nav-button-primary {
+  background: var(--green, #217a57);
+  border-color: var(--green, #217a57);
   color: #fff;
 }
 
+.card-nav-button-primary:hover {
+  background: var(--green-dark, #15573c);
+  border-color: var(--green-dark, #15573c);
+}
+
+.hole-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.hole-picker-overlay[hidden] {
+  display: none;
+}
+
+.hole-picker-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: rgba(8, 26, 21, 0.55);
+  cursor: pointer;
+  animation: hp-fade 180ms ease both;
+}
+
+.hole-picker-sheet {
+  position: relative;
+  width: min(520px, 100%);
+  max-height: min(78vh, 720px);
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -18px 50px rgba(8, 26, 21, 0.32);
+  animation: hp-slide-up 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hole-picker-handle {
+  width: 42px;
+  height: 4px;
+  border-radius: 999px;
+  background: #d6dfd9;
+  margin: 10px auto 0;
+}
+
+.hole-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 10px;
+}
+
+.hole-picker-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+.hole-picker-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: none;
+  background: #f1f5f0;
+  color: var(--ink);
+  font-size: 1.4rem;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.hole-picker-close:hover {
+  background: #e3ebe1;
+}
+
+.hole-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hp-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 140ms ease;
+}
+
+.hp-row:hover {
+  background: #f3f7f1;
+}
+
+.hp-row.active {
+  background: rgba(31, 122, 89, 0.1);
+  border-color: rgba(31, 122, 89, 0.35);
+}
+
+.hp-row-index {
+  font-weight: 800;
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.hp-row.active .hp-row-index {
+  color: var(--green-dark, #15573c);
+}
+
+.hp-row-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hp-row-label strong {
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.hp-row-label small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.hp-row-score {
+  min-width: 36px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-align: center;
+  background: #eef2eb;
+  color: var(--ink);
+}
+
+.hp-row-score-empty {
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.hp-row-score-under {
+  background: #d6eedf;
+  color: #15573c;
+}
+
+.hp-row-score-par {
+  background: #eef2eb;
+  color: var(--ink);
+}
+
+.hp-row-score-over {
+  background: #f8dad4;
+  color: #843c33;
+}
+
+body.hole-picker-open {
+  overflow: hidden;
+}
+
+@keyframes hp-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes hp-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (min-width: 720px) {
+  .hole-picker-overlay {
+    align-items: center;
+  }
+  .hole-picker-sheet {
+    border-radius: 18px;
+    max-height: min(80vh, 760px);
+    animation: hp-pop 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .hole-picker-handle {
+    display: none;
+  }
+  @keyframes hp-pop {
+    from { transform: scale(0.96); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+}
+
 @media (max-width: 640px) {
-  .scorecard-card-nav {
-    flex-wrap: wrap;
-  }
-  .card-jump-strip {
-    order: -1;
-    flex-basis: 100%;
-  }
-  .card-nav-button {
-    flex: 1 1 0;
-    min-width: 0;
-  }
   .card-score-row .score-input {
     flex-basis: 110px;
     min-height: 60px;

@@ -12,7 +12,26 @@
   let sampleCourses = [];
   let selectedCourseDetailId = null;
   let editingRoundId = null;
+  let pendingHoleNotes = {};
   let viewMode = readInitialViewMode();
+
+  function resetHoleNotes() {
+    pendingHoleNotes = {};
+  }
+
+  function setHoleNote(holeNumber, value) {
+    const key = String(holeNumber);
+    const trimmed = String(value || "").trim();
+    if (trimmed) {
+      pendingHoleNotes[key] = trimmed;
+    } else {
+      delete pendingHoleNotes[key];
+    }
+  }
+
+  function getHoleNote(holeNumber) {
+    return pendingHoleNotes[String(holeNumber)] || "";
+  }
 
   function readInitialViewMode() {
     const stored = typeof localStorage !== "undefined" ? localStorage.getItem(VIEW_MODE_KEY) : null;
@@ -81,6 +100,7 @@
     spotlightHole: document.getElementById("spotlightHole"),
     spotlightStats: document.getElementById("spotlightStats"),
     spotlightHistory: document.getElementById("spotlightHistory"),
+    spotlightNotes: document.getElementById("spotlightNotes"),
     trendChart: document.getElementById("trendChart"),
     handicapPanel: document.getElementById("handicapPanel"),
     courseStats: document.getElementById("courseStats"),
@@ -102,6 +122,10 @@
     headerActions: document.getElementById("headerActions"),
     headerActionsToggle: document.getElementById("headerActionsToggle"),
     headerActionsList: document.getElementById("headerActionsList"),
+    holePickerOverlay: document.getElementById("holePickerOverlay"),
+    holePickerBackdrop: document.getElementById("holePickerBackdrop"),
+    holePickerClose: document.getElementById("holePickerClose"),
+    holePickerList: document.getElementById("holePickerList"),
     toast: document.getElementById("toast")
   };
 
@@ -601,6 +625,11 @@
       input.addEventListener("input", updateRoundPreview);
       input.addEventListener("change", updateRoundPreview);
     });
+    els.scorecardGrid.querySelectorAll(".card-note-input").forEach((textarea) => {
+      textarea.addEventListener("input", () => {
+        setHoleNote(textarea.dataset.hole, textarea.value);
+      });
+    });
     if (viewMode === "card") wireCardModeBehavior();
     updateViewToggleLabel();
     updateRoundPreview();
@@ -668,7 +697,7 @@
       return `
         <article class="scorecard-card${index === 0 ? " active" : ""}" data-card-index="${index}" data-hole-number="${hole.number}">
           <div class="card-top">
-            <span class="card-position">${positionText}</span>
+            <button type="button" class="card-position" data-open-hole-picker aria-label="${positionText} — tap to jump to another hole">${positionText} <span class="card-position-caret" aria-hidden="true">▾</span></button>
           </div>
           <div class="card-headline">
             <h3 class="card-hole-label">${escapeHtml(hole.label || `Hole ${hole.number}`)}</h3>
@@ -701,67 +730,71 @@
               ${penaltyInputCell(hole)}
             </label>
           </div>
+          <label class="card-note-field">
+            <span>What happened on this hole?</span>
+            <textarea class="card-note-input" data-hole="${hole.number}" rows="2" placeholder="Drove left, chipped twice, 2-putt from 12ft… (tap the mic on your keyboard for voice)">${escapeHtml(getHoleNote(hole.number))}</textarea>
+          </label>
         </article>`;
     }).join("");
-
-    const jumpDots = course.holes.map((hole, index) => `
-      <button type="button" class="card-jump-dot${index === 0 ? " active" : ""}" data-card-jump="${index}" aria-label="Go to hole ${index + 1}">${index + 1}</button>
-    `).join("");
 
     return `
       <div class="scorecard-cards" data-active-index="0">${cards}</div>
       <div class="scorecard-card-nav">
         <button type="button" class="card-nav-button" data-card-nav="prev">← Prev</button>
-        <div class="card-jump-strip" role="tablist">${jumpDots}</div>
-        <button type="button" class="card-nav-button" data-card-nav="next">Next →</button>
+        <button type="button" class="card-nav-button card-nav-button-primary" data-card-nav="next">Next →</button>
       </div>`;
+  }
+
+  function setActiveCardIndex(index) {
+    const stack = els.scorecardGrid.querySelector(".scorecard-cards");
+    if (!stack) return;
+    const cards = [...stack.querySelectorAll(".scorecard-card")];
+    if (!cards.length) return;
+    const clamped = Math.max(0, Math.min(cards.length - 1, index));
+    cards.forEach((card, i) => card.classList.toggle("active", i === clamped));
+    stack.dataset.activeIndex = String(clamped);
+    const activeCard = cards[clamped];
+    if (activeCard) {
+      const scoreInput = activeCard.querySelector(".score-input");
+      if (scoreInput instanceof HTMLInputElement) {
+        scoreInput.focus({ preventScroll: true });
+        scoreInput.select();
+      }
+    }
+  }
+
+  function getCardCount() {
+    return els.scorecardGrid.querySelectorAll(".scorecard-card").length;
+  }
+
+  function getActiveCardIndex() {
+    const stack = els.scorecardGrid.querySelector(".scorecard-cards");
+    return stack ? Number(stack.dataset.activeIndex || "0") : 0;
   }
 
   function wireCardModeBehavior() {
     const stack = els.scorecardGrid.querySelector(".scorecard-cards");
     if (!stack) return;
-    const cards = [...stack.querySelectorAll(".scorecard-card")];
-    const dots = [...els.scorecardGrid.querySelectorAll(".card-jump-dot")];
     const navPrev = els.scorecardGrid.querySelector('[data-card-nav="prev"]');
     const navNext = els.scorecardGrid.querySelector('[data-card-nav="next"]');
 
-    function setActive(index) {
-      const clamped = Math.max(0, Math.min(cards.length - 1, index));
-      cards.forEach((card, i) => card.classList.toggle("active", i === clamped));
-      dots.forEach((dot, i) => dot.classList.toggle("active", i === clamped));
-      stack.dataset.activeIndex = String(clamped);
-      const activeCard = cards[clamped];
-      if (activeCard) {
-        const dot = dots[clamped];
-        if (dot && typeof dot.scrollIntoView === "function") {
-          dot.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
-        }
-        const scoreInput = activeCard.querySelector(".score-input");
-        if (scoreInput instanceof HTMLInputElement) {
-          scoreInput.focus({ preventScroll: true });
-          scoreInput.select();
-        }
-      }
-    }
-
-    function currentIndex() {
-      return Number(stack.dataset.activeIndex || "0");
-    }
-
-    if (navPrev) navPrev.addEventListener("click", () => setActive(currentIndex() - 1));
-    if (navNext) navNext.addEventListener("click", () => setActive(currentIndex() + 1));
-    dots.forEach((dot) => {
-      dot.addEventListener("click", () => setActive(Number(dot.dataset.cardJump)));
-    });
+    if (navPrev) navPrev.addEventListener("click", () => setActiveCardIndex(getActiveCardIndex() - 1));
+    if (navNext) navNext.addEventListener("click", () => setActiveCardIndex(getActiveCardIndex() + 1));
 
     stack.addEventListener("focusin", (event) => {
       const card = event.target.closest(".scorecard-card");
       if (!card) return;
       const index = Number(card.dataset.cardIndex);
-      if (Number.isFinite(index) && index !== currentIndex()) setActive(index);
+      if (Number.isFinite(index) && index !== getActiveCardIndex()) setActiveCardIndex(index);
     });
 
     stack.addEventListener("click", (event) => {
+      const positionButton = event.target.closest("[data-open-hole-picker]");
+      if (positionButton) {
+        event.preventDefault();
+        openHolePicker();
+        return;
+      }
       const shortcut = event.target.closest(".card-score-shortcut");
       if (!shortcut) return;
       const card = shortcut.closest(".scorecard-card");
@@ -776,6 +809,46 @@
       scoreInput.value = String(next);
       scoreInput.dispatchEvent(new Event("input", { bubbles: true }));
     });
+  }
+
+  function openHolePicker() {
+    const cards = [...els.scorecardGrid.querySelectorAll(".scorecard-card")];
+    if (!cards.length || !els.holePickerOverlay || !els.holePickerList) return;
+    const activeIndex = getActiveCardIndex();
+    els.holePickerList.innerHTML = cards.map((card, index) => {
+      const labelEl = card.querySelector(".card-hole-label");
+      const metaEl = card.querySelector(".card-hole-meta");
+      const scoreInput = card.querySelector(".score-input");
+      const par = scoreInput ? Number(scoreInput.dataset.par) : null;
+      const label = labelEl ? labelEl.textContent.trim() : `Hole ${index + 1}`;
+      const metaParts = metaEl ? [...metaEl.querySelectorAll("span")].map((span) => span.textContent.trim()).filter(Boolean) : [];
+      const meta = metaParts.join(" · ");
+      const scoreValue = scoreInput && scoreInput.value ? Number(scoreInput.value) : null;
+      const scoreText = scoreValue ? String(scoreValue) : "—";
+      let scoreStatus = "empty";
+      if (scoreValue && par) {
+        if (scoreValue < par) scoreStatus = "under";
+        else if (scoreValue === par) scoreStatus = "par";
+        else scoreStatus = "over";
+      }
+      return `
+        <li>
+          <button type="button" class="hp-row${index === activeIndex ? " active" : ""}" data-jump-hole="${index}">
+            <span class="hp-row-index">${index + 1}</span>
+            <span class="hp-row-label"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(meta)}</small></span>
+            <span class="hp-row-score hp-row-score-${scoreStatus}">${scoreText}</span>
+          </button>
+        </li>`;
+    }).join("");
+    els.holePickerOverlay.hidden = false;
+    document.body.classList.add("hole-picker-open");
+    if (els.holePickerClose) els.holePickerClose.focus();
+  }
+
+  function closeHolePicker() {
+    if (!els.holePickerOverlay) return;
+    els.holePickerOverlay.hidden = true;
+    document.body.classList.remove("hole-picker-open");
   }
 
   function updateViewToggleLabel() {
@@ -977,7 +1050,8 @@
         putts: Number.isFinite(puttsValue) ? puttsValue : 0,
         fairway: fairwayInput.value,
         gir: girInput.checked,
-        penalties: Number.isFinite(penaltyValue) ? penaltyValue : 0
+        penalties: Number.isFinite(penaltyValue) ? penaltyValue : 0,
+        note: getHoleNote(holeNumber)
       };
     });
   }
@@ -1502,23 +1576,29 @@
             par: hole.par,
             yards: hole.yards,
             scores: [],
-            sgs: []
+            sgs: [],
+            notes: []
           };
           holeStatsMap.set(hole.number, entry);
         }
         entry.scores.push(hole.score);
         const sg = holeStrokesGained(hole);
         if (sg !== null) entry.sgs.push(sg);
+        if (hole.note && String(hole.note).trim()) {
+          entry.notes.push({ date: round.date, note: String(hole.note).trim() });
+        }
       });
     });
     const holeStats = [...holeStatsMap.values()].map((entry) => {
       const avgScore = average(entry.scores);
+      const sortedNotes = [...entry.notes].sort((a, b) => b.date.localeCompare(a.date));
       return {
         ...entry,
         avgScore,
         avgToPar: avgScore - entry.par,
         avgSg: entry.sgs.length ? average(entry.sgs) : NaN,
-        rounds: entry.scores.length
+        rounds: entry.scores.length,
+        latestNote: sortedNotes[0] || null
       };
     });
 
@@ -1867,6 +1947,7 @@
     if (!course || !holeNumber) {
       els.spotlightStats.innerHTML = emptyState("No hole selected.");
       els.spotlightHistory.innerHTML = "";
+      if (els.spotlightNotes) els.spotlightNotes.innerHTML = "";
       return;
     }
 
@@ -1883,6 +1964,7 @@
     if (!holeRounds.length) {
       els.spotlightStats.innerHTML = emptyState("No saved rounds for this hole.");
       els.spotlightHistory.innerHTML = "";
+      if (els.spotlightNotes) els.spotlightNotes.innerHTML = "";
       return;
     }
 
@@ -1904,6 +1986,34 @@
       </div>`;
 
     els.spotlightHistory.innerHTML = miniChart(holeRounds, courseHole.par);
+
+    if (els.spotlightNotes) {
+      const notedRounds = [...holeRounds]
+        .filter((item) => item.hole.note && String(item.hole.note).trim())
+        .sort((a, b) => b.round.date.localeCompare(a.round.date))
+        .slice(0, 5);
+      if (notedRounds.length) {
+        const rows = notedRounds.map((item) => {
+          const sg = holeStrokesGained(item.hole);
+          const sgChip = sg !== null ? ` <span class="spotlight-note-sg ${sg >= 0 ? "good" : "bad"}">SG ${formatSigned(sg, 2)}</span>` : "";
+          return `
+            <li class="spotlight-note">
+              <div class="spotlight-note-meta">
+                <strong>${escapeHtml(item.round.date)}</strong>
+                <span>Score ${item.hole.score} (${formatSigned(item.hole.score - item.hole.par, 0)})</span>${sgChip}
+              </div>
+              <p class="spotlight-note-text">${escapeHtml(item.hole.note)}</p>
+            </li>`;
+        }).join("");
+        els.spotlightNotes.innerHTML = `
+          <p class="spotlight-section-title">Recent notes</p>
+          <ul class="spotlight-note-list">${rows}</ul>`;
+      } else {
+        els.spotlightNotes.innerHTML = `
+          <p class="spotlight-section-title">Recent notes</p>
+          <p class="spotlight-note-empty">No narrative notes captured for this hole yet. Add one in the card view next time you play.</p>`;
+      }
+    }
   }
 
   function miniChart(items, par) {
@@ -2036,11 +2146,21 @@
     }).join("");
 
     const leaksHtml = brief.leaks.length
-      ? brief.leaks.map((hole) => `<li><strong>${escapeHtml(hole.label)}</strong> <span class="subtext">Par ${hole.par}</span><span class="score-chip bad">${formatSigned(hole.avgSg, 2)}/rd</span></li>`).join("")
+      ? brief.leaks.map((hole) => {
+          const noteHtml = hole.latestNote
+            ? `<p class="brief-list-note">"${escapeHtml(hole.latestNote.note)}" <span class="subtext">— ${escapeHtml(hole.latestNote.date)}</span></p>`
+            : "";
+          return `<li><div class="brief-list-row"><strong>${escapeHtml(hole.label)}</strong> <span class="subtext">Par ${hole.par}</span><span class="score-chip bad">${formatSigned(hole.avgSg, 2)}/rd</span></div>${noteHtml}</li>`;
+        }).join("")
       : "<li class=\"subtext\">Need more SG-eligible rounds.</li>";
 
     const strengthsHtml = brief.strengths.length
-      ? brief.strengths.map((hole) => `<li><strong>${escapeHtml(hole.label)}</strong> <span class="subtext">Par ${hole.par}</span><span class="score-chip">${formatSigned(hole.avgSg, 2)}/rd</span></li>`).join("")
+      ? brief.strengths.map((hole) => {
+          const noteHtml = hole.latestNote
+            ? `<p class="brief-list-note">"${escapeHtml(hole.latestNote.note)}" <span class="subtext">— ${escapeHtml(hole.latestNote.date)}</span></p>`
+            : "";
+          return `<li><div class="brief-list-row"><strong>${escapeHtml(hole.label)}</strong> <span class="subtext">Par ${hole.par}</span><span class="score-chip">${formatSigned(hole.avgSg, 2)}/rd</span></div>${noteHtml}</li>`;
+        }).join("")
       : "<li class=\"subtext\">Need more SG-eligible rounds.</li>";
 
     const cf = brief.counterfactual;
@@ -2127,6 +2247,7 @@
     if (!editingRoundId && els.roundEntryTitle.textContent === "Add Round") return;
     editingRoundId = null;
     els.roundNote.value = "";
+    resetHoleNotes();
     updateEditModeUi();
     if (rerender) renderScorecard(getSelectedRoundCourse());
   }
@@ -2136,6 +2257,11 @@
     editingRoundId = round.id;
     els.roundDate.value = round.date || today;
     els.roundNote.value = round.note || "";
+
+    resetHoleNotes();
+    round.holes.forEach((hole) => {
+      if (hole && hole.note) setHoleNote(hole.number, hole.note);
+    });
 
     const deerwoodInfo = parseDeerwoodCourseId(round.courseId);
     if (deerwoodInfo) {
@@ -2178,16 +2304,18 @@
 
   els.roundCourse.addEventListener("change", () => {
     if (els.roundCourse.value === DEERWOOD_COURSE_ID) els.roundTee.value = "White";
+    resetHoleNotes();
     refreshRoundSetup();
   });
-  els.roundHoleCount.addEventListener("change", refreshRoundSetup);
-  els.roundLayout.addEventListener("change", refreshRoundSetup);
-  els.roundTee.addEventListener("change", refreshRoundSetup);
+  els.roundHoleCount.addEventListener("change", () => { resetHoleNotes(); refreshRoundSetup(); });
+  els.roundLayout.addEventListener("change", () => { resetHoleNotes(); refreshRoundSetup(); });
+  els.roundTee.addEventListener("change", () => { resetHoleNotes(); refreshRoundSetup(); });
   els.resetRoundButton.addEventListener("click", () => {
     if (editingRoundId) {
       clearEditState();
       showToast("Edit cancelled.");
     } else {
+      resetHoleNotes();
       renderScorecard(getSelectedRoundCourse());
     }
   });
@@ -2199,6 +2327,25 @@
   }
 
   els.scorecardGrid.addEventListener("keydown", advanceScorecardOnEnter);
+
+  if (els.holePickerBackdrop) els.holePickerBackdrop.addEventListener("click", closeHolePicker);
+  if (els.holePickerClose) els.holePickerClose.addEventListener("click", closeHolePicker);
+  if (els.holePickerList) {
+    els.holePickerList.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-jump-hole]");
+      if (!button) return;
+      const index = Number(button.dataset.jumpHole);
+      if (Number.isFinite(index)) {
+        setActiveCardIndex(index);
+        closeHolePicker();
+      }
+    });
+  }
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && els.holePickerOverlay && !els.holePickerOverlay.hidden) {
+      closeHolePicker();
+    }
+  });
 
   if (els.headerActionsToggle && els.headerActions && els.headerActionsList) {
     function closeHeaderActions() {
@@ -2283,6 +2430,7 @@
           holes
         };
         editingRoundId = null;
+        resetHoleNotes();
         saveState();
         updateEditModeUi();
         els.roundNote.value = "";
@@ -2298,6 +2446,7 @@
           note,
           holes
         });
+        resetHoleNotes();
         saveState();
         els.roundNote.value = "";
         renderAll();
@@ -2325,6 +2474,7 @@
       rounds: structuredClone(sampleRounds)
     };
     clearEditState({ rerender: false });
+    resetHoleNotes();
     saveState();
     renderAll();
     showToast("Sample data loaded.");
@@ -2334,6 +2484,7 @@
     if (!window.confirm("Clear all courses and rounds?")) return;
     state = { courses: [], rounds: [] };
     clearEditState({ rerender: false });
+    resetHoleNotes();
     saveState();
     renderAll();
     showToast("Data cleared.");
