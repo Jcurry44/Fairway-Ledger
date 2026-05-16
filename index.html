@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Fairway Ledger</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script src="./data/courses.js" defer></script>
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <span></span>
+          </div>
+          <div>
+            <p class="eyebrow">Personal golf analytics</p>
+            <h1>Fairway Ledger</h1>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="ghost-button" id="loadSampleButton" type="button">Sample data</button>
+          <button class="ghost-button" id="exportButton" type="button">Export<span class="export-badge" id="exportBadge" hidden></span></button>
+          <label class="file-button">
+            Import
+            <input id="importInput" type="file" accept="application/json">
+          </label>
+          <button class="danger-button" id="clearButton" type="button">Clear</button>
+        </div>
+      </header>
+
+      <main>
+        <nav class="app-tabs" aria-label="Primary">
+          <button class="tab-button active" type="button" data-tab-target="home" aria-selected="true">Home</button>
+          <button class="tab-button" type="button" data-tab-target="rounds" aria-selected="false">Add Round</button>
+          <button class="tab-button" type="button" data-tab-target="courses" aria-selected="false">Courses</button>
+        </nav>
+
+        <section class="tab-panel active" data-tab-panel="home">
+          <section class="home-hero" aria-label="Dashboard summary">
+            <div>
+              <p class="eyebrow">Player dashboard</p>
+              <h2>Scoring, course form, and handicap pulse</h2>
+            </div>
+            <button class="primary-button tab-shortcut" type="button" data-tab-target="rounds">Add round</button>
+          </section>
+
+          <section class="metrics-grid" aria-label="Score summary">
+            <article class="metric-card">
+              <span>Rounds</span>
+              <strong id="metricRounds">0</strong>
+            </article>
+            <article class="metric-card">
+              <span>Avg score</span>
+              <strong id="metricAverageScore">--</strong>
+            </article>
+            <article class="metric-card">
+              <span>Avg to par</span>
+              <strong id="metricAveragePar">--</strong>
+            </article>
+            <article class="metric-card">
+              <span>Best round</span>
+              <strong id="metricBestRound">--</strong>
+            </article>
+            <article class="metric-card">
+              <span>GIR</span>
+              <strong id="metricGir">--</strong>
+            </article>
+            <article class="metric-card">
+              <span>Avg SG</span>
+              <strong id="metricSg">--</strong>
+            </article>
+            <article class="metric-card handicap-card">
+              <span>Handicap est.</span>
+              <strong id="metricHandicap">--</strong>
+            </article>
+          </section>
+
+          <section id="homeInsights" class="home-insights" aria-label="Key insights"></section>
+
+          <section class="toolbar" aria-label="Stats filters">
+            <label>
+              Course
+              <select id="filterCourse"></select>
+            </label>
+            <label>
+              Tee
+              <select id="filterTee"></select>
+            </label>
+            <label>
+              Window
+              <select id="filterWindow">
+                <option value="all">All rounds</option>
+                <option value="last5">Last 5</option>
+                <option value="last10">Last 10</option>
+                <option value="last20">Last 20</option>
+                <option value="year">This year</option>
+              </select>
+            </label>
+          </section>
+
+          <section class="analytics-grid" aria-label="Analytics">
+            <article class="panel wide-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Trend</p>
+                  <h2>Recent Rounds</h2>
+                </div>
+              </div>
+              <div id="trendChart" class="chart-frame"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">WHS estimate</p>
+                  <h2>Handicap Calculator</h2>
+                </div>
+              </div>
+              <div id="handicapPanel" class="handicap-panel"></div>
+            </article>
+
+            <article class="panel wide-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Performance</p>
+                  <h2>Strokes Gained</h2>
+                </div>
+                <span class="panel-note">vs. PGA Tour scratch baseline</span>
+              </div>
+              <div id="strokesGainedPanel" class="strokes-gained-panel"></div>
+            </article>
+
+            <article class="panel wide-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Courses</p>
+                  <h2>Scoring By Course</h2>
+                </div>
+              </div>
+              <div id="courseStats" class="table-wrap"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Par type</p>
+                  <h2>Par 3 / 4 / 5</h2>
+                </div>
+              </div>
+              <div id="parStats" class="bar-list"></div>
+            </article>
+
+            <article class="panel spotlight-panel" aria-labelledby="spotlightTitle">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Hole view</p>
+                  <h2 id="spotlightTitle">Spotlight</h2>
+                </div>
+              </div>
+
+              <div class="compact-controls">
+                <label>
+                  Course
+                  <select id="spotlightCourse"></select>
+                </label>
+                <label>
+                  Hole
+                  <select id="spotlightHole"></select>
+                </label>
+              </div>
+
+              <div id="spotlightStats" class="spotlight-stats"></div>
+              <div id="spotlightHistory" class="mini-chart"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Targets</p>
+                  <h2>Best Holes</h2>
+                </div>
+              </div>
+              <div id="bestHoles" class="hole-list"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Leaks</p>
+                  <h2>Worst Holes</h2>
+                </div>
+              </div>
+              <div id="worstHoles" class="hole-list"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">History</p>
+                  <h2>Recent Scorecards</h2>
+                </div>
+              </div>
+              <div id="recentRounds" class="round-list"></div>
+            </article>
+          </section>
+        </section>
+
+        <section class="tab-panel" data-tab-panel="rounds">
+          <section class="workflow-grid">
+            <section class="panel entry-panel" aria-labelledby="roundEntryTitle">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Scorecard</p>
+                <h2 id="roundEntryTitle">Add Round</h2>
+              </div>
+              <div class="round-entry-actions">
+                <button class="ghost-button" id="viewToggleButton" type="button">Card view</button>
+                <button class="ghost-button" id="resetRoundButton" type="button">Reset</button>
+              </div>
+            </div>
+
+            <form id="roundForm">
+              <div class="form-grid">
+                <label>
+                  Date
+                  <input id="roundDate" type="date" required>
+                </label>
+                <label>
+                  Course
+                  <select id="roundCourse" required></select>
+                </label>
+                <label id="roundHoleCountField">
+                  Playing
+                  <select id="roundHoleCount">
+                    <option value="18">18 holes</option>
+                    <option value="9">9 holes</option>
+                  </select>
+                </label>
+                <label id="roundLayoutField">
+                  Layout
+                  <select id="roundLayout"></select>
+                </label>
+                <label id="roundTeeField">
+                  Tee
+                  <select id="roundTee">
+                    <option value="White">White</option>
+                    <option value="Blue">Blue</option>
+                  </select>
+                </label>
+                <label>
+                  Note
+                  <input id="roundNote" type="text" maxlength="80" placeholder="Windy front nine, new driver, match play">
+                </label>
+              </div>
+
+              <div id="roundCourseMeta" class="course-meta-strip"></div>
+              <section id="roundBrief" class="round-brief" hidden></section>
+              <div id="roundLiveSummary" class="round-live-summary"></div>
+              <div class="scorecard" id="scorecardGrid" aria-label="Hole scorecard"></div>
+
+              <div class="form-actions">
+                <button class="primary-button" id="roundSubmitButton" type="submit">Save round</button>
+                <span id="roundPreview" class="round-preview">--</span>
+              </div>
+            </form>
+          </section>
+          </section>
+        </section>
+
+        <section class="tab-panel" data-tab-panel="courses">
+          <section class="course-grid">
+          <article class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Setup</p>
+                <h2>Add Course</h2>
+              </div>
+            </div>
+            <form id="courseLookupForm" class="lookup-form">
+              <label>
+                Course search
+                <input id="courseLookupQuery" type="search" placeholder="Course name, city, state" required>
+              </label>
+              <button class="primary-button" type="submit">Find course</button>
+            </form>
+            <div id="courseLookupResults" class="lookup-results"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Library</p>
+                <h2>Courses</h2>
+              </div>
+            </div>
+            <div id="courseList" class="course-list"></div>
+          </article>
+          <article class="panel course-detail-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Course profile</p>
+                <h2>Details</h2>
+              </div>
+            </div>
+            <div id="courseDetail" class="course-detail"></div>
+          </article>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

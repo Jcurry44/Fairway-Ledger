@@ -1,0 +1,12 @@
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Personal data exports (don't accidentally publish your rounds)
+fairway-ledger-*.json
+
+# Editor / IDE
+.vscode/
+.idea/

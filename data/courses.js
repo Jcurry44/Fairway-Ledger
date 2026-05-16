@@ -1,0 +1,164 @@
+window.__golfCourseCatalog = [
+  {
+    "id": "ridgeview-blue",
+    "name": "Ridgeview Golf Club",
+    "tee": "Blue",
+    "rating": null,
+    "slope": null,
+    "holes": [
+      { "number": 1, "par": 4, "yards": 392, "hcp": null },
+      { "number": 2, "par": 4, "yards": 416, "hcp": null },
+      { "number": 3, "par": 3, "yards": 174, "hcp": null },
+      { "number": 4, "par": 5, "yards": 528, "hcp": null },
+      { "number": 5, "par": 4, "yards": 388, "hcp": null },
+      { "number": 6, "par": 4, "yards": 405, "hcp": null },
+      { "number": 7, "par": 3, "yards": 151, "hcp": null },
+      { "number": 8, "par": 5, "yards": 547, "hcp": null },
+      { "number": 9, "par": 4, "yards": 421, "hcp": null },
+      { "number": 10, "par": 4, "yards": 402, "hcp": null },
+      { "number": 11, "par": 4, "yards": 371, "hcp": null },
+      { "number": 12, "par": 3, "yards": 181, "hcp": null },
+      { "number": 13, "par": 5, "yards": 566, "hcp": null },
+      { "number": 14, "par": 4, "yards": 433, "hcp": null },
+      { "number": 15, "par": 4, "yards": 357, "hcp": null },
+      { "number": 16, "par": 3, "yards": 166, "hcp": null },
+      { "number": 17, "par": 5, "yards": 531, "hcp": null },
+      { "number": 18, "par": 4, "yards": 439, "hcp": null }
+    ]
+  },
+  {
+    "id": "lake-county-white",
+    "name": "Lake County Links",
+    "tee": "White",
+    "rating": null,
+    "slope": null,
+    "holes": [
+      { "number": 1, "par": 5, "yards": 501, "hcp": null },
+      { "number": 2, "par": 4, "yards": 364, "hcp": null },
+      { "number": 3, "par": 4, "yards": 391, "hcp": null },
+      { "number": 4, "par": 3, "yards": 143, "hcp": null },
+      { "number": 5, "par": 4, "yards": 415, "hcp": null },
+      { "number": 6, "par": 5, "yards": 522, "hcp": null },
+      { "number": 7, "par": 4, "yards": 347, "hcp": null },
+      { "number": 8, "par": 3, "yards": 171, "hcp": null },
+      { "number": 9, "par": 4, "yards": 402, "hcp": null },
+      { "number": 10, "par": 4, "yards": 377, "hcp": null },
+      { "number": 11, "par": 5, "yards": 536, "hcp": null },
+      { "number": 12, "par": 3, "yards": 156, "hcp": null },
+      { "number": 13, "par": 4, "yards": 428, "hcp": null },
+      { "number": 14, "par": 4, "yards": 382, "hcp": null },
+      { "number": 15, "par": 3, "yards": 188, "hcp": null },
+      { "number": 16, "par": 5, "yards": 548, "hcp": null },
+      { "number": 17, "par": 4, "yards": 404, "hcp": null },
+      { "number": 18, "par": 4, "yards": 396, "hcp": null }
+    ]
+  },
+  {
+    "id": "deerwood-buck-blue",
+    "name": "Deerwood Golf Course - Buck",
+    "tee": "Blue",
+    "rating": 35.8,
+    "slope": 119,
+    "holes": [
+      { "number": 1, "par": 5, "yards": 581, "hcp": 2 },
+      { "number": 2, "par": 3, "yards": 191, "hcp": 4 },
+      { "number": 3, "par": 4, "yards": 412, "hcp": 1 },
+      { "number": 4, "par": 4, "yards": 358, "hcp": 9 },
+      { "number": 5, "par": 4, "yards": 357, "hcp": 7 },
+      { "number": 6, "par": 4, "yards": 375, "hcp": 6 },
+      { "number": 7, "par": 5, "yards": 551, "hcp": 5 },
+      { "number": 8, "par": 3, "yards": 168, "hcp": 3 },
+      { "number": 9, "par": 4, "yards": 392, "hcp": 8 }
+    ]
+  },
+  {
+    "id": "deerwood-buck-white",
+    "name": "Deerwood Golf Course - Buck",
+    "tee": "White",
+    "rating": 35.3,
+    "slope": 117,
+    "holes": [
+      { "number": 1, "par": 5, "yards": 561, "hcp": 2 },
+      { "number": 2, "par": 3, "yards": 183, "hcp": 4 },
+      { "number": 3, "par": 4, "yards": 398, "hcp": 1 },
+      { "number": 4, "par": 4, "yards": 343, "hcp": 9 },
+      { "number": 5, "par": 4, "yards": 344, "hcp": 7 },
+      { "number": 6, "par": 4, "yards": 360, "hcp": 6 },
+      { "number": 7, "par": 5, "yards": 538, "hcp": 5 },
+      { "number": 8, "par": 3, "yards": 162, "hcp": 3 },
+      { "number": 9, "par": 4, "yards": 379, "hcp": 8 }
+    ]
+  },
+  {
+    "id": "deerwood-doe-blue",
+    "name": "Deerwood Golf Course - Doe",
+    "tee": "Blue",
+    "rating": 36.0,
+    "slope": 119,
+    "holes": [
+      { "number": 1, "par": 5, "yards": 504, "hcp": 8 },
+      { "number": 2, "par": 4, "yards": 365, "hcp": 7 },
+      { "number": 3, "par": 5, "yards": 537, "hcp": 4 },
+      { "number": 4, "par": 3, "yards": 201, "hcp": 3 },
+      { "number": 5, "par": 4, "yards": 371, "hcp": 6 },
+      { "number": 6, "par": 4, "yards": 365, "hcp": 5 },
+      { "number": 7, "par": 4, "yards": 435, "hcp": 1 },
+      { "number": 8, "par": 3, "yards": 153, "hcp": 9 },
+      { "number": 9, "par": 4, "yards": 425, "hcp": 2 }
+    ]
+  },
+  {
+    "id": "deerwood-doe-white",
+    "name": "Deerwood Golf Course - Doe",
+    "tee": "White",
+    "rating": 35.3,
+    "slope": 119,
+    "holes": [
+      { "number": 1, "par": 5, "yards": 486, "hcp": 8 },
+      { "number": 2, "par": 4, "yards": 353, "hcp": 7 },
+      { "number": 3, "par": 5, "yards": 521, "hcp": 4 },
+      { "number": 4, "par": 3, "yards": 194, "hcp": 3 },
+      { "number": 5, "par": 4, "yards": 358, "hcp": 6 },
+      { "number": 6, "par": 4, "yards": 325, "hcp": 5 },
+      { "number": 7, "par": 4, "yards": 421, "hcp": 1 },
+      { "number": 8, "par": 3, "yards": 147, "hcp": 9 },
+      { "number": 9, "par": 4, "yards": 412, "hcp": 2 }
+    ]
+  },
+  {
+    "id": "deerwood-fawn-blue",
+    "name": "Deerwood Golf Course - Fawn",
+    "tee": "Blue",
+    "rating": 34.6,
+    "slope": 118,
+    "holes": [
+      { "number": 1, "par": 5, "yards": 481, "hcp": 5 },
+      { "number": 2, "par": 4, "yards": 357, "hcp": 1 },
+      { "number": 3, "par": 3, "yards": 140, "hcp": 9 },
+      { "number": 4, "par": 4, "yards": 307, "hcp": 6 },
+      { "number": 5, "par": 5, "yards": 535, "hcp": 4 },
+      { "number": 6, "par": 4, "yards": 402, "hcp": 2 },
+      { "number": 7, "par": 4, "yards": 327, "hcp": 8 },
+      { "number": 8, "par": 3, "yards": 180, "hcp": 3 },
+      { "number": 9, "par": 4, "yards": 350, "hcp": 7 }
+    ]
+  },
+  {
+    "id": "deerwood-fawn-white",
+    "name": "Deerwood Golf Course - Fawn",
+    "tee": "White",
+    "rating": 33.9,
+    "slope": 115,
+    "holes": [
+      { "number": 1, "par": 5, "yards": 476, "hcp": 5 },
+      { "number": 2, "par": 4, "yards": 333, "hcp": 1 },
+      { "number": 3, "par": 3, "yards": 125, "hcp": 9 },
+      { "number": 4, "par": 4, "yards": 297, "hcp": 6 },
+      { "number": 5, "par": 5, "yards": 524, "hcp": 4 },
+      { "number": 6, "par": 4, "yards": 385, "hcp": 2 },
+      { "number": 7, "par": 4, "yards": 312, "hcp": 8 },
+      { "number": 8, "par": 3, "yards": 148, "hcp": 9 },
+      { "number": 9, "par": 4, "yards": 337, "hcp": 7 }
+    ]
+  }
+];
