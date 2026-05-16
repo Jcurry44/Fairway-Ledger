@@ -103,22 +103,56 @@
     return meters * 1.0936133;
   }
 
-  function getCurrentPositionAsync() {
+  // Subscribes to GPS updates via watchPosition, collecting samples and
+  // resolving with the most-accurate one once we have a "good enough" fix.
+  // This is significantly more reliable than getCurrentPosition for back-to-
+  // back shot captures because the browser often returns a cached position
+  // for getCurrentPosition calls made within a few seconds of each other.
+  function getFreshPositionAsync(timeoutMs = 9000, onProgress) {
     return new Promise((resolve, reject) => {
       if (!navigator || !navigator.geolocation) {
         reject(new Error("Your device does not support location."));
         return;
       }
-      // Modern browsers require a "secure context" (HTTPS or localhost) for
-      // geolocation. file:// and plain HTTP usually fail or get blocked.
       if (typeof window !== "undefined" && window.isSecureContext === false) {
         reject(new Error("INSECURE_CONTEXT"));
         return;
       }
-      navigator.geolocation.getCurrentPosition(
-        (position) => resolve(position),
-        (error) => reject(error),
-        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+      let best = null;
+      let resolved = false;
+      let watchId = null;
+      const startTime = Date.now();
+      const finish = (result, error) => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timer);
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        if (error) reject(error);
+        else resolve(result);
+      };
+      const timer = setTimeout(() => {
+        if (best) finish(best);
+        else finish(null, new Error("GPS timeout — try again outdoors with a clear sky view."));
+      }, timeoutMs);
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          if (!best || position.coords.accuracy < best.coords.accuracy) {
+            best = position;
+          }
+          if (typeof onProgress === "function") {
+            try { onProgress({ accuracy: best.coords.accuracy, elapsed: Date.now() - startTime }); } catch {}
+          }
+          // Resolve early once we have a confident sample (<= 12 m / ~13 yds)
+          // and have waited at least 1.5 seconds so initial fixes can settle.
+          if (best.coords.accuracy <= 12 && Date.now() - startTime >= 1500) {
+            finish(best);
+          }
+        },
+        (error) => {
+          if (best) finish(best);
+          else finish(null, error);
+        },
+        { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 }
       );
     });
   }
@@ -985,7 +1019,10 @@
     buttonElement.textContent = "📡 Getting GPS…";
     buttonElement.disabled = true;
     try {
-      const position = await getCurrentPositionAsync();
+      const position = await getFreshPositionAsync(9000, ({ accuracy }) => {
+        const yds = Math.round(metersToYards(accuracy));
+        buttonElement.textContent = `📡 ±${yds} yds, refining…`;
+      });
       const existing = getHoleShots(holeNumber);
       const next = {
         lat: position.coords.latitude,
@@ -1002,13 +1039,22 @@
       }
       appendHoleShot(holeNumber, next);
       refreshShotsBlock(holeNumber);
-      const accuracyNote = Number.isFinite(position.coords.accuracy)
-        ? ` (±${Math.round(metersToYards(position.coords.accuracy))} yds)`
-        : "";
+      const accuracyYds = Number.isFinite(position.coords.accuracy)
+        ? Math.round(metersToYards(position.coords.accuracy))
+        : null;
+      const accuracyNote = accuracyYds !== null ? ` (±${accuracyYds} yds)` : "";
       if (existing.length === 0) {
         showToast(`Start position captured${accuracyNote}.`);
       } else {
-        showToast(`Shot recorded: ${next.distanceYards} yds${accuracyNote}.`);
+        // If the computed distance is inside the combined GPS error window,
+        // the result is statistically meaningless — warn the user honestly.
+        const prev = existing[existing.length - 1];
+        const combinedErrorYds = Math.round(metersToYards((prev.accuracy || 0) + (position.coords.accuracy || 0)));
+        if (next.distanceYards < combinedErrorYds || next.distanceYards < 5) {
+          showToast(`Recorded ${next.distanceYards} yds — but GPS noise here is ±${combinedErrorYds} yds. Short shots (<30 yds) aren't reliable; use the × to delete if it's wrong.`);
+        } else {
+          showToast(`Shot recorded: ${next.distanceYards} yds${accuracyNote}.`);
+        }
       }
     } catch (error) {
       const message = describeGeolocationError(error);
