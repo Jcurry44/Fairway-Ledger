@@ -1867,12 +1867,15 @@
       return;
     }
     const latest = [...state.rounds].sort((a, b) => b.date.localeCompare(a.date))[0];
-    // Backfill narrative if a round was saved before this feature existed.
-    if (!latest.narrative) {
-      latest.narrative = generateRoundNarrative(latest, state.rounds);
-      if (latest.narrative) saveState();
+    // Always regenerate the headline narrative so any improvements to the
+    // generator (labeling fixes, new themes, etc.) propagate to the visible
+    // panel. Older rounds in Recent Scorecards keep their stored narrative.
+    const freshNarrative = generateRoundNarrative(latest, state.rounds);
+    if (freshNarrative && freshNarrative !== latest.narrative) {
+      latest.narrative = freshNarrative;
+      saveState();
     }
-    if (!latest.narrative) {
+    if (!freshNarrative) {
       els.latestNarrative.hidden = true;
       els.latestNarrative.innerHTML = "";
       return;
@@ -1889,7 +1892,7 @@
           <span>${escapeHtml(latest.date)} · ${escapeHtml(courseLabel)}</span>
         </div>
       </div>
-      <p class="latest-narrative-text">${escapeHtml(latest.narrative)}</p>`;
+      <p class="latest-narrative-text">${escapeHtml(freshNarrative)}</p>`;
   }
 
   function renderStrokesGained(rounds) {
