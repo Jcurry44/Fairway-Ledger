@@ -103,12 +103,12 @@
     return meters * 1.0936133;
   }
 
-  // Subscribes to GPS updates via watchPosition, collecting samples and
-  // resolving with the most-accurate one once we have a "good enough" fix.
-  // This is significantly more reliable than getCurrentPosition for back-to-
-  // back shot captures because the browser often returns a cached position
-  // for getCurrentPosition calls made within a few seconds of each other.
-  function getFreshPositionAsync(timeoutMs = 9000, onProgress) {
+  // Subscribes to GPS updates via watchPosition, collects samples, returns
+  // the MEDIAN position (robust to outliers) once we have enough confident
+  // samples or the timer expires. Median is much more reliable than "best
+  // accuracy" alone because a single fix can be a flier even with optimistic
+  // accuracy metadata.
+  function getFreshPositionAsync(timeoutMs = 10000, onProgress) {
     return new Promise((resolve, reject) => {
       if (!navigator || !navigator.geolocation) {
         reject(new Error("Your device does not support location."));
@@ -118,7 +118,7 @@
         reject(new Error("INSECURE_CONTEXT"));
         return;
       }
-      let best = null;
+      const samples = [];
       let resolved = false;
       let watchId = null;
       const startTime = Date.now();
@@ -130,26 +130,53 @@
         if (error) reject(error);
         else resolve(result);
       };
-      const timer = setTimeout(() => {
-        if (best) finish(best);
-        else finish(null, new Error("GPS timeout — try again outdoors with a clear sky view."));
-      }, timeoutMs);
+      const median = (arr) => {
+        const sorted = [...arr].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        return sorted.length % 2 === 0
+          ? (sorted[mid - 1] + sorted[mid]) / 2
+          : sorted[mid];
+      };
+      const finalize = () => {
+        if (!samples.length) {
+          finish(null, new Error("GPS timeout — try again outdoors with a clear sky view."));
+          return;
+        }
+        // Drop the first sample — it's often the stalest one the OS had cached.
+        const useful = samples.length >= 3 ? samples.slice(1) : samples;
+        const medianPos = {
+          coords: {
+            latitude: median(useful.map((s) => s.coords.latitude)),
+            longitude: median(useful.map((s) => s.coords.longitude)),
+            accuracy: median(useful.map((s) => s.coords.accuracy))
+          },
+          timestamp: Date.now(),
+          sampleCount: useful.length
+        };
+        finish(medianPos);
+      };
+      const timer = setTimeout(finalize, timeoutMs);
       watchId = navigator.geolocation.watchPosition(
         (position) => {
-          if (!best || position.coords.accuracy < best.coords.accuracy) {
-            best = position;
-          }
+          samples.push(position);
+          const bestAccuracySoFar = Math.min(...samples.map((s) => s.coords.accuracy));
           if (typeof onProgress === "function") {
-            try { onProgress({ accuracy: best.coords.accuracy, elapsed: Date.now() - startTime }); } catch {}
+            try { onProgress({
+              accuracy: bestAccuracySoFar,
+              elapsed: Date.now() - startTime,
+              sampleCount: samples.length
+            }); } catch {}
           }
-          // Resolve early once we have a confident sample (<= 12 m / ~13 yds)
-          // and have waited at least 1.5 seconds so initial fixes can settle.
-          if (best.coords.accuracy <= 12 && Date.now() - startTime >= 1500) {
-            finish(best);
+          // Early-resolve criteria, all required:
+          //  - at least 3 samples collected (so median has something to chew on)
+          //  - latest sample reports accuracy <= 8 m (~9 yds)
+          //  - we've spent at least 2.5 s collecting (GPS settle time)
+          if (samples.length >= 3 && position.coords.accuracy <= 8 && Date.now() - startTime >= 2500) {
+            finalize();
           }
         },
         (error) => {
-          if (best) finish(best);
+          if (samples.length) finalize();
           else finish(null, error);
         },
         { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 }
@@ -1019,9 +1046,9 @@
     buttonElement.textContent = "📡 Getting GPS…";
     buttonElement.disabled = true;
     try {
-      const position = await getFreshPositionAsync(9000, ({ accuracy }) => {
+      const position = await getFreshPositionAsync(10000, ({ accuracy, sampleCount }) => {
         const yds = Math.round(metersToYards(accuracy));
-        buttonElement.textContent = `📡 ±${yds} yds, refining…`;
+        buttonElement.textContent = `📡 ±${yds} yds · ${sampleCount} fix${sampleCount === 1 ? "" : "es"}`;
       });
       const existing = getHoleShots(holeNumber);
       const next = {
@@ -1042,15 +1069,20 @@
       const accuracyYds = Number.isFinite(position.coords.accuracy)
         ? Math.round(metersToYards(position.coords.accuracy))
         : null;
-      const accuracyNote = accuracyYds !== null ? ` (±${accuracyYds} yds)` : "";
+      const sampleNote = position.sampleCount ? `, ${position.sampleCount} fixes` : "";
+      const accuracyNote = accuracyYds !== null ? ` (±${accuracyYds} yds${sampleNote})` : "";
       if (existing.length === 0) {
         showToast(`Start position captured${accuracyNote}.`);
       } else {
         // If the computed distance is inside the combined GPS error window,
         // the result is statistically meaningless — warn the user honestly.
+        // Also warn if the accuracy itself is poor (>25 yds error) regardless
+        // of distance, since that means GPS is unreliable here at all.
         const prev = existing[existing.length - 1];
         const combinedErrorYds = Math.round(metersToYards((prev.accuracy || 0) + (position.coords.accuracy || 0)));
-        if (next.distanceYards < combinedErrorYds || next.distanceYards < 5) {
+        if (accuracyYds !== null && accuracyYds > 25) {
+          showToast(`Recorded ${next.distanceYards} yds but GPS accuracy here is poor (±${accuracyYds} yds). Move to clearer sky and consider re-marking.`);
+        } else if (next.distanceYards < combinedErrorYds || next.distanceYards < 5) {
           showToast(`Recorded ${next.distanceYards} yds — but GPS noise here is ±${combinedErrorYds} yds. Short shots (<30 yds) aren't reliable; use the × to delete if it's wrong.`);
         } else {
           showToast(`Shot recorded: ${next.distanceYards} yds${accuracyNote}.`);
