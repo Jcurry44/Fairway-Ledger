@@ -33,6 +33,90 @@
     return pendingHoleNotes[String(holeNumber)] || "";
   }
 
+  let pendingHoleShots = {};
+
+  function resetHoleShots() {
+    pendingHoleShots = {};
+  }
+
+  function getHoleShots(holeNumber) {
+    return pendingHoleShots[String(holeNumber)] || [];
+  }
+
+  function setHoleShots(holeNumber, shots) {
+    const key = String(holeNumber);
+    if (Array.isArray(shots) && shots.length) {
+      pendingHoleShots[key] = shots;
+    } else {
+      delete pendingHoleShots[key];
+    }
+  }
+
+  function appendHoleShot(holeNumber, shot) {
+    const key = String(holeNumber);
+    const existing = pendingHoleShots[key] || [];
+    pendingHoleShots[key] = [...existing, shot];
+    return pendingHoleShots[key];
+  }
+
+  function updateHoleShotAtIndex(holeNumber, index, partial) {
+    const key = String(holeNumber);
+    const existing = pendingHoleShots[key] || [];
+    if (!existing[index]) return existing;
+    const next = existing.map((shot, i) => (i === index ? { ...shot, ...partial } : shot));
+    pendingHoleShots[key] = next;
+    return next;
+  }
+
+  function deleteHoleShotAtIndex(holeNumber, index) {
+    const key = String(holeNumber);
+    const existing = pendingHoleShots[key] || [];
+    const next = existing.filter((_shot, i) => i !== index);
+    // Recompute distances since shot positions are relative to predecessors.
+    const rebuilt = next.map((shot, i) => {
+      if (i === 0) return { ...shot, distanceYards: null };
+      const prev = next[i - 1];
+      const meters = haversineMeters(prev.lat, prev.lon, shot.lat, shot.lon);
+      return { ...shot, distanceYards: Math.round(metersToYards(meters)) };
+    });
+    if (rebuilt.length) {
+      pendingHoleShots[key] = rebuilt;
+    } else {
+      delete pendingHoleShots[key];
+    }
+    return pendingHoleShots[key] || [];
+  }
+
+  function haversineMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  function metersToYards(meters) {
+    return meters * 1.0936133;
+  }
+
+  function getCurrentPositionAsync() {
+    return new Promise((resolve, reject) => {
+      if (!navigator || !navigator.geolocation) {
+        reject(new Error("Your device does not support location."));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (position) => resolve(position),
+        (error) => reject(error),
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+      );
+    });
+  }
+
   function readInitialViewMode() {
     const stored = typeof localStorage !== "undefined" ? localStorage.getItem(VIEW_MODE_KEY) : null;
     if (stored === "card" || stored === "grid") return stored;
@@ -689,6 +773,109 @@
     return `<input class="first-putt-input compact-input" data-hole="${hole.number}" type="number" min="0" max="120" inputmode="numeric" placeholder="ft" aria-label="${escapeHtml(hole.label || `Hole ${hole.number}`)} first putt distance in feet">`;
   }
 
+  const CLUB_OPTIONS = [
+    "Driver", "3W", "5W", "Hybrid",
+    "3i", "4i", "5i", "6i", "7i", "8i", "9i",
+    "PW", "GW", "SW", "LW",
+    "Putter", "Other"
+  ];
+
+  function renderShotsBlock(holeNumber) {
+    const shots = getHoleShots(holeNumber);
+    const header = `
+      <div class="card-shots-header">
+        <p class="card-shots-title">Shot tracker</p>
+        <button type="button" class="card-shot-button" data-mark-shot="${holeNumber}">
+          ${shots.length === 0 ? "📍 Mark starting position" : "📍 Mark next shot end"}
+        </button>
+      </div>`;
+    if (shots.length === 0) {
+      return header + `<p class="card-shots-empty">Tap before your first swing to capture your tee position, then tap again at your ball after each shot. Distances populate automatically.</p>`;
+    }
+    const rows = shots.map((shot, index) => {
+      const isStart = index === 0;
+      const distanceLabel = isStart
+        ? `<span class="card-shot-distance start">Start</span>`
+        : `<span class="card-shot-distance">${shot.distanceYards} yds</span>`;
+      const clubOptions = CLUB_OPTIONS.map((club) => `<option value="${escapeHtml(club)}"${club === shot.club ? " selected" : ""}>${escapeHtml(club)}</option>`).join("");
+      const clubPicker = isStart
+        ? `<span class="card-shot-club-static">Tee position</span>`
+        : `<select class="card-shot-club" data-shot-club="${holeNumber}" data-shot-index="${index}" aria-label="Club for shot ${index}"><option value="">Club…</option>${clubOptions}</select>`;
+      const accuracyMeta = Number.isFinite(shot.accuracy)
+        ? `<small class="card-shot-accuracy">±${Math.round(shot.accuracy)} m</small>`
+        : "";
+      return `
+        <li class="card-shot-row" data-shot-row="${index}">
+          <div class="card-shot-row-top">
+            <span class="card-shot-index">${isStart ? "Start" : `Shot ${index}`}</span>
+            ${distanceLabel}
+            <button type="button" class="card-shot-delete" data-delete-shot="${holeNumber}" data-shot-index="${index}" aria-label="Delete shot ${index}">×</button>
+          </div>
+          <div class="card-shot-row-bottom">
+            ${clubPicker}
+            ${accuracyMeta}
+          </div>
+        </li>`;
+    }).join("");
+    return header + `<ul class="card-shot-list">${rows}</ul>`;
+  }
+
+  async function handleMarkShot(holeNumber, buttonElement) {
+    if (buttonElement.dataset.busy === "true") return;
+    buttonElement.dataset.busy = "true";
+    const originalText = buttonElement.textContent;
+    buttonElement.textContent = "📡 Getting GPS…";
+    buttonElement.disabled = true;
+    try {
+      const position = await getCurrentPositionAsync();
+      const existing = getHoleShots(holeNumber);
+      const next = {
+        lat: position.coords.latitude,
+        lon: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        timestamp: Date.now(),
+        club: "",
+        distanceYards: null
+      };
+      if (existing.length > 0) {
+        const prev = existing[existing.length - 1];
+        const meters = haversineMeters(prev.lat, prev.lon, next.lat, next.lon);
+        next.distanceYards = Math.round(metersToYards(meters));
+      }
+      appendHoleShot(holeNumber, next);
+      refreshShotsBlock(holeNumber);
+      const accuracyNote = Number.isFinite(position.coords.accuracy)
+        ? ` (±${Math.round(position.coords.accuracy)} m)`
+        : "";
+      if (existing.length === 0) {
+        showToast(`Start position captured${accuracyNote}.`);
+      } else {
+        showToast(`Shot recorded: ${next.distanceYards} yds${accuracyNote}.`);
+      }
+    } catch (error) {
+      const message = describeGeolocationError(error);
+      showToast(message);
+      buttonElement.textContent = originalText;
+      buttonElement.disabled = false;
+    } finally {
+      buttonElement.dataset.busy = "false";
+    }
+  }
+
+  function describeGeolocationError(error) {
+    if (!error || typeof error.code !== "number") return "Could not get location. Try again outdoors with a clear sky view.";
+    if (error.code === 1) return "Location permission denied. Enable it in your browser settings to track shots.";
+    if (error.code === 2) return "GPS unavailable right now. Try again in a moment.";
+    if (error.code === 3) return "GPS read timed out. Try again — sometimes the first read is slow.";
+    return error.message || "Could not get location.";
+  }
+
+  function refreshShotsBlock(holeNumber) {
+    const container = els.scorecardGrid.querySelector(`.card-shots[data-hole="${holeNumber}"]`);
+    if (!container) return;
+    container.innerHTML = renderShotsBlock(holeNumber);
+  }
+
   function renderScorecardCardMode(course) {
     const sections = getScorecardSections(course.holes);
     const sectionByHoleNumber = new Map();
@@ -746,6 +933,7 @@
             <span>What happened on this hole?</span>
             <textarea class="card-note-input" data-hole="${hole.number}" rows="2" placeholder="Drove left, chipped twice, 2-putt from 12ft… (tap the mic on your keyboard for voice)">${escapeHtml(getHoleNote(hole.number))}</textarea>
           </label>
+          <div class="card-shots" data-hole="${hole.number}">${renderShotsBlock(hole.number)}</div>
         </article>`;
     }).join("");
 
@@ -807,6 +995,21 @@
         openHolePicker();
         return;
       }
+      const markShotButton = event.target.closest("[data-mark-shot]");
+      if (markShotButton) {
+        event.preventDefault();
+        handleMarkShot(markShotButton.dataset.markShot, markShotButton);
+        return;
+      }
+      const deleteShotButton = event.target.closest("[data-delete-shot]");
+      if (deleteShotButton) {
+        event.preventDefault();
+        const holeNumber = deleteShotButton.dataset.deleteShot;
+        const index = Number(deleteShotButton.dataset.shotIndex);
+        deleteHoleShotAtIndex(holeNumber, index);
+        refreshShotsBlock(holeNumber);
+        return;
+      }
       const shortcut = event.target.closest(".card-score-shortcut");
       if (!shortcut) return;
       const card = shortcut.closest(".scorecard-card");
@@ -820,6 +1023,14 @@
       const next = Math.max(1, Math.min(15, base + delta));
       scoreInput.value = String(next);
       scoreInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    stack.addEventListener("change", (event) => {
+      const clubSelect = event.target.closest("[data-shot-club]");
+      if (!clubSelect) return;
+      const holeNumber = clubSelect.dataset.shotClub;
+      const index = Number(clubSelect.dataset.shotIndex);
+      updateHoleShotAtIndex(holeNumber, index, { club: clubSelect.value });
     });
   }
 
@@ -1071,7 +1282,8 @@
         gir: girInput.checked,
         penalties: Number.isFinite(penaltyValue) ? penaltyValue : 0,
         firstPuttDistance: Number.isFinite(firstPuttValue) && firstPuttValue >= 0 ? firstPuttValue : null,
-        note: getHoleNote(holeNumber)
+        note: getHoleNote(holeNumber),
+        shots: getHoleShots(holeNumber)
       };
     });
   }
@@ -2488,6 +2700,7 @@
     editingRoundId = null;
     els.roundNote.value = "";
     resetHoleNotes();
+    resetHoleShots();
     updateEditModeUi();
     if (rerender) renderScorecard(getSelectedRoundCourse());
   }
@@ -2499,8 +2712,12 @@
     els.roundNote.value = round.note || "";
 
     resetHoleNotes();
+    resetHoleShots();
     round.holes.forEach((hole) => {
       if (hole && hole.note) setHoleNote(hole.number, hole.note);
+      if (hole && Array.isArray(hole.shots) && hole.shots.length) {
+        setHoleShots(hole.number, hole.shots);
+      }
     });
 
     const deerwoodInfo = parseDeerwoodCourseId(round.courseId);
@@ -2547,17 +2764,19 @@
   els.roundCourse.addEventListener("change", () => {
     if (els.roundCourse.value === DEERWOOD_COURSE_ID) els.roundTee.value = "White";
     resetHoleNotes();
+    resetHoleShots();
     refreshRoundSetup();
   });
-  els.roundHoleCount.addEventListener("change", () => { resetHoleNotes(); refreshRoundSetup(); });
-  els.roundLayout.addEventListener("change", () => { resetHoleNotes(); refreshRoundSetup(); });
-  els.roundTee.addEventListener("change", () => { resetHoleNotes(); refreshRoundSetup(); });
+  els.roundHoleCount.addEventListener("change", () => { resetHoleNotes(); resetHoleShots(); refreshRoundSetup(); });
+  els.roundLayout.addEventListener("change", () => { resetHoleNotes(); resetHoleShots(); refreshRoundSetup(); });
+  els.roundTee.addEventListener("change", () => { resetHoleNotes(); resetHoleShots(); refreshRoundSetup(); });
   els.resetRoundButton.addEventListener("click", () => {
     if (editingRoundId) {
       clearEditState();
       showToast("Edit cancelled.");
     } else {
       resetHoleNotes();
+      resetHoleShots();
       renderScorecard(getSelectedRoundCourse());
     }
   });
@@ -2675,6 +2894,7 @@
         state.rounds[existingIndex] = updatedRound;
         editingRoundId = null;
         resetHoleNotes();
+        resetHoleShots();
         saveState();
         updateEditModeUi();
         els.roundNote.value = "";
@@ -2693,6 +2913,7 @@
         newRound.narrative = generateRoundNarrative(newRound, state.rounds);
         state.rounds.push(newRound);
         resetHoleNotes();
+        resetHoleShots();
         saveState();
         els.roundNote.value = "";
         renderAll();
@@ -2721,6 +2942,7 @@
     };
     clearEditState({ rerender: false });
     resetHoleNotes();
+    resetHoleShots();
     saveState();
     renderAll();
     showToast("Sample data loaded.");
@@ -2731,6 +2953,7 @@
     state = { courses: [], rounds: [] };
     clearEditState({ rerender: false });
     resetHoleNotes();
+    resetHoleShots();
     saveState();
     renderAll();
     showToast("Data cleared.");
