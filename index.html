@@ -20,14 +20,17 @@
             <h1>Fairway Ledger</h1>
           </div>
         </div>
-        <div class="header-actions">
-          <button class="ghost-button" id="loadSampleButton" type="button">Sample data</button>
-          <button class="ghost-button" id="exportButton" type="button">Export<span class="export-badge" id="exportBadge" hidden></span></button>
-          <label class="file-button">
-            Import
-            <input id="importInput" type="file" accept="application/json">
-          </label>
-          <button class="danger-button" id="clearButton" type="button">Clear</button>
+        <div class="header-actions" id="headerActions">
+          <button class="header-actions-toggle" id="headerActionsToggle" type="button" aria-expanded="false" aria-controls="headerActionsList">Data <span class="caret" aria-hidden="true">▾</span></button>
+          <div class="header-actions-list" id="headerActionsList">
+            <button class="ghost-button" id="loadSampleButton" type="button">Sample data</button>
+            <button class="ghost-button" id="exportButton" type="button">Export<span class="export-badge" id="exportBadge" hidden></span></button>
+            <label class="file-button">
+              Import
+              <input id="importInput" type="file" accept="application/json">
+            </label>
+            <button class="danger-button" id="clearButton" type="button">Clear</button>
+          </div>
         </div>
       </header>
 

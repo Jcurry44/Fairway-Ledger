@@ -137,9 +137,41 @@ h2 {
 }
 
 .header-actions {
+  position: relative;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.header-actions-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.header-actions-toggle {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--white, #fff);
+  font-weight: 800;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.header-actions-toggle .caret {
+  font-size: 0.8rem;
+  transition: transform 140ms ease;
+}
+
+.header-actions.open .header-actions-toggle .caret {
+  transform: rotate(180deg);
 }
 
 .primary-button,
@@ -495,6 +527,11 @@ select:focus {
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid #edf1eb;
+  flex-wrap: wrap;
+}
+
+.panel-heading > * {
+  min-width: 0;
 }
 
 .form-grid,
@@ -1830,17 +1867,64 @@ td {
   }
 
   .header-actions {
-    justify-content: flex-start;
+    justify-content: flex-end;
+    width: auto;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+
+  .header-actions-toggle {
+    display: inline-flex;
+  }
+
+  .header-actions-list {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 200px;
+    flex-direction: column;
+    align-items: stretch;
+    background: var(--panel, #ffffff);
+    border: 1px solid var(--line, #d6e2d9);
+    border-radius: 10px;
+    padding: 10px;
+    box-shadow: 0 16px 40px rgba(20, 32, 28, 0.28);
+    z-index: 50;
+  }
+
+  .header-actions.open .header-actions-list {
+    display: flex;
+  }
+
+  .header-actions-list > * {
     width: 100%;
+    text-align: left;
+    justify-content: flex-start;
+  }
+
+  .app-header {
+    padding-right: 88px;
   }
 
   .app-tabs {
     overflow-x: auto;
     position: static;
+    gap: 4px;
+    padding: 5px;
   }
 
   .tab-button {
-    flex: 1 0 auto;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 9px 10px;
+    font-size: 0.88rem;
+    white-space: nowrap;
+  }
+
+  .tab-button::before {
+    margin-right: 5px;
   }
 
   .home-hero {
@@ -1852,18 +1936,45 @@ td {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .header-actions > * {
-    flex: 1 1 120px;
-  }
-
-  .metrics-grid,
-  .home-insights,
   .analytics-grid,
   .form-grid,
   .course-form,
   .lookup-form,
   .compact-controls {
     grid-template-columns: 1fr;
+  }
+
+  .metrics-grid,
+  .home-insights {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .metric-card {
+    min-height: 82px;
+    padding: 12px;
+  }
+
+  .metric-card span {
+    font-size: 0.74rem;
+  }
+
+  .metric-card strong {
+    font-size: 1.5rem;
+  }
+
+  .metric-card::after {
+    right: 10px;
+    bottom: 10px;
+  }
+
+  .insight-card {
+    min-height: 96px;
+    padding: 12px;
+  }
+
+  .insight-card strong {
+    font-size: 1.1rem;
   }
 
   .wide-panel {

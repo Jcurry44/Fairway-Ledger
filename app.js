@@ -99,6 +99,9 @@
     exportBadge: document.getElementById("exportBadge"),
     importInput: document.getElementById("importInput"),
     clearButton: document.getElementById("clearButton"),
+    headerActions: document.getElementById("headerActions"),
+    headerActionsToggle: document.getElementById("headerActionsToggle"),
+    headerActionsList: document.getElementById("headerActionsList"),
     toast: document.getElementById("toast")
   };
 
@@ -2196,6 +2199,42 @@
   }
 
   els.scorecardGrid.addEventListener("keydown", advanceScorecardOnEnter);
+
+  if (els.headerActionsToggle && els.headerActions && els.headerActionsList) {
+    function closeHeaderActions() {
+      els.headerActions.classList.remove("open");
+      els.headerActionsToggle.setAttribute("aria-expanded", "false");
+    }
+    function openHeaderActions() {
+      els.headerActions.classList.add("open");
+      els.headerActionsToggle.setAttribute("aria-expanded", "true");
+    }
+    els.headerActionsToggle.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (els.headerActions.classList.contains("open")) {
+        closeHeaderActions();
+      } else {
+        openHeaderActions();
+      }
+    });
+    els.headerActionsList.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.closest("button, label, input")) {
+        // Let the action's own handler run, then close on next tick.
+        setTimeout(closeHeaderActions, 60);
+      }
+    });
+    document.addEventListener("click", (event) => {
+      if (!els.headerActions.contains(event.target)) closeHeaderActions();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && els.headerActions.classList.contains("open")) {
+        closeHeaderActions();
+        els.headerActionsToggle.focus();
+      }
+    });
+  }
 
   [els.filterCourse, els.filterTee, els.filterWindow].forEach((control) => {
     control.addEventListener("change", () => {
