@@ -392,7 +392,52 @@
         hole.hazards = hole.hazards.map(normalizeHazard).filter(Boolean);
       });
     });
+    mirrorHazardsAcrossSiblings(stateValue.courses);
     return stateValue;
+  }
+
+  // Two course entries are "siblings" when they represent the same physical
+  // layout played from different tees (e.g. Deerwood Buck White & Buck Blue).
+  // Hazards live on the ground, not on the tee box, so they should be shared.
+  function getSiblingCourses(courseId, courses = state.courses) {
+    const target = courses.find((c) => c.id === courseId);
+    if (!target) return [];
+    return courses.filter((c) => c.id !== courseId && c.name === target.name);
+  }
+
+  function mirrorHazardsAcrossSiblings(courses) {
+    if (!Array.isArray(courses)) return;
+    const byName = new Map();
+    courses.forEach((course) => {
+      if (!course.name) return;
+      const group = byName.get(course.name) || [];
+      group.push(course);
+      byName.set(course.name, group);
+    });
+    byName.forEach((group) => {
+      if (group.length < 2) return;
+      // Build a merged hazard list per hole number across the group.
+      const mergedByHole = new Map();
+      group.forEach((course) => {
+        if (!Array.isArray(course.holes)) return;
+        course.holes.forEach((hole) => {
+          if (!Array.isArray(hole.hazards)) return;
+          const existing = mergedByHole.get(hole.number) || new Map();
+          hole.hazards.forEach((haz) => {
+            if (haz && haz.id && !existing.has(haz.id)) existing.set(haz.id, haz);
+          });
+          mergedByHole.set(hole.number, existing);
+        });
+      });
+      // Write the merged list back to every course in the group.
+      group.forEach((course) => {
+        if (!Array.isArray(course.holes)) return;
+        course.holes.forEach((hole) => {
+          const merged = mergedByHole.get(hole.number);
+          if (merged && merged.size) hole.hazards = [...merged.values()];
+        });
+      });
+    });
   }
 
   function mergeNewDefaultCourses(saved) {
@@ -499,8 +544,11 @@
 
   function getDeerwoodNineCourse(nineId, tee) {
     const courseId = deerwoodCourseId(nineId, tee);
-    return sampleCourses.find((course) => course.id === courseId)
-      || state.courses.find((course) => course.id === courseId);
+    // Prefer state (user-owned data — has hazards) over the catalog
+    // (read-only seed data). Falls back to catalog if the user has
+    // somehow cleared a Deerwood entry from state.
+    return state.courses.find((course) => course.id === courseId)
+      || sampleCourses.find((course) => course.id === courseId);
   }
 
   function getDeerwoodLayout(holeCount, layoutId) {
@@ -2242,8 +2290,14 @@
   }
 
   function renderCourseList() {
-    const visibleCourses = state.courses.filter((course) => {
-      return !isDeerwoodCourseId(course.id) || state.rounds.some((round) => round.courseId === course.id);
+    // Sort so courses you've actually played show first, but every course is
+    // visible (including Deerwood layouts you haven't logged a round on) so
+    // hazards can be edited for any of them.
+    const visibleCourses = [...state.courses].sort((a, b) => {
+      const aRounds = state.rounds.filter((r) => r.courseId === a.id).length;
+      const bRounds = state.rounds.filter((r) => r.courseId === b.id).length;
+      if (aRounds !== bRounds) return bRounds - aRounds;
+      return a.name.localeCompare(b.name);
     });
     if (!selectedCourseDetailId && visibleCourses[0]) selectedCourseDetailId = visibleCourses[0].id;
 
@@ -2944,6 +2998,13 @@
       const hole = course.holes.find((h) => h.number === holeNumber);
       if (!hole) return;
       hole.hazards = Array.isArray(hole.hazards) ? [...hole.hazards, hazard] : [hazard];
+      // Mirror to sibling courses (same name, different tee) so hazards are
+      // shared across tee variants of the same physical layout.
+      getSiblingCourses(course.id).forEach((sibling) => {
+        const siblingHole = sibling.holes && sibling.holes.find((h) => h.number === holeNumber);
+        if (!siblingHole) return;
+        siblingHole.hazards = Array.isArray(siblingHole.hazards) ? [...siblingHole.hazards, { ...hazard }] : [{ ...hazard }];
+      });
       saveState();
       const openBlock = form.closest(".course-hole-block");
       renderCourseDetail();
@@ -2968,6 +3029,12 @@
       const hole = course.holes.find((h) => h.number === holeNumber);
       if (!hole || !Array.isArray(hole.hazards)) return;
       hole.hazards = hole.hazards.filter((h) => h.id !== hazardId);
+      // Mirror deletion to sibling courses.
+      getSiblingCourses(course.id).forEach((sibling) => {
+        const siblingHole = sibling.holes && sibling.holes.find((h) => h.number === holeNumber);
+        if (!siblingHole || !Array.isArray(siblingHole.hazards)) return;
+        siblingHole.hazards = siblingHole.hazards.filter((h) => h.id !== hazardId);
+      });
       saveState();
       renderCourseDetail();
       const reopened = els.courseDetail.querySelector(`.course-hole-block[data-hole-number="${holeNumber}"]`);
