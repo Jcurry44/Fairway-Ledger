@@ -960,7 +960,7 @@
         ? `<span class="card-shot-club-static">Tee position</span>`
         : `<select class="card-shot-club" data-shot-club="${holeNumber}" data-shot-index="${index}" aria-label="Club for shot ${index}"><option value="">Club…</option>${clubOptions}</select>`;
       const accuracyMeta = Number.isFinite(shot.accuracy)
-        ? `<small class="card-shot-accuracy">±${Math.round(shot.accuracy)} m</small>`
+        ? `<small class="card-shot-accuracy">±${Math.round(metersToYards(shot.accuracy))} yds</small>`
         : "";
       return `
         <li class="card-shot-row" data-shot-row="${index}">
@@ -1003,7 +1003,7 @@
       appendHoleShot(holeNumber, next);
       refreshShotsBlock(holeNumber);
       const accuracyNote = Number.isFinite(position.coords.accuracy)
-        ? ` (±${Math.round(position.coords.accuracy)} m)`
+        ? ` (±${Math.round(metersToYards(position.coords.accuracy))} yds)`
         : "";
       if (existing.length === 0) {
         showToast(`Start position captured${accuracyNote}.`);
