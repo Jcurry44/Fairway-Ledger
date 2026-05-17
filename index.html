@@ -4,9 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Fairway Ledger</title>
-    <link rel="stylesheet" href="./styles.css?v=2026-05-17d">
-    <script src="./data/courses.js?v=2026-05-17d" defer></script>
-    <script src="./app.js?v=2026-05-17d" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-17e">
+    <script src="./data/courses.js?v=2026-05-17e" defer></script>
+    <script src="./app.js?v=2026-05-17e" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -296,18 +296,28 @@
               <div id="roundLiveSummary" class="round-live-summary"></div>
               <div class="scorecard" id="scorecardGrid" aria-label="Hole scorecard"></div>
 
-              <div id="completionCheck" class="completion-check"></div>
+              <section id="reviewSection" class="review-section" hidden>
+                <div class="review-header">
+                  <div>
+                    <p class="eyebrow">Wrap up</p>
+                    <h3>Review &amp; save round</h3>
+                  </div>
+                  <button type="button" class="review-back" data-action="hide-review">← Back to entry</button>
+                </div>
 
-              <div class="round-summary-field">
-                <label for="roundNote" class="round-summary-label">Round summary</label>
-                <textarea id="roundNote" maxlength="500" rows="3" placeholder="How did the round feel overall? Couldn't control driver, hit a few bad chips, putted decent on the back, weather went sideways at the turn…"></textarea>
-                <p class="round-summary-hint">Stored with the round and shown in your history. Anything you want to remember about today.</p>
-              </div>
+                <div id="completionCheck" class="completion-check"></div>
 
-              <div class="form-actions">
-                <button class="primary-button" id="roundSubmitButton" type="submit">Save round</button>
-                <span id="roundPreview" class="round-preview">--</span>
-              </div>
+                <div class="round-summary-field">
+                  <label for="roundNote" class="round-summary-label">Round summary</label>
+                  <textarea id="roundNote" maxlength="500" rows="3" placeholder="How did the round feel overall? Couldn't control driver, hit a few bad chips, putted decent on the back, weather went sideways at the turn…"></textarea>
+                  <p class="round-summary-hint">Stored with the round and shown in your history. Anything you want to remember about today.</p>
+                </div>
+
+                <div class="form-actions">
+                  <button class="primary-button" id="roundSubmitButton" type="submit">Save round</button>
+                  <span id="roundPreview" class="round-preview">--</span>
+                </div>
+              </section>
             </form>
           </section>
           </section>

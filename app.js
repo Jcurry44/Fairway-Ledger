@@ -268,6 +268,7 @@
     roundBrief: document.getElementById("roundBrief"),
     roundLiveSummary: document.getElementById("roundLiveSummary"),
     completionCheck: document.getElementById("completionCheck"),
+    reviewSection: document.getElementById("reviewSection"),
     roundForm: document.getElementById("roundForm"),
     resetRoundButton: document.getElementById("resetRoundButton"),
     viewToggleButton: document.getElementById("viewToggleButton"),
@@ -666,7 +667,7 @@
     if (data.layoutId) els.roundLayout.value = data.layoutId;
     if (data.tee) els.roundTee.value = data.tee;
     resetHoleNotes();
-    resetHoleShots(); resetHoleClubs();
+    resetHoleShots(); resetHoleClubs(); resetReviewState();
     Object.entries(data.holeNotes || {}).forEach(([num, note]) => setHoleNote(num, note));
     Object.entries(data.holeShots || {}).forEach(([num, shots]) => {
       if (Array.isArray(shots) && shots.length) setHoleShots(Number(num), shots);
@@ -1124,6 +1125,51 @@
     updateViewToggleLabel();
     updateRoundPreview();
     if (viewMode === "card") syncAllPillActiveStates();
+    refreshReviewVisibility();
+  }
+
+  function refreshReviewVisibility() {
+    if (!els.reviewSection) return;
+    // Grid mode: always visible — desktop users see everything at once.
+    // Card mode: hidden until the user taps "Review & save round" on a
+    // card. Keeps each card focused on per-hole entry.
+    if (viewMode === "grid") {
+      els.reviewSection.hidden = false;
+    } else {
+      // Don't auto-hide if it's already been opened during this entry session.
+      // The setActiveTab + course-change paths reset things explicitly elsewhere.
+      if (!els.reviewSection.dataset.userOpened) {
+        els.reviewSection.hidden = true;
+      }
+    }
+  }
+
+  function openReviewSection() {
+    if (!els.reviewSection) return;
+    els.reviewSection.hidden = false;
+    els.reviewSection.dataset.userOpened = "true";
+    requestAnimationFrame(() => {
+      els.reviewSection.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+  }
+
+  function closeReviewSection() {
+    if (!els.reviewSection) return;
+    if (viewMode === "card") {
+      els.reviewSection.hidden = true;
+      delete els.reviewSection.dataset.userOpened;
+      // Scroll back up to the active card so the user knows where they are.
+      const activeCard = els.scorecardGrid.querySelector(".scorecard-card.active");
+      if (activeCard) {
+        requestAnimationFrame(() => {
+          activeCard.scrollIntoView({ block: "start", behavior: "smooth" });
+        });
+      }
+    }
+  }
+
+  function resetReviewState() {
+    if (els.reviewSection) delete els.reviewSection.dataset.userOpened;
   }
 
   function renderScorecardGridMode(course) {
@@ -1465,6 +1511,9 @@
       <div class="scorecard-card-nav">
         <button type="button" class="card-nav-button" data-card-nav="prev">← Prev</button>
         <button type="button" class="card-nav-button card-nav-button-primary" data-card-nav="next">Next →</button>
+      </div>
+      <div class="scorecard-review-cta">
+        <button type="button" class="card-review-button" data-action="show-review">Review &amp; save round →</button>
       </div>`;
   }
 
@@ -3632,7 +3681,7 @@
     els.roundNote.value = "";
     clearInProgressRound();
     resetHoleNotes();
-    resetHoleShots(); resetHoleClubs();
+    resetHoleShots(); resetHoleClubs(); resetReviewState();
     updateEditModeUi();
     if (rerender) renderScorecard(getSelectedRoundCourse());
   }
@@ -3644,8 +3693,8 @@
     els.roundNote.value = round.note || "";
 
     resetHoleNotes();
-    resetHoleShots(); resetHoleClubs();
-    resetHoleClubs();
+    resetHoleShots(); resetHoleClubs(); resetReviewState();
+    resetHoleClubs(); resetReviewState();
     round.holes.forEach((hole) => {
       if (hole && hole.note) setHoleNote(hole.number, hole.note);
       if (hole && Array.isArray(hole.shots) && hole.shots.length) {
@@ -3701,12 +3750,12 @@
     if (els.roundCourse.value === DEERWOOD_COURSE_ID) els.roundTee.value = "White";
     clearInProgressRound();
     resetHoleNotes();
-    resetHoleShots(); resetHoleClubs();
+    resetHoleShots(); resetHoleClubs(); resetReviewState();
     refreshRoundSetup();
   });
-  els.roundHoleCount.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); refreshRoundSetup(); });
-  els.roundLayout.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); refreshRoundSetup(); });
-  els.roundTee.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); refreshRoundSetup(); });
+  els.roundHoleCount.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); resetReviewState(); refreshRoundSetup(); });
+  els.roundLayout.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); resetReviewState(); refreshRoundSetup(); });
+  els.roundTee.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); resetReviewState(); refreshRoundSetup(); });
   els.roundDate.addEventListener("change", scheduleInProgressSave);
   els.roundNote.addEventListener("input", scheduleInProgressSave);
   els.resetRoundButton.addEventListener("click", () => {
@@ -3716,7 +3765,7 @@
     } else {
       clearInProgressRound();
       resetHoleNotes();
-      resetHoleShots(); resetHoleClubs();
+      resetHoleShots(); resetHoleClubs(); resetReviewState();
       renderScorecard(getSelectedRoundCourse());
     }
   });
@@ -3728,6 +3777,22 @@
   }
 
   els.scorecardGrid.addEventListener("keydown", advanceScorecardOnEnter);
+  els.scorecardGrid.addEventListener("click", (event) => {
+    const button = event.target.closest('[data-action="show-review"]');
+    if (button) {
+      event.preventDefault();
+      openReviewSection();
+    }
+  });
+  if (els.reviewSection) {
+    els.reviewSection.addEventListener("click", (event) => {
+      const button = event.target.closest('[data-action="hide-review"]');
+      if (button) {
+        event.preventDefault();
+        closeReviewSection();
+      }
+    });
+  }
 
   if (els.courseDetail) {
     els.courseDetail.addEventListener("submit", (event) => {
@@ -3909,7 +3974,7 @@
         editingRoundId = null;
         clearInProgressRound();
         resetHoleNotes();
-        resetHoleShots(); resetHoleClubs();
+        resetHoleShots(); resetHoleClubs(); resetReviewState();
         saveState();
         updateEditModeUi();
         els.roundNote.value = "";
@@ -3929,7 +3994,7 @@
         state.rounds.push(newRound);
         clearInProgressRound();
         resetHoleNotes();
-        resetHoleShots(); resetHoleClubs();
+        resetHoleShots(); resetHoleClubs(); resetReviewState();
         saveState();
         els.roundNote.value = "";
         renderAll();
@@ -3959,7 +4024,7 @@
     clearEditState({ rerender: false });
     clearInProgressRound();
     resetHoleNotes();
-    resetHoleShots(); resetHoleClubs();
+    resetHoleShots(); resetHoleClubs(); resetReviewState();
     saveState();
     renderAll();
     showToast("Sample data loaded.");
@@ -3971,7 +4036,7 @@
     clearEditState({ rerender: false });
     clearInProgressRound();
     resetHoleNotes();
-    resetHoleShots(); resetHoleClubs();
+    resetHoleShots(); resetHoleClubs(); resetReviewState();
     saveState();
     renderAll();
     showToast("Data cleared.");

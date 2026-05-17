@@ -1563,6 +1563,81 @@ select:focus {
   font-size: 0.78rem;
 }
 
+/* Review section — wraps completion check, round summary, and Save into
+   a dedicated post-entry phase. Hidden in card view until the user taps
+   "Review & save round" on a card; always visible in grid view. */
+
+.review-section {
+  margin-top: 20px;
+  padding: 18px 18px 14px;
+  border: 1px solid #d6e2d9;
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, #fbfdfa 0%, #eef4f0 100%);
+  box-shadow: 0 12px 28px rgba(20, 32, 28, 0.06);
+}
+
+.review-section[hidden] {
+  display: none;
+}
+
+.review-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.review-header h3 {
+  margin: 2px 0 0;
+  font-size: 1.15rem;
+  color: var(--ink);
+}
+
+.review-back {
+  border: 1px solid var(--line, #d6e2d9);
+  background: #fff;
+  color: var(--green-dark, #15573c);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-weight: 800;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.review-back:hover {
+  border-color: #a8b8ad;
+}
+
+.scorecard-review-cta {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+}
+
+.card-review-button {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: 1.5px solid var(--green, #217a57);
+  background: #ffffff;
+  color: var(--green-dark, #15573c);
+  font-size: 0.95rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 140ms ease, transform 100ms ease;
+}
+
+.card-review-button:hover {
+  background: #f1f7f1;
+}
+
+.card-review-button:active {
+  transform: scale(0.99);
+}
+
 /* Completion check banner — surfaces missing fields above Save. */
 
 .completion-check {
