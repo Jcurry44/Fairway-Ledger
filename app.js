@@ -6,6 +6,8 @@
   const BACKUP_META_KEY = "fairwayLedger.backupMeta.v1";
   const BRIEF_COLLAPSED_KEY = "fairwayLedger.briefCollapsed.v1";
   const VIEW_MODE_KEY = "fairwayLedger.viewMode.v1";
+  const IN_PROGRESS_KEY = "fairwayLedger.inProgressRound.v1";
+  const IN_PROGRESS_DEBOUNCE_MS = 500;
   const BACKUP_NAG_THRESHOLD = 3;
   const today = new Date().toISOString().slice(0, 10);
 
@@ -543,6 +545,150 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
 
+  // In-progress round auto-save. Captures the user's mid-entry form state to
+  // a separate localStorage key on every input (debounced ~500ms) so that a
+  // page reload, app crash, or accidental tab close doesn't lose hours of
+  // on-course data entry. Distinct from saveState() which persists committed
+  // rounds; this is the "draft" layer that lives between input and Save round.
+
+  let inProgressSaveTimer = null;
+
+  function captureInProgressRound() {
+    const snapshot = captureScorecardSnapshot();
+    const holes = [];
+    snapshot.forEach((values, holeNumber) => {
+      holes.push({ number: holeNumber, ...values });
+    });
+    return {
+      v: 1,
+      savedAt: Date.now(),
+      date: els.roundDate ? els.roundDate.value || "" : "",
+      course: els.roundCourse ? els.roundCourse.value || "" : "",
+      holeCount: els.roundHoleCount ? els.roundHoleCount.value || "" : "",
+      layoutId: els.roundLayout ? els.roundLayout.value || "" : "",
+      tee: els.roundTee ? els.roundTee.value || "" : "",
+      note: els.roundNote ? els.roundNote.value || "" : "",
+      holes,
+      holeNotes: { ...pendingHoleNotes },
+      holeShots: JSON.parse(JSON.stringify(pendingHoleShots || {}))
+    };
+  }
+
+  function scheduleInProgressSave() {
+    // Never auto-save while the user is editing a previously-saved round —
+    // that path uses the real state.rounds[i] and its own lifecycle.
+    if (editingRoundId) return;
+    if (inProgressSaveTimer) clearTimeout(inProgressSaveTimer);
+    inProgressSaveTimer = setTimeout(() => {
+      const draft = captureInProgressRound();
+      const hasScores = draft.holes.some((h) => {
+        const score = Number(h.score);
+        return Number.isFinite(score) && score > 0;
+      });
+      const hasNotes = Object.keys(draft.holeNotes || {}).length > 0;
+      const hasShots = Object.keys(draft.holeShots || {}).length > 0;
+      if (!hasScores && !hasNotes && !hasShots) {
+        // Empty draft — don't pollute storage with placeholder rows.
+        clearInProgressRound();
+        return;
+      }
+      try { localStorage.setItem(IN_PROGRESS_KEY, JSON.stringify(draft)); } catch {}
+    }, IN_PROGRESS_DEBOUNCE_MS);
+  }
+
+  function clearInProgressRound() {
+    if (inProgressSaveTimer) {
+      clearTimeout(inProgressSaveTimer);
+      inProgressSaveTimer = null;
+    }
+    try { localStorage.removeItem(IN_PROGRESS_KEY); } catch {}
+  }
+
+  function loadInProgressRound() {
+    try {
+      const raw = localStorage.getItem(IN_PROGRESS_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      return data && data.v === 1 ? data : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function restoreInProgressRound(data) {
+    if (!data) return;
+    if (data.date) els.roundDate.value = data.date;
+    if (data.course) els.roundCourse.value = data.course;
+    if (data.note) els.roundNote.value = data.note;
+    // Re-render Deerwood option visibility based on the chosen course,
+    // then set holeCount/layout/tee in the correct order so the layout
+    // dropdown's options match the hole count before we assign a value.
+    renderRoundSetupOptions();
+    if (data.holeCount) {
+      els.roundHoleCount.value = data.holeCount;
+      renderRoundSetupOptions();
+    }
+    if (data.layoutId) els.roundLayout.value = data.layoutId;
+    if (data.tee) els.roundTee.value = data.tee;
+    resetHoleNotes();
+    resetHoleShots();
+    Object.entries(data.holeNotes || {}).forEach(([num, note]) => setHoleNote(num, note));
+    Object.entries(data.holeShots || {}).forEach(([num, shots]) => {
+      if (Array.isArray(shots) && shots.length) setHoleShots(Number(num), shots);
+    });
+    renderScorecard(getSelectedRoundCourse());
+    renderCourseBrief();
+    const snapshotMap = new Map();
+    (data.holes || []).forEach((h) => {
+      if (h && h.number != null) snapshotMap.set(Number(h.number), h);
+    });
+    applyScorecardSnapshot(snapshotMap);
+    updateRoundPreview();
+    setActiveTab("rounds");
+  }
+
+  function maybeResumeInProgressRound() {
+    if (editingRoundId) return; // edit mode owns the form
+    const data = loadInProgressRound();
+    if (!data) return;
+    const scoreCount = (data.holes || []).filter((h) => {
+      const score = Number(h.score);
+      return Number.isFinite(score) && score > 0;
+    }).length;
+    const shotCount = Object.values(data.holeShots || {}).reduce(
+      (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
+      0
+    );
+    const noteCount = Object.keys(data.holeNotes || {}).length;
+    if (!scoreCount && !shotCount && !noteCount) {
+      clearInProgressRound();
+      return;
+    }
+    const parts = [];
+    if (scoreCount) parts.push(`${scoreCount} hole${scoreCount === 1 ? "" : "s"} scored`);
+    if (shotCount) parts.push(`${shotCount} GPS shot${shotCount === 1 ? "" : "s"}`);
+    if (noteCount) parts.push(`${noteCount} note${noteCount === 1 ? "" : "s"}`);
+    let ageLabel = "";
+    if (data.savedAt) {
+      const ageMinutes = Math.floor((Date.now() - data.savedAt) / 60000);
+      if (ageMinutes < 1) ageLabel = " (saved just now)";
+      else if (ageMinutes < 60) ageLabel = ` (saved ${ageMinutes} min ago)`;
+      else if (ageMinutes < 1440) ageLabel = ` (saved ${Math.floor(ageMinutes / 60)} hr ago)`;
+      else ageLabel = ` (saved ${Math.floor(ageMinutes / 1440)} day${Math.floor(ageMinutes / 1440) === 1 ? "" : "s"} ago)`;
+    }
+    const summary = parts.join(", ");
+    const ok = window.confirm(
+      `Resume round in progress?\n\n${summary}${ageLabel}.\n\nOK to resume, Cancel to discard.`
+    );
+    if (ok) {
+      restoreInProgressRound(data);
+      showToast("Resumed round in progress.");
+    } else {
+      clearInProgressRound();
+      showToast("Discarded in-progress round.");
+    }
+  }
+
   function readBackupMeta() {
     try {
       const raw = localStorage.getItem(BACKUP_META_KEY);
@@ -927,12 +1073,13 @@
       : renderScorecardGridMode(course);
 
     els.scorecardGrid.querySelectorAll("input, select").forEach((input) => {
-      input.addEventListener("input", updateRoundPreview);
-      input.addEventListener("change", updateRoundPreview);
+      input.addEventListener("input", () => { updateRoundPreview(); scheduleInProgressSave(); });
+      input.addEventListener("change", () => { updateRoundPreview(); scheduleInProgressSave(); });
     });
     els.scorecardGrid.querySelectorAll(".card-note-input").forEach((textarea) => {
       textarea.addEventListener("input", () => {
         setHoleNote(textarea.dataset.hole, textarea.value);
+        scheduleInProgressSave();
       });
     });
     if (viewMode === "card") wireCardModeBehavior();
@@ -1066,6 +1213,7 @@
       }
       appendHoleShot(holeNumber, next);
       refreshShotsBlock(holeNumber);
+      scheduleInProgressSave();
       const accuracyYds = Number.isFinite(position.coords.accuracy)
         ? Math.round(metersToYards(position.coords.accuracy))
         : null;
@@ -1248,6 +1396,7 @@
         const index = Number(deleteShotButton.dataset.shotIndex);
         deleteHoleShotAtIndex(holeNumber, index);
         refreshShotsBlock(holeNumber);
+        scheduleInProgressSave();
         return;
       }
       const shortcut = event.target.closest(".card-score-shortcut");
@@ -1271,6 +1420,7 @@
       const holeNumber = clubSelect.dataset.shotClub;
       const index = Number(clubSelect.dataset.shotIndex);
       updateHoleShotAtIndex(holeNumber, index, { club: clubSelect.value });
+      scheduleInProgressSave();
     });
   }
 
@@ -2982,6 +3132,7 @@
     if (!editingRoundId && els.roundEntryTitle.textContent === "Add Round") return;
     editingRoundId = null;
     els.roundNote.value = "";
+    clearInProgressRound();
     resetHoleNotes();
     resetHoleShots();
     updateEditModeUi();
@@ -3046,18 +3197,22 @@
 
   els.roundCourse.addEventListener("change", () => {
     if (els.roundCourse.value === DEERWOOD_COURSE_ID) els.roundTee.value = "White";
+    clearInProgressRound();
     resetHoleNotes();
     resetHoleShots();
     refreshRoundSetup();
   });
-  els.roundHoleCount.addEventListener("change", () => { resetHoleNotes(); resetHoleShots(); refreshRoundSetup(); });
-  els.roundLayout.addEventListener("change", () => { resetHoleNotes(); resetHoleShots(); refreshRoundSetup(); });
-  els.roundTee.addEventListener("change", () => { resetHoleNotes(); resetHoleShots(); refreshRoundSetup(); });
+  els.roundHoleCount.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); refreshRoundSetup(); });
+  els.roundLayout.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); refreshRoundSetup(); });
+  els.roundTee.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); refreshRoundSetup(); });
+  els.roundDate.addEventListener("change", scheduleInProgressSave);
+  els.roundNote.addEventListener("input", scheduleInProgressSave);
   els.resetRoundButton.addEventListener("click", () => {
     if (editingRoundId) {
       clearEditState();
       showToast("Edit cancelled.");
     } else {
+      clearInProgressRound();
       resetHoleNotes();
       resetHoleShots();
       renderScorecard(getSelectedRoundCourse());
@@ -3240,6 +3395,7 @@
         updatedRound.narrative = generateRoundNarrative(updatedRound, state.rounds);
         state.rounds[existingIndex] = updatedRound;
         editingRoundId = null;
+        clearInProgressRound();
         resetHoleNotes();
         resetHoleShots();
         saveState();
@@ -3259,6 +3415,7 @@
         };
         newRound.narrative = generateRoundNarrative(newRound, state.rounds);
         state.rounds.push(newRound);
+        clearInProgressRound();
         resetHoleNotes();
         resetHoleShots();
         saveState();
@@ -3288,6 +3445,7 @@
       rounds: structuredClone(sampleRounds)
     };
     clearEditState({ rerender: false });
+    clearInProgressRound();
     resetHoleNotes();
     resetHoleShots();
     saveState();
@@ -3299,6 +3457,7 @@
     if (!window.confirm("Clear all courses and rounds?")) return;
     state = { courses: [], rounds: [] };
     clearEditState({ rerender: false });
+    clearInProgressRound();
     resetHoleNotes();
     resetHoleShots();
     saveState();
@@ -3364,6 +3523,9 @@
     state = loadState();
     renderAll();
     setActiveTab(localStorage.getItem(ACTIVE_TAB_KEY) || "home");
+    // Offer to restore any in-progress round entry that was interrupted
+    // (page reload, phone restart, accidental tab close, etc).
+    maybeResumeInProgressRound();
   }
 
   initializeApp();
