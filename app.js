@@ -1879,11 +1879,23 @@
     const allHoles = readScorecard(false);
     const entered = allHoles.filter((hole) => Number.isFinite(hole.score) && hole.score > 0);
     renderCompletionCheck(allHoles, entered);
-    if (!entered.length) {
+
+    // No course selected → no scorecard, so hide the live summary entirely
+    // (otherwise a row of "--" placeholders would float above the "Add a
+    // course" empty state, which is just confusing).
+    if (!allHoles.length) {
       els.roundPreview.textContent = "--";
       els.roundLiveSummary.innerHTML = "";
       return;
     }
+
+    // Always render the live summary skeleton so its height is stable. When
+    // empty it shows "--" placeholders; when populated the same cards just
+    // fill in. Stable height = no scroll jump above the user's viewport
+    // when they tap their first score pill. (Tapping a pill mid-page when
+    // an element above grows from 0 to 100px otherwise pushes the content
+    // they're looking at down by 100px, which feels like the page scrolled
+    // up.)
     const complete = entered.length === allHoles.length;
     const gross = entered.reduce((sum, hole) => sum + hole.score, 0);
     const par = entered.reduce((sum, hole) => sum + hole.par, 0);
@@ -1892,19 +1904,33 @@
     const girMade = entered.filter((hole) => hole.gir).length;
     const fairwayHoles = entered.filter((hole) => hole.fairway && hole.fairway !== "na");
     const fairwaysHit = fairwayHoles.filter((hole) => hole.fairway === "hit").length;
-    const differential = complete ? estimateRoundDifferential(getSelectedRoundCourse(), entered) : null;
-    const sgTotal = entered.reduce((sum, hole) => sum + (holeStrokesGained(hole) || 0), 0);
-    const throughSuffix = complete ? "" : ` | thru ${entered.length}/${allHoles.length}`;
-    els.roundPreview.textContent = `${gross} (${formatSigned(gross - par, 0)}) | ${putts} putts${throughSuffix}`;
+    const differential = (entered.length && complete) ? estimateRoundDifferential(getSelectedRoundCourse(), entered) : null;
+    const sgTotal = entered.length ? entered.reduce((sum, hole) => sum + (holeStrokesGained(hole) || 0), 0) : null;
+    const throughSuffix = entered.length ? (complete ? "" : ` | thru ${entered.length}/${allHoles.length}`) : "";
+
+    els.roundPreview.textContent = entered.length
+      ? `${gross} (${formatSigned(gross - par, 0)}) | ${putts} putts${throughSuffix}`
+      : "--";
+
+    const grossLabel = !entered.length ? "Gross" : complete ? "Gross" : `Gross (thru ${entered.length})`;
+    const grossValue = entered.length ? gross : "--";
+    const toParValue = entered.length ? formatSigned(gross - par, 0) : "--";
+    const puttsValue = entered.length ? putts : "--";
+    const firValue = fairwayHoles.length ? percentage(fairwaysHit, fairwayHoles.length) : "--";
+    const girValue = girMade ? percentage(girMade, entered.length) : "--";
+    const penValue = entered.length ? penalties : "--";
+    const sgValue = sgTotal === null ? "--" : formatSigned(sgTotal);
+    const diffValue = differential === null ? "--" : differential.toFixed(1);
+
     els.roundLiveSummary.innerHTML = `
-      <div class="live-summary-card"><span>${complete ? "Gross" : `Gross (thru ${entered.length})`}</span><strong>${gross}</strong></div>
-      <div class="live-summary-card"><span>To par</span><strong>${formatSigned(gross - par, 0)}</strong></div>
-      <div class="live-summary-card"><span>Putts</span><strong>${putts}</strong></div>
-      <div class="live-summary-card"><span>FIR</span><strong>${fairwayHoles.length ? percentage(fairwaysHit, fairwayHoles.length) : "--"}</strong></div>
-      <div class="live-summary-card"><span>GIR</span><strong>${girMade ? percentage(girMade, entered.length) : "--"}</strong></div>
-      <div class="live-summary-card"><span>Pen</span><strong>${penalties}</strong></div>
-      <div class="live-summary-card"><span>SG vs Tour</span><strong>${formatSigned(sgTotal)}</strong></div>
-      <div class="live-summary-card accent"><span>Diff est.</span><strong>${differential === null ? "--" : differential.toFixed(1)}</strong></div>
+      <div class="live-summary-card"><span>${grossLabel}</span><strong>${grossValue}</strong></div>
+      <div class="live-summary-card"><span>To par</span><strong>${toParValue}</strong></div>
+      <div class="live-summary-card"><span>Putts</span><strong>${puttsValue}</strong></div>
+      <div class="live-summary-card"><span>FIR</span><strong>${firValue}</strong></div>
+      <div class="live-summary-card"><span>GIR</span><strong>${girValue}</strong></div>
+      <div class="live-summary-card"><span>Pen</span><strong>${penValue}</strong></div>
+      <div class="live-summary-card"><span>SG vs Tour</span><strong>${sgValue}</strong></div>
+      <div class="live-summary-card accent"><span>Diff est.</span><strong>${diffValue}</strong></div>
     `;
   }
 
