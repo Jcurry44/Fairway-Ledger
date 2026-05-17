@@ -4,9 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Fairway Ledger</title>
-    <link rel="stylesheet" href="./styles.css?v=2026-05-17a">
-    <script src="./data/courses.js?v=2026-05-17a" defer></script>
-    <script src="./app.js?v=2026-05-17a" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-17b">
+    <script src="./data/courses.js?v=2026-05-17b" defer></script>
+    <script src="./app.js?v=2026-05-17b" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -152,6 +152,17 @@
             <article class="panel wide-panel">
               <div class="panel-heading">
                 <div>
+                  <p class="eyebrow">Scoring</p>
+                  <h2>Scoring Distribution</h2>
+                </div>
+                <span class="panel-note">tap a tier to see the holes</span>
+              </div>
+              <div id="scoringDistribution" class="scoring-distribution"></div>
+            </article>
+
+            <article class="panel wide-panel">
+              <div class="panel-heading">
+                <div>
                   <p class="eyebrow">Courses</p>
                   <h2>Scoring By Course</h2>
                 </div>
@@ -274,6 +285,8 @@
               <div id="roundLiveSummary" class="round-live-summary"></div>
               <div class="scorecard" id="scorecardGrid" aria-label="Hole scorecard"></div>
 
+              <div id="completionCheck" class="completion-check"></div>
+
               <div class="round-summary-field">
                 <label for="roundNote" class="round-summary-label">Round summary</label>
                 <textarea id="roundNote" maxlength="500" rows="3" placeholder="How did the round feel overall? Couldn't control driver, hit a few bad chips, putted decent on the back, weather went sideways at the turn…"></textarea>
@@ -332,6 +345,18 @@
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <div id="bucketSheetOverlay" class="hole-picker-overlay" hidden>
+      <button id="bucketSheetBackdrop" class="hole-picker-backdrop" type="button" aria-label="Close"></button>
+      <div class="hole-picker-sheet" role="dialog" aria-modal="true" aria-labelledby="bucketSheetTitle">
+        <div class="hole-picker-handle" aria-hidden="true"></div>
+        <div class="hole-picker-header">
+          <h3 id="bucketSheetTitle">Scoring tier</h3>
+          <button id="bucketSheetClose" class="hole-picker-close" type="button" aria-label="Close">&times;</button>
+        </div>
+        <ul id="bucketSheetList" class="hole-picker-list bucket-sheet-list"></ul>
+      </div>
+    </div>
 
     <div id="holePickerOverlay" class="hole-picker-overlay" hidden>
       <button id="holePickerBackdrop" class="hole-picker-backdrop" type="button" aria-label="Close hole picker"></button>

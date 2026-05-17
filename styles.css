@@ -1448,6 +1448,269 @@ select:focus {
   font-size: 0.78rem;
 }
 
+/* Completion check banner — surfaces missing fields above Save. */
+
+.completion-check {
+  margin-top: 16px;
+}
+
+.completion-check[hidden] {
+  display: none;
+}
+
+.completion-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid;
+}
+
+.completion-banner strong {
+  display: block;
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+.completion-banner span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.completion-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.completion-ok {
+  background: #eaf6ef;
+  border-color: #b9d8c5;
+}
+
+.completion-ok .completion-icon {
+  color: var(--green-dark, #15573c);
+}
+
+.completion-warn {
+  background: #fff7e3;
+  border-color: #e8c97a;
+}
+
+.completion-warn .completion-icon {
+  color: #b07908;
+}
+
+.completion-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.completion-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 0.86rem;
+}
+
+.completion-section-label {
+  color: var(--muted) !important;
+  font-weight: 800;
+  font-size: 0.78rem !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.completion-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #d8b65a;
+  background: #fff;
+  color: #5a4308;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.completion-chip:hover {
+  background: #fff1c8;
+}
+
+.completion-hint {
+  color: var(--muted) !important;
+  font-size: 0.78rem !important;
+  font-style: italic;
+}
+
+/* Hole picker — highlight rows with no score yet. */
+
+.hp-row-needs-entry {
+  border-style: dashed !important;
+  border-color: #e8c97a !important;
+}
+
+/* Best/worst hole cards become clickable buttons. */
+
+.hole-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid #e0e7de;
+  border-radius: 8px;
+  background: #fffefa;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, transform 100ms ease, box-shadow 140ms ease;
+}
+
+.hole-card:hover {
+  border-color: #bccfc1;
+  box-shadow: 0 6px 14px rgba(20, 32, 28, 0.06);
+}
+
+.hole-card:active {
+  transform: scale(0.99);
+}
+
+/* Scoring distribution panel — birdies/pars/bogeys/etc with drill-down. */
+
+.scoring-distribution {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scoring-distribution-total {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.scoring-distribution-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+  gap: 8px;
+}
+
+.scoring-bucket {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 100ms ease, box-shadow 140ms ease, opacity 140ms ease;
+  text-align: left;
+}
+
+.scoring-bucket:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.scoring-bucket:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(20, 32, 28, 0.08);
+}
+
+.scoring-bucket-label {
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.scoring-bucket-count {
+  font-size: 1.8rem;
+  line-height: 1.05;
+  font-weight: 900;
+}
+
+.scoring-bucket-pct {
+  font-size: 0.74rem;
+  font-weight: 700;
+  opacity: 0.7;
+}
+
+.scoring-eagle { background: #fef3c7; border-color: #f4d75e; color: #6d4d00; }
+.scoring-birdie { background: #d6eedf; border-color: #8cc9a2; color: #15573c; }
+.scoring-par { background: #eef2eb; border-color: #cfdacf; color: var(--ink); }
+.scoring-bogey { background: #fde7d6; border-color: #f0b97f; color: #7a3d05; }
+.scoring-double { background: #f8dad4; border-color: #e9a89c; color: #843c33; }
+.scoring-triple { background: #f1c4bb; border-color: #d68b7d; color: #6b2018; }
+.scoring-worse { background: #c97d72; border-color: #a85950; color: #fff; }
+
+/* Bucket sheet — drill-down list when a scoring tier is tapped. */
+
+.bucket-sheet-list .bucket-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfdfa;
+  margin: 0 0 6px;
+}
+
+.bucket-sheet-list .bucket-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bucket-sheet-list .bucket-row-main strong {
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.bucket-sheet-list .bucket-row-main .subtext {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.bucket-sheet-list .bucket-row-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.bucket-sheet-list .bucket-row-score {
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: var(--green-dark, #15573c);
+}
+
+.bucket-sheet-list .bucket-row-date {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.bucket-empty {
+  text-align: center;
+  color: var(--muted);
+  font-style: italic;
+  padding: 16px;
+}
+
 .hazard-chip-list {
   list-style: none;
   margin: 8px 0 0;

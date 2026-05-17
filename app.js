@@ -267,6 +267,7 @@
     roundCourseMeta: document.getElementById("roundCourseMeta"),
     roundBrief: document.getElementById("roundBrief"),
     roundLiveSummary: document.getElementById("roundLiveSummary"),
+    completionCheck: document.getElementById("completionCheck"),
     roundForm: document.getElementById("roundForm"),
     resetRoundButton: document.getElementById("resetRoundButton"),
     viewToggleButton: document.getElementById("viewToggleButton"),
@@ -288,6 +289,12 @@
     recentRounds: document.getElementById("recentRounds"),
     strokesGainedPanel: document.getElementById("strokesGainedPanel"),
     puttingPanel: document.getElementById("puttingPanel"),
+    scoringDistribution: document.getElementById("scoringDistribution"),
+    bucketSheetOverlay: document.getElementById("bucketSheetOverlay"),
+    bucketSheetBackdrop: document.getElementById("bucketSheetBackdrop"),
+    bucketSheetClose: document.getElementById("bucketSheetClose"),
+    bucketSheetTitle: document.getElementById("bucketSheetTitle"),
+    bucketSheetList: document.getElementById("bucketSheetList"),
     latestNarrative: document.getElementById("latestNarrative"),
     courseLookupForm: document.getElementById("courseLookupForm"),
     courseLookupQuery: document.getElementById("courseLookupQuery"),
@@ -1630,7 +1637,7 @@
       }
       return `
         <li>
-          <button type="button" class="hp-row${index === activeIndex ? " active" : ""}" data-jump-hole="${index}">
+          <button type="button" class="hp-row${index === activeIndex ? " active" : ""}${scoreStatus === "empty" ? " hp-row-needs-entry" : ""}" data-jump-hole="${index}">
             <span class="hp-row-index">${index + 1}</span>
             <span class="hp-row-label"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(meta)}</small></span>
             <span class="hp-row-score hp-row-score-${scoreStatus}">${scoreText}</span>
@@ -1646,6 +1653,85 @@
     if (!els.holePickerOverlay) return;
     els.holePickerOverlay.hidden = true;
     document.body.classList.remove("hole-picker-open");
+  }
+
+  function renderCompletionCheck(allHoles, enteredHoles) {
+    if (!els.completionCheck) return;
+    if (!allHoles.length) {
+      els.completionCheck.innerHTML = "";
+      els.completionCheck.hidden = true;
+      return;
+    }
+    // Identify what's missing: score is required; flag empty putts (user
+    // cleared) or empty first-putt-distance (truly null) as soft warnings.
+    const missingScore = [];
+    const missingPutts = [];
+    const missingFirstPutt = [];
+    allHoles.forEach((hole) => {
+      const hasScore = Number.isFinite(hole.score) && hole.score > 0;
+      if (!hasScore) {
+        missingScore.push(hole);
+        return; // Other fields aren't worth flagging on a hole with no score
+      }
+      const puttsInput = els.scorecardGrid.querySelector(`.putts-input[data-hole="${hole.number}"]`);
+      if (puttsInput && puttsInput.value.trim() === "") missingPutts.push(hole);
+      if (hole.firstPuttDistance === null || hole.firstPuttDistance === undefined) {
+        missingFirstPutt.push(hole);
+      }
+    });
+
+    els.completionCheck.hidden = false;
+
+    if (!missingScore.length && !missingPutts.length) {
+      els.completionCheck.innerHTML = `
+        <div class="completion-banner completion-ok">
+          <span class="completion-icon" aria-hidden="true">✓</span>
+          <div>
+            <strong>All ${allHoles.length} holes complete.</strong>
+            <span>Ready to save${missingFirstPutt.length ? ` (${missingFirstPutt.length} hole${missingFirstPutt.length === 1 ? "" : "s"} without first-putt distance)` : ""}.</span>
+          </div>
+        </div>`;
+      return;
+    }
+
+    const chipFor = (hole, reason) => `<button type="button" class="completion-chip" data-jump-hole-number="${hole.number}" title="${escapeHtml(reason)}">${escapeHtml(hole.label || `#${hole.number}`)}</button>`;
+    const sections = [];
+    if (missingScore.length) {
+      sections.push(`<div class="completion-section"><span class="completion-section-label">Missing score:</span> ${missingScore.map((h) => chipFor(h, "Missing score")).join(" ")}</div>`);
+    }
+    if (missingPutts.length) {
+      sections.push(`<div class="completion-section"><span class="completion-section-label">Empty putts:</span> ${missingPutts.map((h) => chipFor(h, "Empty putts")).join(" ")}</div>`);
+    }
+    els.completionCheck.innerHTML = `
+      <div class="completion-banner completion-warn">
+        <span class="completion-icon" aria-hidden="true">⚠</span>
+        <div class="completion-body">
+          <strong>${missingScore.length + missingPutts.length} item${missingScore.length + missingPutts.length === 1 ? "" : "s"} to fill in</strong>
+          ${sections.join("")}
+          <span class="completion-hint">Tap a hole to jump to it.</span>
+        </div>
+      </div>`;
+
+    els.completionCheck.querySelectorAll("[data-jump-hole-number]").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        const targetNumber = Number(chip.dataset.jumpHoleNumber);
+        if (viewMode === "card") {
+          const cards = [...els.scorecardGrid.querySelectorAll(".scorecard-card")];
+          const index = cards.findIndex((c) => Number(c.dataset.holeNumber) === targetNumber);
+          if (index >= 0) {
+            setActiveCardIndex(index);
+            const card = cards[index];
+            if (card) card.scrollIntoView({ block: "start", behavior: "smooth" });
+          }
+        } else {
+          const input = els.scorecardGrid.querySelector(`.score-input[data-hole="${targetNumber}"]`);
+          if (input) {
+            input.focus();
+            input.scrollIntoView({ block: "center", behavior: "smooth" });
+          }
+        }
+      });
+    });
   }
 
   function updateViewToggleLabel() {
@@ -1792,6 +1878,7 @@
   function updateRoundPreview() {
     const allHoles = readScorecard(false);
     const entered = allHoles.filter((hole) => Number.isFinite(hole.score) && hole.score > 0);
+    renderCompletionCheck(allHoles, entered);
     if (!entered.length) {
       els.roundPreview.textContent = "--";
       els.roundLiveSummary.innerHTML = "";
@@ -2200,6 +2287,29 @@
     const worst = [...groups].sort((a, b) => b.avgToPar - a.avgToPar).slice(0, 5);
     els.bestHoles.innerHTML = best.length ? best.map((group) => holeCard(group, false)).join("") : emptyState("No hole data yet.");
     els.worstHoles.innerHTML = worst.length ? worst.map((group) => holeCard(group, true)).join("") : emptyState("No hole data yet.");
+    [els.bestHoles, els.worstHoles].forEach((container) => {
+      container.querySelectorAll("[data-spotlight-course]").forEach((card) => {
+        card.addEventListener("click", () => {
+          jumpToSpotlight(card.dataset.spotlightCourse, Number(card.dataset.spotlightHole));
+        });
+      });
+    });
+  }
+
+  function jumpToSpotlight(courseId, holeNumber) {
+    if (!els.spotlightCourse || !els.spotlightHole) return;
+    // Make sure the course is selectable in the spotlight dropdown first.
+    if (![...els.spotlightCourse.options].some((opt) => opt.value === courseId)) return;
+    els.spotlightCourse.value = courseId;
+    renderSpotlightHoleOptions();
+    if ([...els.spotlightHole.options].some((opt) => Number(opt.value) === holeNumber)) {
+      els.spotlightHole.value = String(holeNumber);
+    }
+    renderSpotlight();
+    const spotlightPanel = document.querySelector(".spotlight-panel");
+    if (spotlightPanel && typeof spotlightPanel.scrollIntoView === "function") {
+      spotlightPanel.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
   }
 
   const PUTT_DISTANCE_BUCKETS = [
@@ -2270,6 +2380,98 @@
         </div>`;
     }).join("");
     els.puttingPanel.innerHTML = headline + `<div class="putting-rows">${rows}</div>`;
+  }
+
+  const SCORING_BUCKETS = [
+    { id: "eagle", label: "Eagle+", chipClass: "scoring-eagle", match: (toPar) => toPar <= -2 },
+    { id: "birdie", label: "Birdie", chipClass: "scoring-birdie", match: (toPar) => toPar === -1 },
+    { id: "par", label: "Par", chipClass: "scoring-par", match: (toPar) => toPar === 0 },
+    { id: "bogey", label: "Bogey", chipClass: "scoring-bogey", match: (toPar) => toPar === 1 },
+    { id: "double", label: "Double", chipClass: "scoring-double", match: (toPar) => toPar === 2 },
+    { id: "triple", label: "Triple", chipClass: "scoring-triple", match: (toPar) => toPar === 3 },
+    { id: "worse", label: "Worse", chipClass: "scoring-worse", match: (toPar) => toPar >= 4 }
+  ];
+
+  function computeScoringDistribution(rounds) {
+    const buckets = SCORING_BUCKETS.map((b) => ({ ...b, count: 0, holes: [] }));
+    rounds.forEach((round) => {
+      const course = getCourse(round.courseId);
+      round.holes.forEach((hole) => {
+        if (!Number.isFinite(hole.score) || hole.score <= 0) return;
+        const toPar = hole.score - hole.par;
+        const bucket = buckets.find((b) => b.match(toPar));
+        if (!bucket) return;
+        bucket.count += 1;
+        bucket.holes.push({
+          date: round.date,
+          courseId: round.courseId,
+          courseName: course ? course.name : "Unknown",
+          holeNumber: hole.number,
+          label: hole.label || `#${hole.number}`,
+          par: hole.par,
+          score: hole.score,
+          toPar
+        });
+      });
+    });
+    const total = buckets.reduce((sum, b) => sum + b.count, 0);
+    return { buckets, total };
+  }
+
+  function renderScoringDistribution(rounds) {
+    if (!els.scoringDistribution) return;
+    const { buckets, total } = computeScoringDistribution(rounds);
+    if (!total) {
+      els.scoringDistribution.innerHTML = emptyState("Save your first round to see scoring distribution.");
+      return;
+    }
+    const bucketCards = buckets.map((bucket) => {
+      const pct = total ? Math.round((bucket.count / total) * 100) : 0;
+      const disabled = bucket.count === 0 ? " disabled" : "";
+      return `
+        <button type="button" class="scoring-bucket ${bucket.chipClass}" data-scoring-bucket="${bucket.id}"${disabled}>
+          <span class="scoring-bucket-label">${escapeHtml(bucket.label)}</span>
+          <strong class="scoring-bucket-count">${bucket.count}</strong>
+          <small class="scoring-bucket-pct">${pct}%</small>
+        </button>`;
+    }).join("");
+    els.scoringDistribution.innerHTML = `
+      <p class="scoring-distribution-total">${total} hole${total === 1 ? "" : "s"} tracked. Tap any tier to see the holes.</p>
+      <div class="scoring-distribution-grid">${bucketCards}</div>`;
+  }
+
+  function openScoringBucketSheet(bucketId) {
+    if (!els.bucketSheetOverlay || !els.bucketSheetList) return;
+    const filtered = getFilteredRounds();
+    const { buckets } = computeScoringDistribution(filtered);
+    const bucket = buckets.find((b) => b.id === bucketId);
+    if (!bucket) return;
+    els.bucketSheetTitle.textContent = `${bucket.label} · ${bucket.count} hole${bucket.count === 1 ? "" : "s"}`;
+    if (!bucket.holes.length) {
+      els.bucketSheetList.innerHTML = `<li class="bucket-empty">No holes in this tier yet.</li>`;
+    } else {
+      const sorted = [...bucket.holes].sort((a, b) => b.date.localeCompare(a.date));
+      els.bucketSheetList.innerHTML = sorted.map((h) => `
+        <li class="bucket-row">
+          <div class="bucket-row-main">
+            <strong>${escapeHtml(h.label)}</strong>
+            <span class="subtext">${escapeHtml(h.courseName)} · Par ${h.par}</span>
+          </div>
+          <div class="bucket-row-meta">
+            <span class="bucket-row-score">${h.score}</span>
+            <span class="bucket-row-date">${escapeHtml(h.date)}</span>
+          </div>
+        </li>`).join("");
+    }
+    els.bucketSheetOverlay.hidden = false;
+    document.body.classList.add("hole-picker-open");
+    if (els.bucketSheetClose) els.bucketSheetClose.focus();
+  }
+
+  function closeScoringBucketSheet() {
+    if (!els.bucketSheetOverlay) return;
+    els.bucketSheetOverlay.hidden = true;
+    document.body.classList.remove("hole-picker-open");
   }
 
   function renderLatestNarrative() {
@@ -2437,13 +2639,13 @@
 
   function holeCard(group, bad) {
     return `
-      <div class="hole-card">
+      <button type="button" class="hole-card" data-spotlight-course="${escapeHtml(group.courseId)}" data-spotlight-hole="${group.number}" aria-label="View hole spotlight">
         <div>
           <strong>${escapeHtml(group.courseName)} ${escapeHtml(group.label)}</strong>
           <span class="subtext">Par ${group.par} | ${group.rounds} rounds | best ${group.best}</span>
         </div>
         <span class="score-chip ${bad ? "bad" : ""}">${formatSigned(group.avgToPar)}</span>
-      </div>`;
+      </button>`;
   }
 
   function generateRoundNarrative(round, allRounds) {
@@ -3121,6 +3323,7 @@
     renderHoleLists(rounds);
     renderStrokesGained(rounds);
     renderPuttingPanel(rounds);
+    renderScoringDistribution(rounds);
     renderRecentRounds();
     updateBackupBadge();
     renderCourseList();
@@ -3482,6 +3685,15 @@
 
   if (els.holePickerBackdrop) els.holePickerBackdrop.addEventListener("click", closeHolePicker);
   if (els.holePickerClose) els.holePickerClose.addEventListener("click", closeHolePicker);
+  if (els.bucketSheetBackdrop) els.bucketSheetBackdrop.addEventListener("click", closeScoringBucketSheet);
+  if (els.bucketSheetClose) els.bucketSheetClose.addEventListener("click", closeScoringBucketSheet);
+  if (els.scoringDistribution) {
+    els.scoringDistribution.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-scoring-bucket]");
+      if (!button || button.disabled) return;
+      openScoringBucketSheet(button.dataset.scoringBucket);
+    });
+  }
   if (els.holePickerList) {
     els.holePickerList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-jump-hole]");
@@ -3494,8 +3706,9 @@
     });
   }
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && els.holePickerOverlay && !els.holePickerOverlay.hidden) {
-      closeHolePicker();
+    if (event.key === "Escape") {
+      if (els.holePickerOverlay && !els.holePickerOverlay.hidden) closeHolePicker();
+      if (els.bucketSheetOverlay && !els.bucketSheetOverlay.hidden) closeScoringBucketSheet();
     }
   });
 
