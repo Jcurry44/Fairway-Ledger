@@ -290,6 +290,7 @@
     strokesGainedPanel: document.getElementById("strokesGainedPanel"),
     puttingPanel: document.getElementById("puttingPanel"),
     scoringDistribution: document.getElementById("scoringDistribution"),
+    teeClubPanel: document.getElementById("teeClubPanel"),
     bucketSheetOverlay: document.getElementById("bucketSheetOverlay"),
     bucketSheetBackdrop: document.getElementById("bucketSheetBackdrop"),
     bucketSheetClose: document.getElementById("bucketSheetClose"),
@@ -1266,14 +1267,19 @@
   }
 
   function renderClubsHitPills(hole) {
-    const selected = new Set(getHoleClubs(hole.number));
+    const selected = getHoleClubs(hole.number); // ordered array — index 0 is tee club
+    const selectedSet = new Set(selected);
+    const teeClub = selected[0] || null;
     const pills = CLUB_OPTIONS.map((club) => {
-      const isActive = selected.has(club) ? " active" : "";
-      return `<button type="button" class="pill pill-club${isActive}" data-toggle-club="${escapeHtml(club)}" data-hole="${hole.number}">${escapeHtml(club)}</button>`;
+      const isActive = selectedSet.has(club);
+      const isTee = club === teeClub;
+      const cls = `pill pill-club${isActive ? " active" : ""}${isTee ? " pill-club-tee" : ""}`;
+      const teeBadge = isTee ? `<span class="pill-tee-badge" aria-label="tee shot">TEE</span>` : "";
+      return `<button type="button" class="${cls}" data-toggle-club="${escapeHtml(club)}" data-hole="${hole.number}">${escapeHtml(club)}${teeBadge}</button>`;
     }).join("");
     return `
       <div class="card-clubs-row" data-hole="${hole.number}">
-        <span class="card-pill-label">Clubs hit</span>
+        <span class="card-pill-label">Clubs hit <span class="card-pill-sublabel">(first tap = tee shot)</span></span>
         <div class="card-clubs-grid">${pills}</div>
       </div>`;
   }
@@ -1538,7 +1544,13 @@
         const holeNumber = clubPill.dataset.hole;
         const club = clubPill.dataset.toggleClub;
         toggleHoleClub(holeNumber, club);
-        clubPill.classList.toggle("active");
+        // Re-render the whole clubs row so the TEE badge moves to whatever
+        // is currently first in the clubsHit array. classList.toggle alone
+        // doesn't handle the tee-club position change.
+        const row = clubPill.closest(".card-clubs-row");
+        if (row) {
+          row.outerHTML = renderClubsHitPills({ number: Number(holeNumber) });
+        }
         scheduleInProgressSave();
         return;
       }
@@ -2500,6 +2512,77 @@
     document.body.classList.remove("hole-picker-open");
   }
 
+  function computeTeeClubPerformance(rounds) {
+    const grouped = new Map();
+    rounds.forEach((round) => {
+      round.holes.forEach((hole) => {
+        if (!Number.isFinite(hole.score) || hole.score <= 0) return;
+        const teeClub = Array.isArray(hole.clubsHit) && hole.clubsHit.length ? hole.clubsHit[0] : null;
+        if (!teeClub) return;
+        if (!grouped.has(teeClub)) {
+          grouped.set(teeClub, {
+            club: teeClub,
+            count: 0,
+            par3: 0,
+            par4: 0,
+            par5: 0,
+            par6: 0,
+            toParTotal: 0,
+            sgValues: []
+          });
+        }
+        const entry = grouped.get(teeClub);
+        entry.count += 1;
+        entry.toParTotal += hole.score - hole.par;
+        if (hole.par === 3) entry.par3 += 1;
+        else if (hole.par === 4) entry.par4 += 1;
+        else if (hole.par === 5) entry.par5 += 1;
+        else if (hole.par === 6) entry.par6 += 1;
+        const sg = holeStrokesGained(hole);
+        if (sg !== null) entry.sgValues.push(sg);
+      });
+    });
+    return [...grouped.values()]
+      .map((entry) => ({
+        ...entry,
+        avgToPar: entry.count ? entry.toParTotal / entry.count : 0,
+        avgSg: entry.sgValues.length ? average(entry.sgValues) : NaN
+      }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  function renderTeeClubPerformance(rounds) {
+    if (!els.teeClubPanel) return;
+    const data = computeTeeClubPerformance(rounds);
+    if (!data.length) {
+      els.teeClubPanel.innerHTML = emptyState("Tag your tee shots in Clubs Hit (first club tapped = tee shot) to unlock tee-club performance.");
+      return;
+    }
+    const total = data.reduce((sum, entry) => sum + entry.count, 0);
+    const rows = data.map((entry) => {
+      const parParts = [];
+      if (entry.par3) parParts.push(`${entry.par3} par 3`);
+      if (entry.par4) parParts.push(`${entry.par4} par 4`);
+      if (entry.par5) parParts.push(`${entry.par5} par 5`);
+      if (entry.par6) parParts.push(`${entry.par6} par 6`);
+      const parBreakdown = parParts.length ? parParts.join(" · ") : "";
+      return `
+        <li class="tee-club-row">
+          <div class="tee-club-row-main">
+            <strong>${escapeHtml(entry.club)}</strong>
+            <span class="subtext">${entry.count} tee shot${entry.count === 1 ? "" : "s"}${parBreakdown ? ` · ${escapeHtml(parBreakdown)}` : ""}</span>
+          </div>
+          <div class="tee-club-row-stats">
+            <span class="tee-club-stat"><small>Score to par</small><strong>${formatSigned(entry.avgToPar, 2)}</strong></span>
+            <span class="tee-club-stat"><small>Avg SG</small><strong>${Number.isFinite(entry.avgSg) ? formatSigned(entry.avgSg, 2) : "--"}</strong></span>
+          </div>
+        </li>`;
+    }).join("");
+    els.teeClubPanel.innerHTML = `
+      <p class="tee-club-total">${total} tee shot${total === 1 ? "" : "s"} tagged across ${data.length} club${data.length === 1 ? "" : "s"}.</p>
+      <ul class="tee-club-list">${rows}</ul>`;
+  }
+
   function renderLatestNarrative() {
     if (!els.latestNarrative) return;
     if (!state.rounds.length) {
@@ -3350,6 +3433,7 @@
     renderStrokesGained(rounds);
     renderPuttingPanel(rounds);
     renderScoringDistribution(rounds);
+    renderTeeClubPerformance(rounds);
     renderRecentRounds();
     updateBackupBadge();
     renderCourseList();

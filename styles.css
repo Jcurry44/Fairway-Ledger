@@ -1398,6 +1398,121 @@ select:focus {
   border-color: var(--green-dark, #15573c);
 }
 
+.pill-club-tee {
+  position: relative;
+  padding-right: 38px;
+  border-color: #c98b21;
+  box-shadow: 0 0 0 2px rgba(201, 139, 33, 0.18);
+}
+
+.pill-club-tee.active {
+  background: #b07908;
+  border-color: #8a5c05;
+}
+
+.pill-tee-badge {
+  position: absolute;
+  top: -6px;
+  right: -4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #c98b21;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  line-height: 1.4;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.card-pill-sublabel {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: normal;
+  text-transform: none;
+  margin-left: 6px;
+}
+
+/* Tee Club Performance panel — aggregate by tee club across rounds. */
+
+.tee-club-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tee-club-total {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.tee-club-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tee-club-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfdfa;
+}
+
+.tee-club-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tee-club-row-main strong {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.tee-club-row-main .subtext {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.tee-club-row-stats {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.tee-club-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.tee-club-stat small {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tee-club-stat strong {
+  color: var(--green-dark, #15573c);
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
 .round-summary-field {
   margin-top: 18px;
   padding: 16px 18px;
