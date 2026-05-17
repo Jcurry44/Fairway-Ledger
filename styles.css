@@ -1262,6 +1262,192 @@ select:focus {
   font-weight: 700;
 }
 
+/* Pill-based fast entry — replaces typed number inputs in card view.
+   Hidden inputs (.card-hidden-inputs) keep the data layer unchanged. */
+
+.card-hidden-inputs[hidden] {
+  display: none;
+}
+
+.card-pill-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0;
+  border-top: 1px solid #edf1eb;
+}
+
+.card-pill-row:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.card-pill-label {
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.card-pill-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.card-pill-na {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 48px;
+  padding: 6px 14px;
+  border: 1.5px solid var(--line, #d6e2d9);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 100ms ease, border-color 100ms ease, color 100ms ease, transform 80ms ease;
+}
+
+.pill:hover {
+  border-color: #a8b8ad;
+}
+
+.pill:active {
+  transform: scale(0.96);
+}
+
+.pill.active {
+  background: var(--green, #217a57);
+  border-color: var(--green, #217a57);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(31, 122, 89, 0.28);
+}
+
+.card-pill-custom {
+  width: 64px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1.5px dashed #cfd9d2;
+  border-radius: 12px;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 700;
+  background: #fbfdfa;
+  color: var(--ink);
+}
+
+.card-pill-options-no-custom {
+  /* For fairway etc. where a custom input doesn't make sense */
+}
+
+.card-field-gir {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line, #d6e2d9);
+  border-radius: 10px;
+  background: #fbfdfa;
+}
+
+.card-field-gir span {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ink);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.card-clubs-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0;
+  border-top: 1px solid #edf1eb;
+}
+
+.card-clubs-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pill-club {
+  min-height: 36px;
+  min-width: 0;
+  padding: 4px 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.pill-club.active {
+  background: var(--green-dark, #15573c);
+  border-color: var(--green-dark, #15573c);
+}
+
+.round-summary-field {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px solid #d6e2d9;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f6fbf5 0%, #eaf3ee 100%);
+}
+
+.round-summary-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--green-dark, #15573c);
+  margin-bottom: 8px;
+}
+
+.round-summary-field textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 12px 13px;
+  border: 1px solid var(--line, #d6e2d9);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 500;
+  font-family: inherit;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.round-summary-field textarea:focus {
+  outline: none;
+  border-color: var(--green, #217a57);
+  box-shadow: 0 0 0 3px rgba(31, 122, 89, 0.15);
+}
+
+.round-summary-field textarea::placeholder {
+  color: #9aab9d;
+  font-style: italic;
+}
+
+.round-summary-hint {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .hazard-chip-list {
   list-style: none;
   margin: 8px 0 0;

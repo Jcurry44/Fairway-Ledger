@@ -36,9 +36,34 @@
   }
 
   let pendingHoleShots = {};
+  let pendingHoleClubs = {};
 
   function resetHoleShots() {
     pendingHoleShots = {};
+  }
+
+  function resetHoleClubs() {
+    pendingHoleClubs = {};
+  }
+
+  function getHoleClubs(holeNumber) {
+    return pendingHoleClubs[String(holeNumber)] || [];
+  }
+
+  function setHoleClubs(holeNumber, clubs) {
+    const key = String(holeNumber);
+    if (Array.isArray(clubs) && clubs.length) {
+      pendingHoleClubs[key] = [...clubs];
+    } else {
+      delete pendingHoleClubs[key];
+    }
+  }
+
+  function toggleHoleClub(holeNumber, club) {
+    const current = getHoleClubs(holeNumber);
+    const next = current.includes(club) ? current.filter((c) => c !== club) : [...current, club];
+    setHoleClubs(holeNumber, next);
+    return next;
   }
 
   function getHoleShots(holeNumber) {
@@ -570,7 +595,8 @@
       note: els.roundNote ? els.roundNote.value || "" : "",
       holes,
       holeNotes: { ...pendingHoleNotes },
-      holeShots: JSON.parse(JSON.stringify(pendingHoleShots || {}))
+      holeShots: JSON.parse(JSON.stringify(pendingHoleShots || {})),
+      holeClubs: JSON.parse(JSON.stringify(pendingHoleClubs || {}))
     };
   }
 
@@ -587,7 +613,8 @@
       });
       const hasNotes = Object.keys(draft.holeNotes || {}).length > 0;
       const hasShots = Object.keys(draft.holeShots || {}).length > 0;
-      if (!hasScores && !hasNotes && !hasShots) {
+      const hasClubs = Object.keys(draft.holeClubs || {}).length > 0;
+      if (!hasScores && !hasNotes && !hasShots && !hasClubs) {
         // Empty draft — don't pollute storage with placeholder rows.
         clearInProgressRound();
         return;
@@ -631,10 +658,13 @@
     if (data.layoutId) els.roundLayout.value = data.layoutId;
     if (data.tee) els.roundTee.value = data.tee;
     resetHoleNotes();
-    resetHoleShots();
+    resetHoleShots(); resetHoleClubs();
     Object.entries(data.holeNotes || {}).forEach(([num, note]) => setHoleNote(num, note));
     Object.entries(data.holeShots || {}).forEach(([num, shots]) => {
       if (Array.isArray(shots) && shots.length) setHoleShots(Number(num), shots);
+    });
+    Object.entries(data.holeClubs || {}).forEach(([num, clubs]) => {
+      if (Array.isArray(clubs) && clubs.length) setHoleClubs(Number(num), clubs);
     });
     renderScorecard(getSelectedRoundCourse());
     renderCourseBrief();
@@ -1073,8 +1103,8 @@
       : renderScorecardGridMode(course);
 
     els.scorecardGrid.querySelectorAll("input, select").forEach((input) => {
-      input.addEventListener("input", () => { updateRoundPreview(); scheduleInProgressSave(); });
-      input.addEventListener("change", () => { updateRoundPreview(); scheduleInProgressSave(); });
+      input.addEventListener("input", () => { updateRoundPreview(); scheduleInProgressSave(); if (viewMode === "card") syncAllPillActiveStates(); });
+      input.addEventListener("change", () => { updateRoundPreview(); scheduleInProgressSave(); if (viewMode === "card") syncAllPillActiveStates(); });
     });
     els.scorecardGrid.querySelectorAll(".card-note-input").forEach((textarea) => {
       textarea.addEventListener("input", () => {
@@ -1085,6 +1115,7 @@
     if (viewMode === "card") wireCardModeBehavior();
     updateViewToggleLabel();
     updateRoundPreview();
+    if (viewMode === "card") syncAllPillActiveStates();
   }
 
   function renderScorecardGridMode(course) {
@@ -1137,6 +1168,107 @@
 
   function firstPuttInputCell(hole) {
     return `<input class="first-putt-input compact-input" data-hole="${hole.number}" type="number" min="0" max="120" inputmode="numeric" placeholder="ft" aria-label="${escapeHtml(hole.label || `Hole ${hole.number}`)} first putt distance in feet">`;
+  }
+
+  // Pills for fast on-course tap entry. Each pill row writes to the hidden
+  // typed input (which preserves all existing read/save logic) plus offers
+  // a small custom input as an escape hatch for values outside the pill set.
+  function renderPillsRow({ label, holeNumber, inputClass, values, customMin, customMax, customPlaceholder = "…" }) {
+    const pills = values.map((v) => `<button type="button" class="pill" data-pill-value="${v}">${v}</button>`).join("");
+    return `
+      <div class="card-pill-row" data-pill-group="${inputClass}" data-hole="${holeNumber}">
+        <span class="card-pill-label">${escapeHtml(label)}</span>
+        <div class="card-pill-options">
+          ${pills}
+          <input type="number" class="card-pill-custom" data-pill-custom-for="${inputClass}" data-hole="${holeNumber}" min="${customMin}" max="${customMax}" inputmode="numeric" placeholder="${escapeHtml(customPlaceholder)}" aria-label="Custom ${escapeHtml(label)} value">
+        </div>
+      </div>`;
+  }
+
+  function renderScorePills(hole) {
+    const par = hole.par;
+    const values = [];
+    for (let v = Math.max(1, par - 2); v <= par + 3; v += 1) values.push(v);
+    return renderPillsRow({
+      label: "Score",
+      holeNumber: hole.number,
+      inputClass: "score-input",
+      values,
+      customMin: 1,
+      customMax: 15,
+      customPlaceholder: String(par)
+    });
+  }
+
+  function renderPuttsPills(hole) {
+    return renderPillsRow({
+      label: "Putts",
+      holeNumber: hole.number,
+      inputClass: "putts-input",
+      values: [0, 1, 2, 3, 4, 5],
+      customMin: 0,
+      customMax: 8
+    });
+  }
+
+  function renderPenPills(hole) {
+    return renderPillsRow({
+      label: "Pen",
+      holeNumber: hole.number,
+      inputClass: "penalty-input",
+      values: [0, 1, 2, 3],
+      customMin: 0,
+      customMax: 8
+    });
+  }
+
+  function renderFirstPuttPills(hole) {
+    return renderPillsRow({
+      label: "1st putt (ft)",
+      holeNumber: hole.number,
+      inputClass: "first-putt-input",
+      values: [3, 6, 10, 15, 20, 30, 50],
+      customMin: 0,
+      customMax: 120,
+      customPlaceholder: "ft"
+    });
+  }
+
+  function renderFairwayPills(hole) {
+    if (hole.par === 3) {
+      return `
+        <div class="card-pill-row" data-pill-group="fairway-input" data-hole="${hole.number}">
+          <span class="card-pill-label">Fairway</span>
+          <span class="card-pill-na">N/A (par 3)</span>
+        </div>`;
+    }
+    const options = [
+      { value: "hit", label: "Hit" },
+      { value: "left", label: "Left" },
+      { value: "right", label: "Right" },
+      { value: "short", label: "Short" },
+      { value: "long", label: "Long" },
+      { value: "miss", label: "Miss" }
+    ];
+    const pills = options.map((opt) => `<button type="button" class="pill" data-pill-value="${opt.value}">${escapeHtml(opt.label)}</button>`).join("");
+    return `
+      <div class="card-pill-row" data-pill-group="fairway-input" data-hole="${hole.number}">
+        <span class="card-pill-label">Fairway</span>
+        <div class="card-pill-options card-pill-options-no-custom">${pills}</div>
+      </div>`;
+  }
+
+  function renderClubsHitPills(hole) {
+    const selected = new Set(getHoleClubs(hole.number));
+    const pills = CLUB_OPTIONS.map((club) => {
+      const isActive = selected.has(club) ? " active" : "";
+      return `<button type="button" class="pill pill-club${isActive}" data-toggle-club="${escapeHtml(club)}" data-hole="${hole.number}">${escapeHtml(club)}</button>`;
+    }).join("");
+    return `
+      <div class="card-clubs-row" data-hole="${hole.number}">
+        <span class="card-pill-label">Clubs hit</span>
+        <div class="card-clubs-grid">${pills}</div>
+      </div>`;
   }
 
   const CLUB_OPTIONS = [
@@ -1290,33 +1422,23 @@
             </div>
             ${Array.isArray(hole.hazards) && hole.hazards.length ? `<ul class="hazard-chip-list hazard-chip-list-compact">${hole.hazards.map((h) => renderHazardChip(h)).join("")}</ul>` : ""}
           </div>
-          <div class="card-score-row">
-            <button type="button" class="card-score-shortcut" data-score-delta="-1" aria-label="Decrease score for ${escapeHtml(hole.label || `hole ${hole.number}`)}">−</button>
+          <div class="card-hidden-inputs" hidden>
             ${scoreInputCell(hole)}
-            <button type="button" class="card-score-shortcut" data-score-delta="1" aria-label="Increase score for ${escapeHtml(hole.label || `hole ${hole.number}`)}">+</button>
+            ${puttsInputCell(hole)}
+            ${firstPuttInputCell(hole)}
+            ${fairwayInputCell(hole)}
+            ${penaltyInputCell(hole)}
           </div>
-          <div class="card-secondary">
-            <label class="card-field">
-              <span>Putts</span>
-              ${puttsInputCell(hole)}
-            </label>
-            <label class="card-field">
-              <span>1st putt (ft)</span>
-              ${firstPuttInputCell(hole)}
-            </label>
-            <label class="card-field">
-              <span>Fairway</span>
-              ${fairwayInputCell(hole)}
-            </label>
-            <div class="card-field card-field-toggle">
-              <span>GIR</span>
-              ${girInputCell(hole)}
-            </div>
-            <label class="card-field">
-              <span>Pen</span>
-              ${penaltyInputCell(hole)}
-            </label>
+          ${renderScorePills(hole)}
+          ${renderPuttsPills(hole)}
+          ${renderFirstPuttPills(hole)}
+          ${renderFairwayPills(hole)}
+          <div class="card-field card-field-toggle card-field-gir">
+            <span>GIR (green in regulation)</span>
+            ${girInputCell(hole)}
           </div>
+          ${renderPenPills(hole)}
+          ${renderClubsHitPills(hole)}
           <label class="card-note-field">
             <span>What happened on this hole?</span>
             <textarea class="card-note-input" data-hole="${hole.number}" rows="2" placeholder="Drove left, chipped twice, 2-putt from 12ft… (tap the mic on your keyboard for voice)">${escapeHtml(getHoleNote(hole.number))}</textarea>
@@ -1383,6 +1505,36 @@
         openHolePicker();
         return;
       }
+      const pill = event.target.closest(".pill[data-pill-value]");
+      if (pill) {
+        event.preventDefault();
+        const row = pill.closest(".card-pill-row");
+        if (!row) return;
+        const inputClass = row.dataset.pillGroup;
+        const holeNumber = row.dataset.hole;
+        const value = pill.dataset.pillValue;
+        const input = stack.querySelector(`.${inputClass}[data-hole="${holeNumber}"]`);
+        if (input) {
+          input.value = value;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        // Clear any value typed in the custom field for this row
+        const customField = row.querySelector(".card-pill-custom");
+        if (customField) customField.value = "";
+        syncPillActiveStateForRow(row);
+        return;
+      }
+      const clubPill = event.target.closest("[data-toggle-club]");
+      if (clubPill) {
+        event.preventDefault();
+        const holeNumber = clubPill.dataset.hole;
+        const club = clubPill.dataset.toggleClub;
+        toggleHoleClub(holeNumber, club);
+        clubPill.classList.toggle("active");
+        scheduleInProgressSave();
+        return;
+      }
       const markShotButton = event.target.closest("[data-mark-shot]");
       if (markShotButton) {
         event.preventDefault();
@@ -1416,12 +1568,44 @@
 
     stack.addEventListener("change", (event) => {
       const clubSelect = event.target.closest("[data-shot-club]");
-      if (!clubSelect) return;
-      const holeNumber = clubSelect.dataset.shotClub;
-      const index = Number(clubSelect.dataset.shotIndex);
-      updateHoleShotAtIndex(holeNumber, index, { club: clubSelect.value });
-      scheduleInProgressSave();
+      if (clubSelect) {
+        const holeNumber = clubSelect.dataset.shotClub;
+        const index = Number(clubSelect.dataset.shotIndex);
+        updateHoleShotAtIndex(holeNumber, index, { club: clubSelect.value });
+        scheduleInProgressSave();
+        return;
+      }
     });
+
+    // Custom typed fallback for pill rows: when the user types in the small
+    // "…" input next to the pills, mirror that value into the real hidden
+    // input so all existing read/save logic continues to work.
+    stack.addEventListener("input", (event) => {
+      const custom = event.target.closest("[data-pill-custom-for]");
+      if (!custom) return;
+      const inputClass = custom.dataset.pillCustomFor;
+      const holeNumber = custom.dataset.hole;
+      const input = stack.querySelector(`.${inputClass}[data-hole="${holeNumber}"]`);
+      if (input) {
+        input.value = custom.value;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+  }
+
+  function syncPillActiveStateForRow(row) {
+    const inputClass = row.dataset.pillGroup;
+    const holeNumber = row.dataset.hole;
+    const input = els.scorecardGrid.querySelector(`.${inputClass}[data-hole="${holeNumber}"]`);
+    if (!input) return;
+    const value = input.value;
+    row.querySelectorAll(".pill").forEach((p) => {
+      p.classList.toggle("active", p.dataset.pillValue !== undefined && String(p.dataset.pillValue) === String(value));
+    });
+  }
+
+  function syncAllPillActiveStates() {
+    els.scorecardGrid.querySelectorAll(".card-pill-row").forEach(syncPillActiveStateForRow);
   }
 
   function openHolePicker() {
@@ -1673,7 +1857,8 @@
         penalties: Number.isFinite(penaltyValue) ? penaltyValue : 0,
         firstPuttDistance: Number.isFinite(firstPuttValue) && firstPuttValue >= 0 ? firstPuttValue : null,
         note: getHoleNote(holeNumber),
-        shots: getHoleShots(holeNumber)
+        shots: getHoleShots(holeNumber),
+        clubsHit: getHoleClubs(holeNumber)
       };
     });
   }
@@ -3134,7 +3319,7 @@
     els.roundNote.value = "";
     clearInProgressRound();
     resetHoleNotes();
-    resetHoleShots();
+    resetHoleShots(); resetHoleClubs();
     updateEditModeUi();
     if (rerender) renderScorecard(getSelectedRoundCourse());
   }
@@ -3146,11 +3331,15 @@
     els.roundNote.value = round.note || "";
 
     resetHoleNotes();
-    resetHoleShots();
+    resetHoleShots(); resetHoleClubs();
+    resetHoleClubs();
     round.holes.forEach((hole) => {
       if (hole && hole.note) setHoleNote(hole.number, hole.note);
       if (hole && Array.isArray(hole.shots) && hole.shots.length) {
         setHoleShots(hole.number, hole.shots);
+      }
+      if (hole && Array.isArray(hole.clubsHit) && hole.clubsHit.length) {
+        setHoleClubs(hole.number, hole.clubsHit);
       }
     });
 
@@ -3199,12 +3388,12 @@
     if (els.roundCourse.value === DEERWOOD_COURSE_ID) els.roundTee.value = "White";
     clearInProgressRound();
     resetHoleNotes();
-    resetHoleShots();
+    resetHoleShots(); resetHoleClubs();
     refreshRoundSetup();
   });
-  els.roundHoleCount.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); refreshRoundSetup(); });
-  els.roundLayout.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); refreshRoundSetup(); });
-  els.roundTee.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); refreshRoundSetup(); });
+  els.roundHoleCount.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); refreshRoundSetup(); });
+  els.roundLayout.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); refreshRoundSetup(); });
+  els.roundTee.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); refreshRoundSetup(); });
   els.roundDate.addEventListener("change", scheduleInProgressSave);
   els.roundNote.addEventListener("input", scheduleInProgressSave);
   els.resetRoundButton.addEventListener("click", () => {
@@ -3214,7 +3403,7 @@
     } else {
       clearInProgressRound();
       resetHoleNotes();
-      resetHoleShots();
+      resetHoleShots(); resetHoleClubs();
       renderScorecard(getSelectedRoundCourse());
     }
   });
@@ -3397,7 +3586,7 @@
         editingRoundId = null;
         clearInProgressRound();
         resetHoleNotes();
-        resetHoleShots();
+        resetHoleShots(); resetHoleClubs();
         saveState();
         updateEditModeUi();
         els.roundNote.value = "";
@@ -3417,7 +3606,7 @@
         state.rounds.push(newRound);
         clearInProgressRound();
         resetHoleNotes();
-        resetHoleShots();
+        resetHoleShots(); resetHoleClubs();
         saveState();
         els.roundNote.value = "";
         renderAll();
@@ -3447,7 +3636,7 @@
     clearEditState({ rerender: false });
     clearInProgressRound();
     resetHoleNotes();
-    resetHoleShots();
+    resetHoleShots(); resetHoleClubs();
     saveState();
     renderAll();
     showToast("Sample data loaded.");
@@ -3459,7 +3648,7 @@
     clearEditState({ rerender: false });
     clearInProgressRound();
     resetHoleNotes();
-    resetHoleShots();
+    resetHoleShots(); resetHoleClubs();
     saveState();
     renderAll();
     showToast("Data cleared.");
