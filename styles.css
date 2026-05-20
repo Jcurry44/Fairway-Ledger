@@ -1470,8 +1470,21 @@ select:focus {
    bogey/double bogey turn square — so the row telegraphs the tiers before
    you tap. Tapping fills green (par or better) or red (bogey or worse). */
 .pill-tier-bogey,
-.pill-tier-double {
+.pill-tier-double,
+.pill-tier-triple {
   border-radius: 11px;
+}
+
+/* Triple bogey or worse: a solid filled red box (placed after .pill.active
+   so it wins the fill even when selected). */
+.pill.pill-tier-triple {
+  background: #c0492f;
+  border-color: #c0492f;
+  color: #ffffff;
+}
+
+.pill.active.pill-tier-triple {
+  box-shadow: 0 4px 14px rgba(192, 73, 47, 0.3);
 }
 
 .pill-tier-birdie:not(.active),
@@ -2971,6 +2984,14 @@ select:focus {
 
 .score-mark-double {
   box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #c0492f;
+}
+
+/* Triple bogey or worse: solid filled red box — the heaviest mark. */
+.score-mark-triple {
+  border: 2px solid #c0492f;
+  border-radius: 6px;
+  background: #c0492f;
+  color: #ffffff;
 }
 
 body.hole-picker-open {

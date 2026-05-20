@@ -2621,7 +2621,8 @@
     if (delta === -1) return "score-mark-birdie";
     if (delta === 0) return "score-mark-par";
     if (delta === 1) return "score-mark-bogey";
-    return "score-mark-double";
+    if (delta === 2) return "score-mark-double";
+    return "score-mark-triple";
   }
 
   function renderScoreMark(score, par, emptyText = "—") {
