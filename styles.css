@@ -1480,18 +1480,10 @@ select:focus {
   background: #f1f8f3;
 }
 
-.pill-tier-eagle:not(.active) {
-  border-width: 3px;
-}
-
 .pill-tier-bogey:not(.active),
 .pill-tier-double:not(.active) {
   border-color: #e3b3a6;
   background: #fcf3f0;
-}
-
-.pill-tier-double:not(.active) {
-  border-width: 3px;
 }
 
 .pill.active.pill-tier-bogey,
@@ -1499,6 +1491,44 @@ select:focus {
   background: #c0492f;
   border-color: #c0492f;
   box-shadow: 0 4px 14px rgba(192, 73, 47, 0.3);
+}
+
+/* Eagle = double circle, double bogey or worse = double box. The second
+   ring is drawn inside the pill so it never bleeds into the tight pill-row
+   gap. (Birdie stays a single circle, bogey a single box, par plain.) */
+.pill-tier-eagle,
+.pill-tier-double {
+  position: relative;
+}
+
+.pill-tier-eagle::after,
+.pill-tier-double::after {
+  content: "";
+  position: absolute;
+  inset: 3.5px;
+  border: 1.5px solid;
+  pointer-events: none;
+}
+
+.pill-tier-eagle::after {
+  border-radius: 999px;
+}
+
+.pill-tier-double::after {
+  border-radius: 7px;
+}
+
+.pill-tier-eagle:not(.active)::after {
+  border-color: #9cc8b0;
+}
+
+.pill-tier-double:not(.active)::after {
+  border-color: #e3b3a6;
+}
+
+.pill.active.pill-tier-eagle::after,
+.pill.active.pill-tier-double::after {
+  border-color: rgba(255, 255, 255, 0.7);
 }
 
 .card-pill-custom {
