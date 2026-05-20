@@ -953,6 +953,21 @@ select:focus {
   gap: 4px;
   border-bottom: 1px solid #edf1eb;
   padding-bottom: 12px;
+  position: relative;
+}
+
+/* Live score mark badge in the top-right of the card headline. */
+.card-hole-mark {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.card-hole-mark .score-mark {
+  min-width: 40px;
+  height: 40px;
+  margin: 4px;
+  font-size: 1.35rem;
 }
 
 .card-hole-label {
@@ -2304,6 +2319,110 @@ select:focus {
   line-height: 1.5;
 }
 
+/* Expandable per-round scorecard — reuses the summary <details> styling. */
+.round-row-scorecard {
+  margin-top: 6px;
+}
+
+.round-row-scorecard summary {
+  cursor: pointer;
+  color: var(--green-dark, #15573c);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+}
+
+.round-row-scorecard summary::-webkit-details-marker {
+  display: none;
+}
+
+.round-row-scorecard summary::after {
+  content: "▾";
+  font-size: 0.7rem;
+  transition: transform 140ms ease;
+}
+
+.round-row-scorecard[open] summary::after {
+  transform: rotate(180deg);
+}
+
+.round-scorecard {
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #f3f7f1;
+  border-radius: 8px;
+}
+
+.rsc-nine-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--green-dark, #15573c);
+  margin-bottom: 4px;
+}
+
+.rsc-nine-head span {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.rsc-holes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.rsc-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  flex: 1 0 auto;
+  width: calc((100% - 16px) / 9);
+  min-width: 38px;
+  padding: 4px 0;
+}
+
+.rsc-cell-label {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.rsc-cell-par {
+  font-size: 0.58rem;
+  color: #9aa8a0;
+}
+
+.rsc-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-top: 1px solid #dde6da;
+  padding-top: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.rsc-total strong {
+  font-size: 1rem;
+  color: var(--ink);
+}
+
 .putting-panel {
   display: flex;
   flex-direction: column;
@@ -2586,35 +2705,55 @@ select:focus {
 }
 
 .hp-row-score {
-  min-width: 36px;
-  padding: 4px 10px;
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+}
+
+/* Traditional scorecard score marks: circle = birdie, double circle = eagle+,
+   square = bogey, double square = double bogey or worse, plain = par. */
+.score-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 26px;
+  height: 26px;
+  margin: 4px;
+  padding: 0 3px;
   font-size: 0.95rem;
   font-weight: 800;
-  text-align: center;
-  background: #eef2eb;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
   color: var(--ink);
 }
 
-.hp-row-score-empty {
-  background: transparent;
+.score-mark-empty {
   color: var(--muted);
   font-weight: 600;
 }
 
-.hp-row-score-under {
-  background: #d6eedf;
-  color: #15573c;
+.score-mark-birdie,
+.score-mark-eagle {
+  border: 2px solid var(--green, #1f7a59);
+  border-radius: 50%;
+  color: var(--green-dark, #123f32);
 }
 
-.hp-row-score-par {
-  background: #eef2eb;
-  color: var(--ink);
+.score-mark-eagle {
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px var(--green, #1f7a59);
 }
 
-.hp-row-score-over {
-  background: #f8dad4;
-  color: #843c33;
+.score-mark-bogey,
+.score-mark-double {
+  border: 2px solid #c0492f;
+  border-radius: 6px;
+  color: #8f2f1c;
+}
+
+.score-mark-double {
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #c0492f;
 }
 
 body.hole-picker-open {

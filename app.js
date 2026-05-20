@@ -265,6 +265,7 @@
     roundBackNineField: document.getElementById("roundBackNineField"),
     roundTee: document.getElementById("roundTee"),
     roundTeeField: document.getElementById("roundTeeField"),
+    roundWind: document.getElementById("roundWind"),
     roundNote: document.getElementById("roundNote"),
     roundCourseMeta: document.getElementById("roundCourseMeta"),
     roundBrief: document.getElementById("roundBrief"),
@@ -603,6 +604,7 @@
       holeCount: els.roundHoleCount ? els.roundHoleCount.value || "" : "",
       layoutId: els.roundLayout ? els.roundLayout.value || "" : "",
       tee: els.roundTee ? els.roundTee.value || "" : "",
+      wind: els.roundWind ? els.roundWind.value || "" : "",
       note: els.roundNote ? els.roundNote.value || "" : "",
       holes,
       holeNotes: { ...pendingHoleNotes },
@@ -658,6 +660,7 @@
     if (data.date) els.roundDate.value = data.date;
     if (data.course) els.roundCourse.value = data.course;
     if (data.note) els.roundNote.value = data.note;
+    if (els.roundWind) els.roundWind.value = data.wind || "";
     // Re-render Deerwood option visibility based on the chosen course,
     // then set holeCount/layout/tee in the correct order so the layout
     // dropdown's options match the hole count before we assign a value.
@@ -1521,6 +1524,7 @@
             <button type="button" class="card-position" data-open-hole-picker aria-label="${positionText} — tap to jump to another hole">${positionText} <span class="card-position-caret" aria-hidden="true">▾</span></button>
           </div>
           <div class="card-headline">
+            <span class="card-hole-mark" data-hole="${hole.number}" hidden></span>
             <h3 class="card-hole-label">${escapeHtml(hole.label || `Hole ${hole.number}`)}</h3>
             <div class="card-hole-meta">
               <span>Par ${hole.par}</span>
@@ -1759,6 +1763,25 @@
 
   function syncAllPillActiveStates() {
     els.scorecardGrid.querySelectorAll(".card-pill-row").forEach(syncPillActiveStateForRow);
+    syncCardScoreMarks();
+  }
+
+  // Show a traditional birdie-circle / bogey-box mark in each card's headline
+  // once a score is entered, so the card reads back the result at a glance.
+  function syncCardScoreMarks() {
+    els.scorecardGrid.querySelectorAll(".card-hole-mark[data-hole]").forEach((el) => {
+      const hole = el.dataset.hole;
+      const scoreInput = els.scorecardGrid.querySelector(`.score-input[data-hole="${hole}"]`);
+      const par = scoreInput ? Number(scoreInput.dataset.par) : NaN;
+      const score = scoreInput && scoreInput.value ? Number(scoreInput.value) : NaN;
+      if (Number.isFinite(score) && score > 0) {
+        el.innerHTML = renderScoreMark(score, par);
+        el.hidden = false;
+      } else {
+        el.innerHTML = "";
+        el.hidden = true;
+      }
+    });
   }
 
   function openHolePicker() {
@@ -1774,19 +1797,13 @@
       const metaParts = metaEl ? [...metaEl.querySelectorAll("span")].map((span) => span.textContent.trim()).filter(Boolean) : [];
       const meta = metaParts.join(" · ");
       const scoreValue = scoreInput && scoreInput.value ? Number(scoreInput.value) : null;
-      const scoreText = scoreValue ? String(scoreValue) : "—";
-      let scoreStatus = "empty";
-      if (scoreValue && par) {
-        if (scoreValue < par) scoreStatus = "under";
-        else if (scoreValue === par) scoreStatus = "par";
-        else scoreStatus = "over";
-      }
+      const needsEntry = !(Number.isFinite(scoreValue) && scoreValue > 0);
       return `
         <li>
-          <button type="button" class="hp-row${index === activeIndex ? " active" : ""}${scoreStatus === "empty" ? " hp-row-needs-entry" : ""}" data-jump-hole="${index}">
+          <button type="button" class="hp-row${index === activeIndex ? " active" : ""}${needsEntry ? " hp-row-needs-entry" : ""}" data-jump-hole="${index}">
             <span class="hp-row-index">${index + 1}</span>
             <span class="hp-row-label"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(meta)}</small></span>
-            <span class="hp-row-score hp-row-score-${scoreStatus}">${scoreText}</span>
+            <span class="hp-row-score">${renderScoreMark(scoreValue, par)}</span>
           </button>
         </li>`;
     }).join("");
@@ -2427,6 +2444,31 @@
       if (match) return `deerwood:${match[1].toLowerCase()}:${match[2]}`;
     }
     return `course:${courseId}:${hole ? hole.number : ""}`;
+  }
+
+  // Wind is stored as the raw selector value: "", "calm", "5".."25", "30+".
+  function formatWind(wind) {
+    if (!wind) return "";
+    if (wind === "calm") return "Calm";
+    return `${wind} mph wind`;
+  }
+
+  // Traditional scorecard notation: circle = birdie, double circle = eagle+,
+  // square = bogey, double square = double bogey or worse, plain = par.
+  function scoreMarkClass(score, par) {
+    if (!Number.isFinite(score) || score <= 0 || !Number.isFinite(par)) return "";
+    const delta = score - par;
+    if (delta <= -2) return "score-mark-eagle";
+    if (delta === -1) return "score-mark-birdie";
+    if (delta === 0) return "score-mark-par";
+    if (delta === 1) return "score-mark-bogey";
+    return "score-mark-double";
+  }
+
+  function renderScoreMark(score, par, emptyText = "—") {
+    const variant = scoreMarkClass(score, par);
+    if (!variant) return `<span class="score-mark score-mark-empty">${escapeHtml(emptyText)}</span>`;
+    return `<span class="score-mark ${variant}">${score}</span>`;
   }
 
   function getHoleGroups(rounds) {
@@ -3143,6 +3185,36 @@
     };
   }
 
+  // A read-only, traditional marked-up scorecard for a saved round: holes
+  // split by nine, each score shown with its birdie-circle / bogey-box mark.
+  function renderRoundScorecard(round) {
+    if (!round || !Array.isArray(round.holes) || !round.holes.length) return "";
+    const sectionsHtml = getScorecardSections(round.holes).map((section) => {
+      const scored = section.holes.filter((hole) => Number.isFinite(hole.score) && hole.score > 0);
+      const scoreSum = scored.reduce((sum, hole) => sum + hole.score, 0);
+      const cells = section.holes.map((hole) => `
+        <div class="rsc-cell">
+          <span class="rsc-cell-label">${escapeHtml(hole.label || `#${hole.number}`)}</span>
+          ${renderScoreMark(hole.score, hole.par)}
+          <span class="rsc-cell-par">Par ${hole.par}</span>
+        </div>`).join("");
+      return `
+        <div class="rsc-nine">
+          <div class="rsc-nine-head">
+            <strong>${escapeHtml(section.label)}</strong>
+            <span>${scored.length ? `${scoreSum} (${formatSigned(scoreSum - section.par, 0)})` : "--"} · Par ${section.par}</span>
+          </div>
+          <div class="rsc-holes">${cells}</div>
+        </div>`;
+    }).join("");
+    const totals = roundTotals(round);
+    return `
+      <div class="round-scorecard">
+        ${sectionsHtml}
+        <div class="rsc-total"><span>Total</span><strong>${totals.gross} (${formatSigned(totals.toPar, 0)})</strong></div>
+      </div>`;
+  }
+
   function renderRecentRounds() {
     const rows = [...state.rounds]
       .sort((a, b) => b.date.localeCompare(a.date))
@@ -3152,17 +3224,20 @@
         const totals = roundTotals(round);
         const sg = roundStrokesGained(round);
         const sgLabel = sg ? ` | SG ${formatSigned(sg.total)}` : "";
+        const windLabel = round.wind ? ` | ${escapeHtml(formatWind(round.wind))}` : "";
         const editingBadge = editingRoundId === round.id ? ' <span class="editing-pill">editing</span>' : "";
         const narrative = round.narrative || (round.holes && round.holes.some((h) => Number.isFinite(h.score) && h.score > 0) ? generateRoundNarrative(round, state.rounds) : "");
         const narrativeHtml = narrative
           ? `<details class="round-row-summary"><summary>Summary</summary><p>${escapeHtml(narrative)}</p></details>`
           : "";
+        const scorecardHtml = `<details class="round-row-scorecard"><summary>Scorecard</summary>${renderRoundScorecard(round)}</details>`;
         return `
           <div class="round-row${editingRoundId === round.id ? " editing" : ""}">
             <div class="round-row-main">
               <strong>${totals.gross} (${formatSigned(totals.toPar, 0)})${editingBadge}</strong>
-              <span class="subtext">${round.date} | ${escapeHtml(course ? course.name : "Unknown")}${sgLabel}</span>
+              <span class="subtext">${round.date} | ${escapeHtml(course ? course.name : "Unknown")}${windLabel}${sgLabel}</span>
               ${narrativeHtml}
+              ${scorecardHtml}
             </div>
             <div class="row-actions">
               <button type="button" data-edit-round="${round.id}">Edit</button>
@@ -3838,6 +3913,7 @@
     if (!editingRoundId && els.roundEntryTitle.textContent === "Add Round") return;
     editingRoundId = null;
     els.roundNote.value = "";
+    if (els.roundWind) els.roundWind.value = "";
     clearInProgressRound();
     resetHoleNotes();
     resetHoleShots(); resetHoleClubs(); resetReviewState();
@@ -3850,6 +3926,7 @@
     editingRoundId = round.id;
     els.roundDate.value = round.date || today;
     els.roundNote.value = round.note || "";
+    if (els.roundWind) els.roundWind.value = round.wind || "";
 
     resetHoleNotes();
     resetHoleShots(); resetHoleClubs(); resetReviewState();
@@ -3936,6 +4013,7 @@
   });
   els.roundDate.addEventListener("change", scheduleInProgressSave);
   els.roundNote.addEventListener("input", scheduleInProgressSave);
+  if (els.roundWind) els.roundWind.addEventListener("change", scheduleInProgressSave);
   els.resetRoundButton.addEventListener("click", () => {
     if (editingRoundId) {
       clearEditState();
@@ -4148,6 +4226,7 @@
           date,
           courseId: course.id,
           tee: course.tee,
+          wind: els.roundWind ? els.roundWind.value || "" : "",
           note,
           holes
         };
@@ -4160,6 +4239,7 @@
         saveState();
         updateEditModeUi();
         els.roundNote.value = "";
+        if (els.roundWind) els.roundWind.value = "";
         renderAll();
         setActiveTab("home");
         showToast("Round updated.");
@@ -4169,6 +4249,7 @@
           date,
           courseId: course.id,
           tee: course.tee,
+          wind: els.roundWind ? els.roundWind.value || "" : "",
           note,
           holes
         };
@@ -4179,6 +4260,7 @@
         resetHoleShots(); resetHoleClubs(); resetReviewState();
         saveState();
         els.roundNote.value = "";
+        if (els.roundWind) els.roundWind.value = "";
         renderAll();
         setActiveTab("home");
         showToast("Round saved.");
