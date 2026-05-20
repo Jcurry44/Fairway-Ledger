@@ -1466,6 +1466,41 @@ select:focus {
   color: var(--green-dark, #123f32);
 }
 
+/* Score pills carry their scoring-tier shape: birdie/eagle stay round,
+   bogey/double bogey turn square — so the row telegraphs the tiers before
+   you tap. Tapping fills green (par or better) or red (bogey or worse). */
+.pill-tier-bogey,
+.pill-tier-double {
+  border-radius: 11px;
+}
+
+.pill-tier-birdie:not(.active),
+.pill-tier-eagle:not(.active) {
+  border-color: #9cc8b0;
+  background: #f1f8f3;
+}
+
+.pill-tier-eagle:not(.active) {
+  border-width: 3px;
+}
+
+.pill-tier-bogey:not(.active),
+.pill-tier-double:not(.active) {
+  border-color: #e3b3a6;
+  background: #fcf3f0;
+}
+
+.pill-tier-double:not(.active) {
+  border-width: 3px;
+}
+
+.pill.active.pill-tier-bogey,
+.pill.active.pill-tier-double {
+  background: #c0492f;
+  border-color: #c0492f;
+  box-shadow: 0 4px 14px rgba(192, 73, 47, 0.3);
+}
+
 .card-pill-custom {
   width: 64px;
   min-height: 44px;

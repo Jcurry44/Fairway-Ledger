@@ -1326,10 +1326,16 @@
   // Pills for fast on-course tap entry. Each pill row writes to the hidden
   // typed input (which preserves all existing read/save logic) plus offers
   // a small custom input as an escape hatch for values outside the pill set.
-  function renderPillsRow({ label, holeNumber, inputClass, values, customMin, customMax, customPlaceholder = "…", parValue }) {
+  function renderPillsRow({ label, holeNumber, inputClass, values, customMin, customMax, customPlaceholder = "…", parValue, scoreTiers = false }) {
     const pills = values.map((v) => {
       const isPar = parValue !== undefined && Number(v) === Number(parValue);
-      return `<button type="button" class="pill${isPar ? " pill-par" : ""}" data-pill-value="${v}">${v}</button>`;
+      let tierCls = "";
+      // Score pills carry their scoring-tier shape (circle birdie / box bogey).
+      if (scoreTiers && parValue !== undefined) {
+        const variant = scoreMarkClass(Number(v), Number(parValue));
+        if (variant) tierCls = ` pill-${variant.replace("score-mark-", "tier-")}`;
+      }
+      return `<button type="button" class="pill${isPar ? " pill-par" : ""}${tierCls}" data-pill-value="${v}">${v}</button>`;
     }).join("");
     return `
       <div class="card-pill-row" data-pill-group="${inputClass}" data-hole="${holeNumber}">
@@ -1351,6 +1357,7 @@
       inputClass: "score-input",
       values,
       parValue: par,
+      scoreTiers: true,
       customMin: 1,
       customMax: 15,
       customPlaceholder: String(par)
