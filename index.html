@@ -4,9 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Fairway Ledger</title>
-    <link rel="stylesheet" href="./styles.css?v=2026-05-17e">
-    <script src="./data/courses.js?v=2026-05-17e" defer></script>
-    <script src="./app.js?v=2026-05-17e" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-19a">
+    <script src="./data/courses.js?v=2026-05-19a" defer></script>
+    <script src="./app.js?v=2026-05-19a" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -279,8 +279,24 @@
                   </select>
                 </label>
                 <label id="roundLayoutField">
-                  Layout
+                  Nine
                   <select id="roundLayout"></select>
+                </label>
+                <label id="roundFrontNineField">
+                  Front 9
+                  <select id="roundFrontNine">
+                    <option value="buck">Buck</option>
+                    <option value="doe">Doe</option>
+                    <option value="fawn">Fawn</option>
+                  </select>
+                </label>
+                <label id="roundBackNineField">
+                  Back 9
+                  <select id="roundBackNine">
+                    <option value="buck">Buck</option>
+                    <option value="doe" selected>Doe</option>
+                    <option value="fawn">Fawn</option>
+                  </select>
                 </label>
                 <label id="roundTeeField">
                   Tee

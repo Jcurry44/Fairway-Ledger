@@ -222,16 +222,14 @@
 
   const DEERWOOD_COURSE_ID = "deerwood";
   const DEERWOOD_TEE_OPTIONS = ["White", "Blue"];
+  // 9-hole rounds pick a single nine. 18-hole rounds pick Front 9 + Back 9
+  // independently (all 6 permutations), so 18-hole layouts are computed in
+  // getDeerwoodLayout rather than enumerated here.
   const deerwoodLayoutOptions = {
     "9": [
       { id: "buck", label: "Buck", nines: ["buck"] },
       { id: "doe", label: "Doe", nines: ["doe"] },
       { id: "fawn", label: "Fawn", nines: ["fawn"] }
-    ],
-    "18": [
-      { id: "buck-doe", label: "Buck / Doe", nines: ["buck", "doe"] },
-      { id: "buck-fawn", label: "Buck / Fawn", nines: ["buck", "fawn"] },
-      { id: "doe-fawn", label: "Doe / Fawn", nines: ["doe", "fawn"] }
     ]
   };
   const deerwoodNineLabels = {
@@ -261,6 +259,10 @@
     roundHoleCountField: document.getElementById("roundHoleCountField"),
     roundLayout: document.getElementById("roundLayout"),
     roundLayoutField: document.getElementById("roundLayoutField"),
+    roundFrontNine: document.getElementById("roundFrontNine"),
+    roundFrontNineField: document.getElementById("roundFrontNineField"),
+    roundBackNine: document.getElementById("roundBackNine"),
+    roundBackNineField: document.getElementById("roundBackNineField"),
     roundTee: document.getElementById("roundTee"),
     roundTeeField: document.getElementById("roundTeeField"),
     roundNote: document.getElementById("roundNote"),
@@ -664,8 +666,17 @@
       els.roundHoleCount.value = data.holeCount;
       renderRoundSetupOptions();
     }
-    if (data.layoutId) els.roundLayout.value = data.layoutId;
     if (data.tee) els.roundTee.value = data.tee;
+    if (data.layoutId) {
+      if (data.holeCount === "9") {
+        els.roundLayout.value = data.layoutId;
+      } else {
+        const [front, back] = String(data.layoutId).split("-");
+        if (DEERWOOD_NINE_IDS.includes(front)) els.roundFrontNine.value = front;
+        if (DEERWOOD_NINE_IDS.includes(back)) els.roundBackNine.value = back;
+      }
+      renderRoundSetupOptions();
+    }
     resetHoleNotes();
     resetHoleShots(); resetHoleClubs(); resetReviewState();
     Object.entries(data.holeNotes || {}).forEach(([num, note]) => setHoleNote(num, note));
@@ -803,9 +814,22 @@
       || sampleCourses.find((course) => course.id === courseId);
   }
 
+  const DEERWOOD_NINE_IDS = ["buck", "doe", "fawn"];
+
   function getDeerwoodLayout(holeCount, layoutId) {
-    const layouts = deerwoodLayoutOptions[String(holeCount)] || deerwoodLayoutOptions["18"];
-    return layouts.find((layout) => layout.id === layoutId) || layouts[0];
+    if (String(holeCount) === "9") {
+      const nine = deerwoodLayoutOptions["9"].find((layout) => layout.id === layoutId);
+      return nine || deerwoodLayoutOptions["9"][0];
+    }
+    // 18-hole: layoutId is "{front}-{back}" — any of the 6 permutations.
+    const parts = String(layoutId).split("-");
+    const front = DEERWOOD_NINE_IDS.includes(parts[0]) ? parts[0] : "buck";
+    const back = DEERWOOD_NINE_IDS.includes(parts[1]) ? parts[1] : "doe";
+    return {
+      id: `${front}-${back}`,
+      label: `${deerwoodNineLabels[front]} / ${deerwoodNineLabels[back]}`,
+      nines: [front, back]
+    };
   }
 
   function buildDeerwoodCourse(holeCount, layoutId, tee) {
@@ -847,9 +871,16 @@
     return buildDeerwoodCourse(holeCount, layoutId, tee);
   }
 
+  function getSelectedRoundLayoutId() {
+    if (els.roundHoleCount.value === "9") return els.roundLayout.value;
+    const front = DEERWOOD_NINE_IDS.includes(els.roundFrontNine.value) ? els.roundFrontNine.value : "buck";
+    const back = DEERWOOD_NINE_IDS.includes(els.roundBackNine.value) ? els.roundBackNine.value : "doe";
+    return `${front}-${back}`;
+  }
+
   function getSelectedRoundCourse() {
     if (els.roundCourse.value === DEERWOOD_COURSE_ID) {
-      return buildDeerwoodCourse(els.roundHoleCount.value, els.roundLayout.value, els.roundTee.value);
+      return buildDeerwoodCourse(els.roundHoleCount.value, getSelectedRoundLayoutId(), els.roundTee.value);
     }
     return getCourse(els.roundCourse.value);
   }
@@ -1067,23 +1098,34 @@
 
   function renderRoundSetupOptions() {
     const isDeerwood = els.roundCourse.value === DEERWOOD_COURSE_ID;
-    [els.roundHoleCountField, els.roundLayoutField, els.roundTeeField].forEach((field) => {
-      field.hidden = !isDeerwood;
-    });
-    if (!isDeerwood) return;
+    els.roundHoleCountField.hidden = !isDeerwood;
+    els.roundTeeField.hidden = !isDeerwood;
+    if (!isDeerwood) {
+      els.roundLayoutField.hidden = true;
+      els.roundFrontNineField.hidden = true;
+      els.roundBackNineField.hidden = true;
+      return;
+    }
 
     if (!els.roundHoleCount.value) els.roundHoleCount.value = "18";
     if (!DEERWOOD_TEE_OPTIONS.includes(els.roundTee.value)) els.roundTee.value = "White";
 
-    const layouts = deerwoodLayoutOptions[els.roundHoleCount.value] || deerwoodLayoutOptions["18"];
-    const currentLayout = els.roundLayout.value;
-    els.roundLayout.innerHTML = layouts
-      .map((layout) => `<option value="${layout.id}">${layout.label}</option>`)
-      .join("");
-    if (layouts.some((layout) => layout.id === currentLayout)) {
-      els.roundLayout.value = currentLayout;
+    const isNineHole = els.roundHoleCount.value === "9";
+    // 9-hole: single nine picker. 18-hole: independent Front 9 / Back 9.
+    els.roundLayoutField.hidden = !isNineHole;
+    els.roundFrontNineField.hidden = isNineHole;
+    els.roundBackNineField.hidden = isNineHole;
+
+    if (isNineHole) {
+      const nines = deerwoodLayoutOptions["9"];
+      const currentNine = els.roundLayout.value;
+      els.roundLayout.innerHTML = nines
+        .map((nine) => `<option value="${nine.id}">${nine.label}</option>`)
+        .join("");
+      els.roundLayout.value = nines.some((n) => n.id === currentNine) ? currentNine : nines[0].id;
     } else {
-      els.roundLayout.value = layouts[0].id;
+      if (!DEERWOOD_NINE_IDS.includes(els.roundFrontNine.value)) els.roundFrontNine.value = "buck";
+      if (!DEERWOOD_NINE_IDS.includes(els.roundBackNine.value)) els.roundBackNine.value = "doe";
     }
   }
 
@@ -1213,7 +1255,9 @@
   }
 
   function girInputCell(hole) {
-    return `<label class="gir-toggle compact-toggle"><input class="gir-input" data-hole="${hole.number}" type="checkbox" aria-label="${escapeHtml(hole.label || `Hole ${hole.number}`)} GIR"><span></span></label>`;
+    // Default checked: the "regulation par" default hole is GIR + 2 putts +
+    // par. Edit mode and snapshot restore both override this explicitly.
+    return `<label class="gir-toggle compact-toggle"><input class="gir-input" data-hole="${hole.number}" type="checkbox" checked aria-label="${escapeHtml(hole.label || `Hole ${hole.number}`)} GIR"><span></span></label>`;
   }
 
   function penaltyInputCell(hole) {
@@ -1227,8 +1271,11 @@
   // Pills for fast on-course tap entry. Each pill row writes to the hidden
   // typed input (which preserves all existing read/save logic) plus offers
   // a small custom input as an escape hatch for values outside the pill set.
-  function renderPillsRow({ label, holeNumber, inputClass, values, customMin, customMax, customPlaceholder = "…" }) {
-    const pills = values.map((v) => `<button type="button" class="pill" data-pill-value="${v}">${v}</button>`).join("");
+  function renderPillsRow({ label, holeNumber, inputClass, values, customMin, customMax, customPlaceholder = "…", parValue }) {
+    const pills = values.map((v) => {
+      const isPar = parValue !== undefined && Number(v) === Number(parValue);
+      return `<button type="button" class="pill${isPar ? " pill-par" : ""}" data-pill-value="${v}">${v}</button>`;
+    }).join("");
     return `
       <div class="card-pill-row" data-pill-group="${inputClass}" data-hole="${holeNumber}">
         <span class="card-pill-label">${escapeHtml(label)}</span>
@@ -1248,6 +1295,7 @@
       holeNumber: hole.number,
       inputClass: "score-input",
       values,
+      parValue: par,
       customMin: 1,
       customMax: 15,
       customPlaceholder: String(par)
@@ -1517,12 +1565,49 @@
       </div>`;
   }
 
+  // Smart defaults: when the user leaves a card (taps Next/Prev, jumps via
+  // the hole picker, or opens Review), fill in the "most likely" entries for
+  // anything they didn't touch — score → par, clubs → Driver tee + Putter
+  // (par 3s skip the Driver since the tee club is an iron). Walking the
+  // course then becomes mostly "tap Next" on the holes that went to plan.
+  // Holes the user never advanced past stay genuinely empty, so the
+  // completion check still catches skipped holes. Disabled in edit mode,
+  // where exact fidelity to the saved round matters.
+  function autoFillCardDefaults(holeNumber) {
+    if (editingRoundId) return;
+    if (viewMode !== "card") return;
+    const hole = Number(holeNumber);
+    if (!Number.isFinite(hole)) return;
+    const scoreInput = els.scorecardGrid.querySelector(`.score-input[data-hole="${hole}"]`);
+    if (!scoreInput) return;
+    const par = Number(scoreInput.dataset.par) || 4;
+    let changed = false;
+    if (scoreInput.value.trim() === "") {
+      scoreInput.value = String(par);
+      // input event drives updateRoundPreview + scheduleInProgressSave + pills.
+      scoreInput.dispatchEvent(new Event("input", { bubbles: true }));
+      changed = true;
+    }
+    if (getHoleClubs(hole).length === 0) {
+      setHoleClubs(hole, par === 3 ? ["Putter"] : ["Driver", "Putter"]);
+      const row = els.scorecardGrid.querySelector(`.card-clubs-row[data-hole="${hole}"]`);
+      if (row) row.outerHTML = renderClubsHitPills({ number: hole });
+      changed = true;
+    }
+    if (changed) scheduleInProgressSave();
+  }
+
   function setActiveCardIndex(index) {
     const stack = els.scorecardGrid.querySelector(".scorecard-cards");
     if (!stack) return;
     const cards = [...stack.querySelectorAll(".scorecard-card")];
     if (!cards.length) return;
     const clamped = Math.max(0, Math.min(cards.length - 1, index));
+    // Auto-fill the card we're leaving before switching away from it.
+    const leavingIndex = Number(stack.dataset.activeIndex || "0");
+    if (leavingIndex !== clamped && cards[leavingIndex]) {
+      autoFillCardDefaults(cards[leavingIndex].dataset.holeNumber);
+    }
     cards.forEach((card, i) => card.classList.toggle("active", i === clamped));
     stack.dataset.activeIndex = String(clamped);
     const activeCard = cards[clamped];
@@ -3541,6 +3626,34 @@
     renderCourseBrief();
   }
 
+  // Re-render the round setup + scorecard while preserving entered data for
+  // the given hole numbers. Used when a Deerwood nine or the tee changes:
+  // the holes in the unchanged half (or all holes, for a tee swap) keep
+  // their scores/putts/notes/shots/clubs; the rest reset to fresh.
+  function refreshRoundPreservingHoles(preserveHoleNumbers) {
+    const preserve = new Set(preserveHoleNumbers);
+    const snapshot = captureScorecardSnapshot();
+    // Drop per-hole notes/shots/clubs for holes that are NOT being preserved.
+    [pendingHoleNotes, pendingHoleShots, pendingHoleClubs].forEach((map) => {
+      Object.keys(map).forEach((key) => {
+        if (!preserve.has(Number(key))) delete map[key];
+      });
+    });
+    renderRoundSetupOptions();
+    renderScorecard(getSelectedRoundCourse());
+    renderHandicapPanel();
+    renderCourseBrief();
+    // Re-apply the preserved holes' score/putts/fairway/gir/pen/firstPutt.
+    const preservedSnap = new Map();
+    snapshot.forEach((values, holeNumber) => {
+      if (preserve.has(holeNumber)) preservedSnap.set(holeNumber, values);
+    });
+    applyScorecardSnapshot(preservedSnap);
+    updateRoundPreview();
+    if (viewMode === "card") syncAllPillActiveStates();
+    scheduleInProgressSave();
+  }
+
   function renderCourseBrief() {
     const container = els.roundBrief;
     if (!container) return;
@@ -3694,7 +3807,6 @@
 
     resetHoleNotes();
     resetHoleShots(); resetHoleClubs(); resetReviewState();
-    resetHoleClubs(); resetReviewState();
     round.holes.forEach((hole) => {
       if (hole && hole.note) setHoleNote(hole.number, hole.note);
       if (hole && Array.isArray(hole.shots) && hole.shots.length) {
@@ -3709,9 +3821,16 @@
     if (deerwoodInfo) {
       els.roundCourse.value = DEERWOOD_COURSE_ID;
       els.roundHoleCount.value = deerwoodInfo.holeCount;
-      renderRoundSetupOptions();
-      els.roundLayout.value = deerwoodInfo.layoutId;
       els.roundTee.value = deerwoodInfo.tee;
+      if (deerwoodInfo.holeCount === "9") {
+        renderRoundSetupOptions();
+        els.roundLayout.value = deerwoodInfo.layoutId;
+      } else {
+        const [front, back] = deerwoodInfo.layoutId.split("-");
+        els.roundFrontNine.value = DEERWOOD_NINE_IDS.includes(front) ? front : "buck";
+        els.roundBackNine.value = DEERWOOD_NINE_IDS.includes(back) ? back : "doe";
+        renderRoundSetupOptions();
+      }
     } else {
       if ([...els.roundCourse.options].some((option) => option.value === round.courseId)) {
         els.roundCourse.value = round.courseId;
@@ -3755,7 +3874,20 @@
   });
   els.roundHoleCount.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); resetReviewState(); refreshRoundSetup(); });
   els.roundLayout.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); resetReviewState(); refreshRoundSetup(); });
-  els.roundTee.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); resetReviewState(); refreshRoundSetup(); });
+  // Front 9 change keeps the back 9 (holes 10-18); back 9 change keeps the
+  // front 9 (holes 1-9). This means fixing a wrong nine mid-round no longer
+  // wipes the half you already entered.
+  els.roundFrontNine.addEventListener("change", () => {
+    refreshRoundPreservingHoles([10, 11, 12, 13, 14, 15, 16, 17, 18]);
+  });
+  els.roundBackNine.addEventListener("change", () => {
+    refreshRoundPreservingHoles([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+  // Tee change is the same physical holes (only yardage/rating differ),
+  // so preserve everything.
+  els.roundTee.addEventListener("change", () => {
+    refreshRoundPreservingHoles([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
+  });
   els.roundDate.addEventListener("change", scheduleInProgressSave);
   els.roundNote.addEventListener("input", scheduleInProgressSave);
   els.resetRoundButton.addEventListener("click", () => {
@@ -3781,6 +3913,10 @@
     const button = event.target.closest('[data-action="show-review"]');
     if (button) {
       event.preventDefault();
+      // Fill the card the user is on now before heading to Review, so the
+      // last hole isn't left blank when they tapped straight to Review.
+      const activeCard = els.scorecardGrid.querySelector(".scorecard-card.active");
+      if (activeCard) autoFillCardDefaults(activeCard.dataset.holeNumber);
       openReviewSection();
     }
   });

@@ -1335,6 +1335,17 @@ select:focus {
   box-shadow: 0 4px 14px rgba(31, 122, 89, 0.28);
 }
 
+/* Par marker on the score row: a gold ring + tint on the par pill so the
+   player can spot par at a glance. Par is also the smart default — leaving a
+   hole untouched fills in par — so this doubles as "tap Next to accept par".
+   When selected, .pill.active (defined above, higher specificity) takes over
+   with the solid green treatment. */
+.pill-par:not(.active) {
+  border-color: var(--gold, #c58b2e);
+  background: #fdf6e7;
+  color: var(--green-dark, #123f32);
+}
+
 .card-pill-custom {
   width: 64px;
   min-height: 44px;
