@@ -50,13 +50,35 @@
     return pendingHoleClubs[String(holeNumber)] || [];
   }
 
+  // The tee club is whatever sits at index 0. Putter is never a tee shot, so
+  // keep it out of the lead slot whenever another club is present — that way
+  // removing a pre-seeded Driver and tapping the real tee club just works.
+  function normalizeClubOrder(clubs) {
+    if (clubs.length > 1 && clubs[0] === "Putter") {
+      return [...clubs.slice(1), "Putter"];
+    }
+    return clubs;
+  }
+
   function setHoleClubs(holeNumber, clubs) {
     const key = String(holeNumber);
     if (Array.isArray(clubs) && clubs.length) {
-      pendingHoleClubs[key] = [...clubs];
+      pendingHoleClubs[key] = normalizeClubOrder([...clubs]);
     } else {
       delete pendingHoleClubs[key];
     }
+  }
+
+  // Pre-select the likely clubs on every hole so the card shows them ready:
+  // Driver (tee shot) + Putter on par 4/5/6. A par-3 tee shot is an iron the
+  // player picks, so those are left blank. Skipped in edit mode.
+  function seedDefaultClubs(course) {
+    if (editingRoundId || !course || !Array.isArray(course.holes)) return;
+    course.holes.forEach((hole) => {
+      if (getHoleClubs(hole.number).length > 0) return;
+      if (hole.par === 3) return;
+      setHoleClubs(hole.number, ["Driver", "Putter"]);
+    });
   }
 
   function toggleHoleClub(holeNumber, club) {
@@ -287,6 +309,8 @@
     roundTee: document.getElementById("roundTee"),
     roundTeeField: document.getElementById("roundTeeField"),
     roundWind: document.getElementById("roundWind"),
+    roundSetup: document.getElementById("roundSetup"),
+    roundSetupBanner: document.getElementById("roundSetupBanner"),
     roundNote: document.getElementById("roundNote"),
     roundCourseMeta: document.getElementById("roundCourseMeta"),
     roundBrief: document.getElementById("roundBrief"),
@@ -648,8 +672,10 @@
       });
       const hasNotes = Object.keys(draft.holeNotes || {}).length > 0;
       const hasShots = Object.keys(draft.holeShots || {}).length > 0;
-      const hasClubs = Object.keys(draft.holeClubs || {}).length > 0;
-      if (!hasScores && !hasNotes && !hasShots && !hasClubs) {
+      // Note: clubs are intentionally NOT a "started a round" signal — they're
+      // pre-seeded with Driver/Putter defaults, so counting them would flag a
+      // round in progress before the user has actually entered anything.
+      if (!hasScores && !hasNotes && !hasShots) {
         // Empty draft — don't pollute storage with placeholder rows.
         clearInProgressRound();
         return;
@@ -1176,6 +1202,7 @@
       <span>Slope ${course.slope || "--"}</span>
     `;
 
+    if (viewMode === "card") seedDefaultClubs(course);
     els.scorecardGrid.className = `scorecard mode-${viewMode}`;
     els.scorecardGrid.innerHTML = viewMode === "card"
       ? renderScorecardCardMode(course)
@@ -1635,8 +1662,8 @@
       scoreInput.dispatchEvent(new Event("input", { bubbles: true }));
       changed = true;
     }
-    if (getHoleClubs(hole).length === 0) {
-      setHoleClubs(hole, par === 3 ? ["Putter"] : ["Driver", "Putter"]);
+    if (par !== 3 && getHoleClubs(hole).length === 0) {
+      setHoleClubs(hole, ["Driver", "Putter"]);
       const row = els.scorecardGrid.querySelector(`.card-clubs-row[data-hole="${hole}"]`);
       if (row) row.outerHTML = renderClubsHitPills({ number: hole });
       changed = true;
@@ -2109,10 +2136,63 @@
     return `<select class="fairway-input compact-select" data-hole="${hole.number}" aria-label="${escapeHtml(hole.label || `Hole ${hole.number}`)} fairway">${options}</select>`;
   }
 
+  // In-round chrome: once a round is underway the setup fields (course, tee,
+  // wind, rating/slope) collapse into a one-line banner so the screen is just
+  // the scorecard. Tapping the banner re-opens the fields to change something.
+  let roundSetupOpen = true;
+  let roundChromeAutoCollapsed = false;
+
+  function resetRoundChrome() {
+    roundSetupOpen = true;
+    roundChromeAutoCollapsed = false;
+    renderRoundSetupChrome();
+  }
+
+  function roundSetupSummary() {
+    const selected = getSelectedRoundCourse();
+    const parts = [selected ? selected.name : "Round setup"];
+    if (els.roundTeeField && !els.roundTeeField.hidden && els.roundTee.value) {
+      parts.push(`${els.roundTee.value} tee`);
+    }
+    if (els.roundWind && els.roundWind.value) {
+      parts.push(formatWind(els.roundWind.value));
+    }
+    return parts.join("  ·  ");
+  }
+
+  function renderRoundSetupChrome() {
+    if (!els.roundSetupBanner || !els.roundSetup) return;
+    if (!els.roundCourse.value) {
+      els.roundSetupBanner.hidden = true;
+      els.roundSetup.hidden = false;
+      return;
+    }
+    els.roundSetupBanner.hidden = false;
+    els.roundSetup.hidden = !roundSetupOpen;
+    els.roundSetupBanner.classList.toggle("is-open", roundSetupOpen);
+    els.roundSetupBanner.setAttribute("aria-expanded", String(roundSetupOpen));
+    els.roundSetupBanner.innerHTML = roundSetupOpen
+      ? `<span class="rcb-text">Round setup</span><span class="rcb-action">Hide ▴</span>`
+      : `<span class="rcb-text">${escapeHtml(roundSetupSummary())}</span><span class="rcb-action">Edit ▾</span>`;
+  }
+
   function updateRoundPreview() {
     const allHoles = readScorecard(false);
     const entered = allHoles.filter((hole) => Number.isFinite(hole.score) && hole.score > 0);
     renderCompletionCheck(allHoles, entered);
+    // Collapse the setup section the first time a score lands — the round is
+    // underway, so get the fields out of the way and focus on the scorecard.
+    if (entered.length >= 1 && !roundChromeAutoCollapsed) {
+      roundChromeAutoCollapsed = true;
+      roundSetupOpen = false;
+      requestAnimationFrame(() => {
+        const activeCard = els.scorecardGrid.querySelector(".scorecard-card.active");
+        if (activeCard && typeof activeCard.scrollIntoView === "function") {
+          activeCard.scrollIntoView({ block: "start" });
+        }
+      });
+    }
+    renderRoundSetupChrome();
 
     // No course selected → no scorecard, so hide the live summary entirely
     // (otherwise a row of "--" placeholders would float above the "Add a
@@ -3904,6 +3984,7 @@
   }
 
   function refreshRoundSetup() {
+    resetRoundChrome();
     renderRoundSetupOptions();
     renderScorecard(getSelectedRoundCourse());
     renderHandicapPanel();
@@ -4081,6 +4162,7 @@
     resetHoleNotes();
     resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
     updateEditModeUi();
+    resetRoundChrome();
     if (rerender) renderScorecard(getSelectedRoundCourse());
   }
 
@@ -4183,6 +4265,13 @@
   els.roundDate.addEventListener("change", scheduleInProgressSave);
   els.roundNote.addEventListener("input", scheduleInProgressSave);
   if (els.roundWind) els.roundWind.addEventListener("change", scheduleInProgressSave);
+  if (els.roundSetupBanner) {
+    els.roundSetupBanner.addEventListener("click", () => {
+      roundSetupOpen = !roundSetupOpen;
+      roundChromeAutoCollapsed = true;
+      renderRoundSetupChrome();
+    });
+  }
   els.resetRoundButton.addEventListener("click", () => {
     if (editingRoundId) {
       clearEditState();
@@ -4191,6 +4280,7 @@
       clearInProgressRound();
       resetHoleNotes();
       resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
+      resetRoundChrome();
       renderScorecard(getSelectedRoundCourse());
     }
   });
@@ -4422,6 +4512,7 @@
         updateEditModeUi();
         els.roundNote.value = "";
         if (els.roundWind) els.roundWind.value = "";
+        resetRoundChrome();
         renderAll();
         setActiveTab("home");
         showToast("Round updated.");
@@ -4443,6 +4534,7 @@
         saveState();
         els.roundNote.value = "";
         if (els.roundWind) els.roundWind.value = "";
+        resetRoundChrome();
         renderAll();
         setActiveTab("home");
         showToast("Round saved.");

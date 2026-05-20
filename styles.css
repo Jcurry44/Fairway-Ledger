@@ -584,6 +584,51 @@ select:focus {
   margin-top: 14px;
 }
 
+/* Collapsible in-round chrome: once a round is underway the setup fields tuck
+   behind this banner so the screen is just the scorecard. Tap to re-open. */
+.round-collapse-banner {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 4px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line, #d8dfd7);
+  border-radius: 10px;
+  background: #f3f7f1;
+  color: var(--green-dark, #123f32);
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.round-collapse-banner:active {
+  transform: scale(0.995);
+}
+
+.round-collapse-banner.is-open {
+  background: #eef4ec;
+  margin-bottom: 4px;
+}
+
+.round-collapse-banner .rcb-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.round-collapse-banner .rcb-action {
+  flex-shrink: 0;
+  font-size: 0.74rem;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--green, #1f7a59);
+}
+
 .round-brief {
   margin-top: 16px;
   padding: 18px;

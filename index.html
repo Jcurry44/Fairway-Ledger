@@ -4,9 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Fairway Ledger</title>
-    <link rel="stylesheet" href="./styles.css?v=2026-05-19d">
-    <script src="./data/courses.js?v=2026-05-19d" defer></script>
-    <script src="./app.js?v=2026-05-19d" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-19e">
+    <script src="./data/courses.js?v=2026-05-19e" defer></script>
+    <script src="./app.js?v=2026-05-19e" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -262,6 +262,8 @@
             </div>
 
             <form id="roundForm">
+              <button type="button" id="roundSetupBanner" class="round-collapse-banner" hidden aria-expanded="true"></button>
+              <div id="roundSetup">
               <div class="form-grid">
                 <label>
                   Date
@@ -321,6 +323,7 @@
               </div>
 
               <div id="roundCourseMeta" class="course-meta-strip"></div>
+              </div>
               <section id="roundBrief" class="round-brief" hidden></section>
               <div id="roundLiveSummary" class="round-live-summary"></div>
               <div class="scorecard" id="scorecardGrid" aria-label="Hole scorecard"></div>
