@@ -782,6 +782,54 @@ select:focus {
   color: #c9ded3;
 }
 
+/* GIR / FIR cards are tappable to drill into which holes were hit/missed. */
+.live-summary-card-drill {
+  cursor: pointer;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.live-summary-card-drill::after {
+  content: "tap ›";
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 0.55rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--green, #1f7a59);
+}
+
+.live-summary-card-drill:active {
+  background: #eef4ec;
+  transform: scale(0.98);
+}
+
+.stat-drill-flag {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.stat-drill-hit {
+  background: #d6eedf;
+  color: #15573c;
+}
+
+.stat-drill-miss {
+  background: #f8dad4;
+  color: #843c33;
+}
+
+.stat-drill-none {
+  background: #eef2eb;
+  color: var(--muted);
+}
+
 .scorecard-section {
   min-width: 920px;
   overflow: hidden;
@@ -1284,12 +1332,24 @@ select:focus {
   display: none;
 }
 
-.card-pill-row {
+.card-pill-row,
+.card-penalty-club-row {
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 10px 0;
   border-top: 1px solid #edf1eb;
+}
+
+.card-penalty-club-row .penalty-club-input {
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line, #d6e2d9);
+  background: #fff;
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 700;
 }
 
 .card-pill-row:first-of-type {
@@ -1481,6 +1541,53 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.penalty-club-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line, #d8dfd7);
+}
+
+.penalty-club-title {
+  margin: 0 0 8px;
+  font-size: 0.76rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.penalty-club-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.penalty-club-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 10px;
+  background: #faf3f0;
+  border-radius: 6px;
+}
+
+.penalty-club-row strong {
+  font-size: 0.95rem;
+}
+
+.penalty-club-row .subtext {
+  flex: 1;
+}
+
+.penalty-club-count {
+  font-weight: 800;
+  color: #843c33;
+  font-size: 0.9rem;
 }
 
 .tee-club-row {

@@ -66,6 +66,27 @@
     return next;
   }
 
+  // The club blamed for a hole's penalty stroke(s) — one per hole, defaults
+  // to the tee club when a penalty is first logged.
+  let pendingHolePenaltyClubs = {};
+
+  function resetHolePenaltyClubs() {
+    pendingHolePenaltyClubs = {};
+  }
+
+  function getHolePenaltyClub(holeNumber) {
+    return pendingHolePenaltyClubs[String(holeNumber)] || "";
+  }
+
+  function setHolePenaltyClub(holeNumber, club) {
+    const key = String(holeNumber);
+    if (club) {
+      pendingHolePenaltyClubs[key] = club;
+    } else {
+      delete pendingHolePenaltyClubs[key];
+    }
+  }
+
   function getHoleShots(holeNumber) {
     return pendingHoleShots[String(holeNumber)] || [];
   }
@@ -609,7 +630,8 @@
       holes,
       holeNotes: { ...pendingHoleNotes },
       holeShots: JSON.parse(JSON.stringify(pendingHoleShots || {})),
-      holeClubs: JSON.parse(JSON.stringify(pendingHoleClubs || {}))
+      holeClubs: JSON.parse(JSON.stringify(pendingHoleClubs || {})),
+      holePenaltyClubs: { ...pendingHolePenaltyClubs }
     };
   }
 
@@ -681,13 +703,16 @@
       renderRoundSetupOptions();
     }
     resetHoleNotes();
-    resetHoleShots(); resetHoleClubs(); resetReviewState();
+    resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
     Object.entries(data.holeNotes || {}).forEach(([num, note]) => setHoleNote(num, note));
     Object.entries(data.holeShots || {}).forEach(([num, shots]) => {
       if (Array.isArray(shots) && shots.length) setHoleShots(Number(num), shots);
     });
     Object.entries(data.holeClubs || {}).forEach(([num, clubs]) => {
       if (Array.isArray(clubs) && clubs.length) setHoleClubs(Number(num), clubs);
+    });
+    Object.entries(data.holePenaltyClubs || {}).forEach(([num, club]) => {
+      if (club) setHolePenaltyClub(Number(num), club);
     });
     renderScorecard(getSelectedRoundCourse());
     renderCourseBrief();
@@ -1388,6 +1413,23 @@
     "Putter", "Other"
   ];
 
+  // Shown only when a hole has a penalty logged — captures which club caused
+  // it. syncPenaltyClubRows() toggles visibility and defaults to the tee club.
+  function renderPenaltyClubRow(hole) {
+    const current = getHolePenaltyClub(hole.number);
+    const options = CLUB_OPTIONS
+      .map((club) => `<option value="${escapeHtml(club)}"${club === current ? " selected" : ""}>${escapeHtml(club)}</option>`)
+      .join("");
+    return `
+      <div class="card-penalty-club-row" data-hole="${hole.number}" hidden>
+        <span class="card-pill-label">Penalty club</span>
+        <select class="penalty-club-input compact-select" data-hole="${hole.number}" aria-label="Club that caused the penalty">
+          <option value="">— club —</option>
+          ${options}
+        </select>
+      </div>`;
+  }
+
   function renderShotsBlock(holeNumber) {
     const shots = getHoleShots(holeNumber);
     const header = `
@@ -1549,6 +1591,7 @@
             ${girInputCell(hole)}
           </div>
           ${renderPenPills(hole)}
+          ${renderPenaltyClubRow(hole)}
           ${renderClubsHitPills(hole)}
           <label class="card-note-field">
             <span>What happened on this hole?</span>
@@ -1732,6 +1775,12 @@
         scheduleInProgressSave();
         return;
       }
+      const penClubSelect = event.target.closest(".penalty-club-input");
+      if (penClubSelect) {
+        setHolePenaltyClub(penClubSelect.dataset.hole, penClubSelect.value);
+        scheduleInProgressSave();
+        return;
+      }
     });
 
     // Custom typed fallback for pill rows: when the user types in the small
@@ -1764,6 +1813,28 @@
   function syncAllPillActiveStates() {
     els.scorecardGrid.querySelectorAll(".card-pill-row").forEach(syncPillActiveStateForRow);
     syncCardScoreMarks();
+    syncPenaltyClubRows();
+  }
+
+  // Reveal the penalty-club picker only on holes with a penalty logged, and
+  // default it to the tee club the first time a penalty appears.
+  function syncPenaltyClubRows() {
+    els.scorecardGrid.querySelectorAll(".card-penalty-club-row[data-hole]").forEach((row) => {
+      const hole = row.dataset.hole;
+      const penInput = els.scorecardGrid.querySelector(`.penalty-input[data-hole="${hole}"]`);
+      const pen = penInput ? Number(penInput.value) : 0;
+      const show = Number.isFinite(pen) && pen > 0;
+      row.hidden = !show;
+      if (!show) return;
+      const select = row.querySelector(".penalty-club-input");
+      if (select && !select.value && !getHolePenaltyClub(hole)) {
+        const teeClub = getHoleClubs(hole)[0] || "Driver";
+        if ([...select.options].some((option) => option.value === teeClub)) {
+          select.value = teeClub;
+          setHolePenaltyClub(hole, teeClub);
+        }
+      }
+    });
   }
 
   // Show a traditional birdie-circle / bogey-box mark in each card's headline
@@ -2089,8 +2160,8 @@
       <div class="live-summary-card"><span>${grossLabel}</span><strong>${grossValue}</strong></div>
       <div class="live-summary-card"><span>To par</span><strong>${toParValue}</strong></div>
       <div class="live-summary-card"><span>Putts</span><strong>${puttsValue}</strong></div>
-      <div class="live-summary-card"><span>FIR</span><strong>${firValue}</strong></div>
-      <div class="live-summary-card"><span>GIR</span><strong>${girValue}</strong></div>
+      <div class="live-summary-card live-summary-card-drill" data-stat-drill="fir" role="button" tabindex="0" aria-label="Fairways in regulation — tap to see which holes"><span>FIR</span><strong>${firValue}</strong></div>
+      <div class="live-summary-card live-summary-card-drill" data-stat-drill="gir" role="button" tabindex="0" aria-label="Greens in regulation — tap to see which holes"><span>GIR</span><strong>${girValue}</strong></div>
       <div class="live-summary-card"><span>Pen</span><strong>${penValue}</strong></div>
       <div class="live-summary-card"><span>SG vs Tour</span><strong>${sgValue}</strong></div>
       <div class="live-summary-card accent"><span>Diff est.</span><strong>${diffValue}</strong></div>
@@ -2131,6 +2202,7 @@
         fairway: fairwayInput.value,
         gir: girInput.checked,
         penalties: Number.isFinite(penaltyValue) ? penaltyValue : 0,
+        penaltyClub: (Number.isFinite(penaltyValue) && penaltyValue > 0) ? getHolePenaltyClub(holeNumber) : "",
         firstPuttDistance: Number.isFinite(firstPuttValue) && firstPuttValue >= 0 ? firstPuttValue : null,
         note: getHoleNote(holeNumber),
         shots: getHoleShots(holeNumber),
@@ -2716,6 +2788,58 @@
     document.body.classList.remove("hole-picker-open");
   }
 
+  // Tap the live GIR / FIR stat mid-round to see exactly which holes were
+  // hit and missed so far. Reuses the scoring-bucket bottom sheet.
+  const FAIRWAY_RESULT_LABELS = {
+    hit: "Fairway ✓", left: "Missed left", right: "Missed right",
+    short: "Short", long: "Long", miss: "Missed"
+  };
+
+  function openStatDrillSheet(kind) {
+    if (!els.bucketSheetOverlay || !els.bucketSheetList) return;
+    const holes = readScorecard(false).filter((h) => Number.isFinite(h.score) && h.score > 0);
+    let title;
+    let rows;
+    if (kind === "fir") {
+      const drivable = holes.filter((h) => h.par !== 3);
+      const hitCount = drivable.filter((h) => h.fairway === "hit").length;
+      title = `Fairways hit · ${hitCount}/${drivable.length}`;
+      rows = holes.map((h) => {
+        let flag = "none";
+        let text = "—";
+        if (h.par === 3) {
+          text = "Par 3";
+        } else if (h.fairway && FAIRWAY_RESULT_LABELS[h.fairway]) {
+          text = FAIRWAY_RESULT_LABELS[h.fairway];
+          flag = h.fairway === "hit" ? "hit" : "miss";
+        }
+        return { label: h.label, number: h.number, par: h.par, flag, text };
+      });
+    } else {
+      const made = holes.filter((h) => h.gir).length;
+      title = `Greens in regulation · ${made}/${holes.length}`;
+      rows = holes.map((h) => ({
+        label: h.label, number: h.number, par: h.par,
+        flag: h.gir ? "hit" : "miss",
+        text: h.gir ? "GIR ✓" : "Missed green"
+      }));
+    }
+    els.bucketSheetTitle.textContent = title;
+    els.bucketSheetList.innerHTML = holes.length
+      ? rows.map((r) => `
+        <li class="bucket-row">
+          <div class="bucket-row-main">
+            <strong>${escapeHtml(r.label || `#${r.number}`)}</strong>
+            <span class="subtext">Par ${r.par}</span>
+          </div>
+          <span class="stat-drill-flag stat-drill-${r.flag}">${escapeHtml(r.text)}</span>
+        </li>`).join("")
+      : `<li class="bucket-empty">Enter some hole scores first.</li>`;
+    els.bucketSheetOverlay.hidden = false;
+    document.body.classList.add("hole-picker-open");
+    if (els.bucketSheetClose) els.bucketSheetClose.focus();
+  }
+
   function computeTeeClubPerformance(rounds) {
     const grouped = new Map();
     rounds.forEach((round) => {
@@ -2755,11 +2879,49 @@
       .sort((a, b) => b.count - a.count);
   }
 
+  // Tally penalty strokes by the club blamed for them — surfaces which club
+  // is quietly costing you shots (usually the driver, sometimes a wedge).
+  function computePenaltyClubs(rounds) {
+    const map = new Map();
+    let totalStrokes = 0;
+    rounds.forEach((round) => {
+      round.holes.forEach((hole) => {
+        const pen = Number(hole.penalties);
+        if (!Number.isFinite(pen) || pen <= 0 || !hole.penaltyClub) return;
+        totalStrokes += pen;
+        if (!map.has(hole.penaltyClub)) map.set(hole.penaltyClub, { club: hole.penaltyClub, strokes: 0, holes: 0 });
+        const entry = map.get(hole.penaltyClub);
+        entry.strokes += pen;
+        entry.holes += 1;
+      });
+    });
+    return {
+      rows: [...map.values()].sort((a, b) => b.strokes - a.strokes),
+      totalStrokes
+    };
+  }
+
+  function renderPenaltyClubsSection(data) {
+    if (!data.rows.length) return "";
+    const rows = data.rows.map((entry) => `
+      <li class="penalty-club-row">
+        <strong>${escapeHtml(entry.club)}</strong>
+        <span class="subtext">${entry.holes} hole${entry.holes === 1 ? "" : "s"}</span>
+        <span class="penalty-club-count">${entry.strokes} pen</span>
+      </li>`).join("");
+    return `
+      <div class="penalty-club-section">
+        <p class="penalty-club-title">Penalty strokes by club · ${data.totalStrokes} total</p>
+        <ul class="penalty-club-list">${rows}</ul>
+      </div>`;
+  }
+
   function renderTeeClubPerformance(rounds) {
     if (!els.teeClubPanel) return;
     const data = computeTeeClubPerformance(rounds);
+    const penaltyHtml = renderPenaltyClubsSection(computePenaltyClubs(rounds));
     if (!data.length) {
-      els.teeClubPanel.innerHTML = emptyState("Tag your tee shots in Clubs Hit (first club tapped = tee shot) to unlock tee-club performance.");
+      els.teeClubPanel.innerHTML = emptyState("Tag your tee shots in Clubs Hit (first club tapped = tee shot) to unlock tee-club performance.") + penaltyHtml;
       return;
     }
     const total = data.reduce((sum, entry) => sum + entry.count, 0);
@@ -2784,7 +2946,8 @@
     }).join("");
     els.teeClubPanel.innerHTML = `
       <p class="tee-club-total">${total} tee shot${total === 1 ? "" : "s"} tagged across ${data.length} club${data.length === 1 ? "" : "s"}.</p>
-      <ul class="tee-club-list">${rows}</ul>`;
+      <ul class="tee-club-list">${rows}</ul>
+      ${penaltyHtml}`;
   }
 
   function renderLatestNarrative() {
@@ -3916,7 +4079,7 @@
     if (els.roundWind) els.roundWind.value = "";
     clearInProgressRound();
     resetHoleNotes();
-    resetHoleShots(); resetHoleClubs(); resetReviewState();
+    resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
     updateEditModeUi();
     if (rerender) renderScorecard(getSelectedRoundCourse());
   }
@@ -3929,7 +4092,7 @@
     if (els.roundWind) els.roundWind.value = round.wind || "";
 
     resetHoleNotes();
-    resetHoleShots(); resetHoleClubs(); resetReviewState();
+    resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
     round.holes.forEach((hole) => {
       if (hole && hole.note) setHoleNote(hole.number, hole.note);
       if (hole && Array.isArray(hole.shots) && hole.shots.length) {
@@ -3937,6 +4100,9 @@
       }
       if (hole && Array.isArray(hole.clubsHit) && hole.clubsHit.length) {
         setHoleClubs(hole.number, hole.clubsHit);
+      }
+      if (hole && hole.penaltyClub) {
+        setHolePenaltyClub(hole.number, hole.penaltyClub);
       }
     });
 
@@ -3985,6 +4151,9 @@
 
     updateEditModeUi();
     updateRoundPreview();
+    // Loaded values were written straight to the hidden inputs; re-sync the
+    // card-view pills, score marks, and penalty-club rows to match them.
+    if (viewMode === "card") syncAllPillActiveStates();
     setActiveTab("rounds");
   }
 
@@ -3992,11 +4161,11 @@
     if (els.roundCourse.value === DEERWOOD_COURSE_ID) els.roundTee.value = "White";
     clearInProgressRound();
     resetHoleNotes();
-    resetHoleShots(); resetHoleClubs(); resetReviewState();
+    resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
     refreshRoundSetup();
   });
-  els.roundHoleCount.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); resetReviewState(); refreshRoundSetup(); });
-  els.roundLayout.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); resetReviewState(); refreshRoundSetup(); });
+  els.roundHoleCount.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState(); refreshRoundSetup(); });
+  els.roundLayout.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState(); refreshRoundSetup(); });
   // Front 9 change keeps the back 9 (holes 10-18); back 9 change keeps the
   // front 9 (holes 1-9). This means fixing a wrong nine mid-round no longer
   // wipes the half you already entered.
@@ -4021,7 +4190,7 @@
     } else {
       clearInProgressRound();
       resetHoleNotes();
-      resetHoleShots(); resetHoleClubs(); resetReviewState();
+      resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
       renderScorecard(getSelectedRoundCourse());
     }
   });
@@ -4140,6 +4309,19 @@
       }
     });
   }
+  if (els.roundLiveSummary) {
+    els.roundLiveSummary.addEventListener("click", (event) => {
+      const card = event.target.closest("[data-stat-drill]");
+      if (card) openStatDrillSheet(card.dataset.statDrill);
+    });
+    els.roundLiveSummary.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const card = event.target.closest("[data-stat-drill]");
+      if (!card) return;
+      event.preventDefault();
+      openStatDrillSheet(card.dataset.statDrill);
+    });
+  }
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       if (els.holePickerOverlay && !els.holePickerOverlay.hidden) closeHolePicker();
@@ -4235,7 +4417,7 @@
         editingRoundId = null;
         clearInProgressRound();
         resetHoleNotes();
-        resetHoleShots(); resetHoleClubs(); resetReviewState();
+        resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
         saveState();
         updateEditModeUi();
         els.roundNote.value = "";
@@ -4257,7 +4439,7 @@
         state.rounds.push(newRound);
         clearInProgressRound();
         resetHoleNotes();
-        resetHoleShots(); resetHoleClubs(); resetReviewState();
+        resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
         saveState();
         els.roundNote.value = "";
         if (els.roundWind) els.roundWind.value = "";
@@ -4288,7 +4470,7 @@
     clearEditState({ rerender: false });
     clearInProgressRound();
     resetHoleNotes();
-    resetHoleShots(); resetHoleClubs(); resetReviewState();
+    resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
     saveState();
     renderAll();
     showToast("Sample data loaded.");
@@ -4300,7 +4482,7 @@
     clearEditState({ rerender: false });
     clearInProgressRound();
     resetHoleNotes();
-    resetHoleShots(); resetHoleClubs(); resetReviewState();
+    resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
     saveState();
     renderAll();
     showToast("Data cleared.");
