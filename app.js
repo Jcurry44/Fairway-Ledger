@@ -2415,26 +2415,54 @@
     els.parStats.innerHTML = html || emptyState("No par-type stats yet.");
   }
 
+  // A physical hole's stable identity — independent of routing and tee.
+  // Deerwood holes carry a label like "Buck 3" that encodes the nine plus the
+  // within-nine number, which never changes no matter where the nine sits in
+  // an 18-hole routing or which tee was played. Pooling on this keeps "Buck 3"
+  // as one hole with one history instead of fragmenting across courseIds.
+  // Other courses already have a stable courseId, so key on courseId + number.
+  function physicalHoleId(courseId, hole) {
+    if (isDeerwoodCourseId(courseId) && hole) {
+      const match = String(hole.label || "").trim().match(/^(buck|doe|fawn)\s+(\d+)$/i);
+      if (match) return `deerwood:${match[1].toLowerCase()}:${match[2]}`;
+    }
+    return `course:${courseId}:${hole ? hole.number : ""}`;
+  }
+
   function getHoleGroups(rounds) {
     const map = new Map();
     rounds.forEach((round) => {
+      const deerwood = isDeerwoodCourseId(round.courseId);
       const course = getCourse(round.courseId);
       round.holes.forEach((hole) => {
-        const key = `${round.courseId}-${hole.number}`;
+        if (!Number.isFinite(hole.score) || hole.score <= 0) return;
+        const key = physicalHoleId(round.courseId, hole);
         if (!map.has(key)) {
           map.set(key, {
             key,
+            physicalId: key,
             courseId: round.courseId,
-            courseName: course ? course.name : "Unknown",
+            courseName: deerwood ? "Deerwood Golf Course" : (course ? course.name : "Unknown"),
             tee: round.tee,
             number: hole.number,
             label: hole.label || `#${hole.number}`,
             par: hole.par,
+            yards: Number(hole.yards || 0),
+            repDate: round.date,
             scores: [],
             dates: []
           });
         }
         const group = map.get(key);
+        // Keep the representative courseId/number pointing at the most recent
+        // round so a click-through jumps somewhere the dropdown still lists.
+        if (round.date >= group.repDate) {
+          group.repDate = round.date;
+          group.courseId = round.courseId;
+          group.number = hole.number;
+          group.tee = round.tee;
+          if (Number(hole.yards)) group.yards = Number(hole.yards);
+        }
         group.scores.push(hole.score);
         group.dates.push(round.date);
       });
@@ -2785,10 +2813,7 @@
 
     const holeGroups = getHoleGroups(rounds).filter((group) => group.rounds >= 2);
     const holeGroupsWithSg = holeGroups.map((group) => {
-      const course = getCourse(group.courseId);
-      const courseHole = course && course.holes.find((hole) => hole.number === group.number);
-      const yards = courseHole ? Number(courseHole.yards || 0) : 0;
-      const expected = tourExpectedStrokes(group.par, yards);
+      const expected = tourExpectedStrokes(group.par, Number(group.yards || 0));
       return { ...group, sgPerHole: expected - group.avgScore };
     });
     const bestSg = [...holeGroupsWithSg].sort((a, b) => b.sgPerHole - a.sgPerHole).slice(0, 3);
@@ -3006,10 +3031,22 @@
     const course = getCourse(courseId);
     if (!course) return null;
 
+    const deerwood = isDeerwoodCourseId(courseId);
+    const holeCount = course.holes.length;
+    // Round-level stats need rounds of the same shape — mixing 9- and 18-hole
+    // grosses would corrupt the averages. For Deerwood that means every
+    // same-hole-count Deerwood round, regardless of routing.
     const courseRounds = state.rounds
-      .filter((round) => round.courseId === courseId)
+      .filter((round) => deerwood
+        ? (isDeerwoodCourseId(round.courseId) && round.holes.length === holeCount)
+        : round.courseId === courseId)
       .sort((a, b) => b.date.localeCompare(a.date));
     if (courseRounds.length < 2) return null;
+    // Per-hole stats are hole-count-agnostic, so pool every Deerwood round
+    // (9- and 18-hole alike) — a physical hole keeps one combined history.
+    const holePoolRounds = deerwood
+      ? state.rounds.filter((round) => isDeerwoodCourseId(round.courseId))
+      : courseRounds;
 
     const totals = courseRounds.map(roundTotals);
     const avgGross = average(totals.map((entry) => entry.gross));
@@ -3032,35 +3069,32 @@
       };
     });
 
-    const courseHoleByNumber = new Map(course.holes.map((hole) => [hole.number, hole]));
-    const holeStatsMap = new Map();
-    courseRounds.forEach((round) => {
-      round.holes.forEach((hole) => {
-        if (!Number.isFinite(hole.score) || hole.score <= 0) return;
-        let entry = holeStatsMap.get(hole.number);
-        if (!entry) {
-          const courseHole = courseHoleByNumber.get(hole.number);
-          entry = {
-            number: hole.number,
-            label: hole.label || `#${hole.number}`,
-            par: hole.par,
-            yards: hole.yards,
-            scores: [],
-            sgs: [],
-            notes: [],
-            hazards: courseHole && Array.isArray(courseHole.hazards) ? courseHole.hazards : []
-          };
-          holeStatsMap.set(hole.number, entry);
-        }
-        entry.scores.push(hole.score);
-        const sg = holeStrokesGained(hole);
-        if (sg !== null) entry.sgs.push(sg);
-        if (hole.note && String(hole.note).trim()) {
-          entry.notes.push({ date: round.date, note: String(hole.note).trim() });
-        }
+    // Walk the holes of the routing you're about to play; for each one pool
+    // every round (any routing/tee) where that same physical hole was played.
+    const holeStats = course.holes.map((courseHole) => {
+      const physId = physicalHoleId(courseId, courseHole);
+      const entry = {
+        number: courseHole.number,
+        label: courseHole.label || `#${courseHole.number}`,
+        par: courseHole.par,
+        yards: courseHole.yards,
+        scores: [],
+        sgs: [],
+        notes: [],
+        hazards: Array.isArray(courseHole.hazards) ? courseHole.hazards : []
+      };
+      holePoolRounds.forEach((round) => {
+        round.holes.forEach((hole) => {
+          if (physicalHoleId(round.courseId, hole) !== physId) return;
+          if (!Number.isFinite(hole.score) || hole.score <= 0) return;
+          entry.scores.push(hole.score);
+          const sg = holeStrokesGained(hole);
+          if (sg !== null) entry.sgs.push(sg);
+          if (hole.note && String(hole.note).trim()) {
+            entry.notes.push({ date: round.date, note: String(hole.note).trim() });
+          }
+        });
       });
-    });
-    const holeStats = [...holeStatsMap.values()].map((entry) => {
       const avgScore = average(entry.scores);
       const sortedNotes = [...entry.notes].sort((a, b) => b.date.localeCompare(a.date));
       return {
@@ -3071,7 +3105,7 @@
         rounds: entry.scores.length,
         latestNote: sortedNotes[0] || null
       };
-    });
+    }).filter((entry) => entry.scores.length > 0);
 
     const sgRanked = holeStats.filter((entry) => Number.isFinite(entry.avgSg));
     const leaks = [...sgRanked].sort((a, b) => a.avgSg - b.avgSg).slice(0, 3);
@@ -3459,14 +3493,26 @@
     }
 
     const courseHole = course.holes.find((hole) => hole.number === holeNumber);
-    const holeRounds = state.rounds
-      .filter((round) => round.courseId === courseId)
+    if (!courseHole) {
+      els.spotlightStats.innerHTML = emptyState("No hole selected.");
+      els.spotlightHistory.innerHTML = "";
+      if (els.spotlightNotes) els.spotlightNotes.innerHTML = "";
+      return;
+    }
+    // Pool every round where this physical hole was played — across routings
+    // and tees — so "Buck 3" keeps one combined history.
+    const physId = physicalHoleId(courseId, courseHole);
+    const holeRounds = [];
+    state.rounds
+      .slice()
       .sort((a, b) => a.date.localeCompare(b.date))
-      .map((round) => ({
-        round,
-        hole: round.holes.find((hole) => hole.number === holeNumber)
-      }))
-      .filter((item) => item.hole);
+      .forEach((round) => {
+        round.holes.forEach((hole) => {
+          if (physicalHoleId(round.courseId, hole) !== physId) return;
+          if (!Number.isFinite(hole.score) || hole.score <= 0) return;
+          holeRounds.push({ round, hole });
+        });
+      });
 
     if (!holeRounds.length) {
       els.spotlightStats.innerHTML = emptyState("No saved rounds for this hole.");
