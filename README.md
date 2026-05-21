@@ -4,6 +4,16 @@ A first-pass personal golf stats tracker. It runs as a static browser app and st
 
 Open `index.html` in a browser to use it.
 
+## Tests
+
+The pure golf math (Strokes Gained, round totals, score classification, hole identity, handicap helpers, geo) lives in `lib/golf-math.js` — no DOM, no storage, no app state — so it can be unit-tested directly. `app.js` loads it as a plain script and binds the functions into scope; the test suite `require()`s the same file in Node. No build step, no dependencies.
+
+Run the tests with the Node built-in runner:
+
+```
+node --test tests/golf-math.test.js
+```
+
 ## MVP Scope
 
 - Manual round entry by hole
