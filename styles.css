@@ -990,6 +990,8 @@ select:focus {
   border-radius: 12px;
   background: #fff;
   box-shadow: 0 6px 18px rgba(20, 32, 28, 0.04);
+  /* Clears the sticky tab bar when a card is scrolled to the top. */
+  scroll-margin-top: 70px;
 }
 
 .scorecard-card.active {
@@ -1038,6 +1040,34 @@ select:focus {
 .card-position-caret {
   color: var(--green-dark, #15573c);
   font-size: 0.8rem;
+}
+
+/* Forward / back hole arrows, right next to the hole label. */
+.card-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border: 1px solid var(--line, #d6e2d9);
+  border-radius: 999px;
+  background: #f3f7f1;
+  color: var(--green-dark, #15573c);
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.card-step:hover {
+  background: #e9f1e7;
+  border-color: #b8c8bd;
+}
+
+.card-step:active {
+  transform: scale(0.94);
 }
 
 .card-headline {

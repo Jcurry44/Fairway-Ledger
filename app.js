@@ -634,6 +634,11 @@
   // rounds; this is the "draft" layer that lives between input and Save round.
 
   let inProgressSaveTimer = null;
+  // True once the user has genuinely engaged with the round (entered a value,
+  // tapped a pill, navigated holes). Pre-filled par/club defaults don't set
+  // it — so just opening Add Round and looking around never writes a draft
+  // or triggers a spurious "resume round in progress?" prompt next time.
+  let roundTouched = false;
 
   function captureInProgressRound() {
     const snapshot = captureScorecardSnapshot();
@@ -663,6 +668,9 @@
     // Never auto-save while the user is editing a previously-saved round —
     // that path uses the real state.rounds[i] and its own lifecycle.
     if (editingRoundId) return;
+    // Don't write a draft until the user has actually engaged — pre-filled
+    // par/club defaults alone are not "a round in progress".
+    if (!roundTouched) return;
     if (inProgressSaveTimer) clearTimeout(inProgressSaveTimer);
     inProgressSaveTimer = setTimeout(() => {
       const draft = captureInProgressRound();
@@ -747,6 +755,8 @@
       if (h && h.number != null) snapshotMap.set(Number(h.number), h);
     });
     applyScorecardSnapshot(snapshotMap);
+    // A resumed round is genuinely in progress — keep autosaving its edits.
+    roundTouched = true;
     updateRoundPreview();
     setActiveTab("rounds");
   }
@@ -1209,11 +1219,20 @@
       : renderScorecardGridMode(course);
 
     els.scorecardGrid.querySelectorAll("input, select").forEach((input) => {
-      input.addEventListener("input", () => { updateRoundPreview(); scheduleInProgressSave(); if (viewMode === "card") syncAllPillActiveStates(); });
-      input.addEventListener("change", () => { updateRoundPreview(); scheduleInProgressSave(); if (viewMode === "card") syncAllPillActiveStates(); });
+      const onEntry = (event) => {
+        // Only a genuine user gesture counts — programmatic events (par/club
+        // pre-fill) have isTrusted === false.
+        if (event && event.isTrusted) roundTouched = true;
+        updateRoundPreview();
+        scheduleInProgressSave();
+        if (viewMode === "card") syncAllPillActiveStates();
+      };
+      input.addEventListener("input", onEntry);
+      input.addEventListener("change", onEntry);
     });
     els.scorecardGrid.querySelectorAll(".card-note-input").forEach((textarea) => {
       textarea.addEventListener("input", () => {
+        roundTouched = true;
         setHoleNote(textarea.dataset.hole, textarea.value);
         scheduleInProgressSave();
       });
@@ -1222,6 +1241,7 @@
     updateViewToggleLabel();
     updateRoundPreview();
     if (viewMode === "card") syncAllPillActiveStates();
+    if (viewMode === "card") prefillActiveCardPar();
     refreshReviewVisibility();
   }
 
@@ -1597,7 +1617,9 @@
       return `
         <article class="scorecard-card${index === 0 ? " active" : ""}" data-card-index="${index}" data-hole-number="${hole.number}">
           <div class="card-top">
+            <button type="button" class="card-step" data-card-nav="prev" aria-label="Previous hole">‹</button>
             <button type="button" class="card-position" data-open-hole-picker aria-label="${positionText} — tap to jump to another hole">${positionText} <span class="card-position-caret" aria-hidden="true">▾</span></button>
+            <button type="button" class="card-step" data-card-nav="next" aria-label="Next hole">›</button>
           </div>
           <div class="card-headline">
             <span class="card-hole-mark" data-hole="${hole.number}" hidden></span>
@@ -1646,36 +1668,23 @@
       </div>`;
   }
 
-  // Smart defaults: when the user leaves a card (taps Next/Prev, jumps via
-  // the hole picker, or opens Review), fill in the "most likely" entries for
-  // anything they didn't touch — score → par, clubs → Driver tee + Putter
-  // (par 3s skip the Driver since the tee club is an iron). Walking the
-  // course then becomes mostly "tap Next" on the holes that went to plan.
-  // Holes the user never advanced past stay genuinely empty, so the
-  // completion check still catches skipped holes. Disabled in edit mode,
-  // where exact fidelity to the saved round matters.
-  function autoFillCardDefaults(holeNumber) {
-    if (editingRoundId) return;
-    if (viewMode !== "card") return;
-    const hole = Number(holeNumber);
-    if (!Number.isFinite(hole)) return;
-    const scoreInput = els.scorecardGrid.querySelector(`.score-input[data-hole="${hole}"]`);
-    if (!scoreInput) return;
+  // Smart default: when a hole becomes the active card, pre-select par in the
+  // Score row (if untouched) so walking the course is mostly tapping the
+  // forward arrow — you only stop to change the holes that weren't par.
+  // Holes you never navigate to stay genuinely empty, so the completion
+  // check still catches skipped holes. Disabled in edit mode, where exact
+  // fidelity to the saved round matters.
+  function prefillActiveCardPar() {
+    if (editingRoundId || viewMode !== "card") return;
+    const activeCard = els.scorecardGrid.querySelector(".scorecard-card.active");
+    if (!activeCard) return;
+    const scoreInput = activeCard.querySelector(".score-input");
+    if (!(scoreInput instanceof HTMLInputElement) || scoreInput.value.trim() !== "") return;
     const par = Number(scoreInput.dataset.par) || 4;
-    let changed = false;
-    if (scoreInput.value.trim() === "") {
-      scoreInput.value = String(par);
-      // input event drives updateRoundPreview + scheduleInProgressSave + pills.
-      scoreInput.dispatchEvent(new Event("input", { bubbles: true }));
-      changed = true;
-    }
-    if (par !== 3 && getHoleClubs(hole).length === 0) {
-      setHoleClubs(hole, ["Driver", "Putter"]);
-      const row = els.scorecardGrid.querySelector(`.card-clubs-row[data-hole="${hole}"]`);
-      if (row) row.outerHTML = renderClubsHitPills({ number: hole });
-      changed = true;
-    }
-    if (changed) scheduleInProgressSave();
+    scoreInput.value = String(par);
+    // Programmatic event (isTrusted = false) — drives the pills/preview but
+    // does NOT count as the user touching the round.
+    scoreInput.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
   function setActiveCardIndex(index) {
@@ -1684,20 +1693,22 @@
     const cards = [...stack.querySelectorAll(".scorecard-card")];
     if (!cards.length) return;
     const clamped = Math.max(0, Math.min(cards.length - 1, index));
-    // Auto-fill the card we're leaving before switching away from it.
-    const leavingIndex = Number(stack.dataset.activeIndex || "0");
-    if (leavingIndex !== clamped && cards[leavingIndex]) {
-      autoFillCardDefaults(cards[leavingIndex].dataset.holeNumber);
-    }
+    roundTouched = true;
     cards.forEach((card, i) => card.classList.toggle("active", i === clamped));
     stack.dataset.activeIndex = String(clamped);
     const activeCard = cards[clamped];
-    if (activeCard) {
-      const scoreInput = activeCard.querySelector(".score-input");
-      if (scoreInput instanceof HTMLInputElement) {
-        scoreInput.focus({ preventScroll: true });
-        scoreInput.select();
-      }
+    if (!activeCard) return;
+    // Pre-select par on the hole we just landed on.
+    prefillActiveCardPar();
+    // Scroll the card to the top so the Score row is right where the user
+    // needs it — no hunting after tapping the forward arrow.
+    requestAnimationFrame(() => {
+      activeCard.scrollIntoView({ block: "start" });
+    });
+    const scoreInput = activeCard.querySelector(".score-input");
+    if (scoreInput instanceof HTMLInputElement) {
+      scoreInput.focus({ preventScroll: true });
+      scoreInput.select();
     }
   }
 
@@ -1713,11 +1724,9 @@
   function wireCardModeBehavior() {
     const stack = els.scorecardGrid.querySelector(".scorecard-cards");
     if (!stack) return;
-    const navPrev = els.scorecardGrid.querySelector('[data-card-nav="prev"]');
-    const navNext = els.scorecardGrid.querySelector('[data-card-nav="next"]');
-
-    if (navPrev) navPrev.addEventListener("click", () => setActiveCardIndex(getActiveCardIndex() - 1));
-    if (navNext) navNext.addEventListener("click", () => setActiveCardIndex(getActiveCardIndex() + 1));
+    // Prev/Next nav is handled by a single delegated listener on the stable
+    // scorecardGrid element (see init) so both the header arrows and the
+    // bottom buttons work without re-binding on every render.
 
     stack.addEventListener("focusin", (event) => {
       const card = event.target.closest(".scorecard-card");
@@ -1727,6 +1736,7 @@
     });
 
     stack.addEventListener("click", (event) => {
+      roundTouched = true;
       const positionButton = event.target.closest("[data-open-hole-picker]");
       if (positionButton) {
         event.preventDefault();
@@ -2152,6 +2162,8 @@
   function resetRoundChrome() {
     roundSetupOpen = true;
     roundChromeAutoCollapsed = false;
+    // A fresh round hasn't been touched yet — pre-filled defaults don't count.
+    roundTouched = false;
     renderRoundSetupChrome();
   }
 
@@ -4301,13 +4313,20 @@
 
   els.scorecardGrid.addEventListener("keydown", advanceScorecardOnEnter);
   els.scorecardGrid.addEventListener("click", (event) => {
+    // Prev/Next nav — delegated so the header arrows and the bottom buttons
+    // both work (and survive scorecard re-renders).
+    const navButton = event.target.closest("[data-card-nav]");
+    if (navButton) {
+      event.preventDefault();
+      const step = navButton.dataset.cardNav === "prev" ? -1 : 1;
+      setActiveCardIndex(getActiveCardIndex() + step);
+      return;
+    }
     const button = event.target.closest('[data-action="show-review"]');
     if (button) {
       event.preventDefault();
-      // Fill the card the user is on now before heading to Review, so the
-      // last hole isn't left blank when they tapped straight to Review.
-      const activeCard = els.scorecardGrid.querySelector(".scorecard-card.active");
-      if (activeCard) autoFillCardDefaults(activeCard.dataset.holeNumber);
+      // Make sure the hole the user is on has its par pre-fill before review.
+      prefillActiveCardPar();
       openReviewSection();
     }
   });
