@@ -1105,6 +1105,76 @@
     return rounds;
   }
 
+  // ---- Physical course grouping -----------------------------------------
+  //
+  // The catalog stores one entry per course-tee combination (so Diamond Hawk
+  // has 5 entries for Black/Gold/Green/Silver/Burgundy). For the UI we
+  // collapse those down to one "physical" course chip, with the tee picked
+  // separately — exactly like Deerwood already works. Internal code that
+  // looks up rating/slope/yardage continues to use the specific catalog id.
+
+  const PREFERRED_TEE_KEY = "fairwayLedger.preferredTee.v1";
+
+  // The user-facing name for whatever physical course a courseId refers to.
+  // Deerwood's six per-nine entries all collapse to "Deerwood Golf Course";
+  // every other course's tee variants share their course.name.
+  function physicalCourseName(courseId) {
+    if (isDeerwoodCourseId(courseId) || courseId === DEERWOOD_COURSE_ID) {
+      return "Deerwood Golf Course";
+    }
+    const course = getCourse(courseId);
+    return course ? course.name : courseId;
+  }
+
+  // All physical course names available in the catalog, Deerwood first.
+  function getPhysicalCourseNames() {
+    const seen = new Set();
+    const names = [];
+    state.courses.forEach((course) => {
+      const name = physicalCourseName(course.id);
+      if (seen.has(name)) return;
+      seen.add(name);
+      names.push(name);
+    });
+    names.sort((a, b) => {
+      if (a === "Deerwood Golf Course") return -1;
+      if (b === "Deerwood Golf Course") return 1;
+      return a.localeCompare(b);
+    });
+    return names;
+  }
+
+  // All catalog entries matching a physical course name (one per tee).
+  // Deerwood collapses every nine+tee entry to a single bucket.
+  function getCatalogEntriesForCourseName(name) {
+    if (name === "Deerwood Golf Course") {
+      return state.courses.filter((c) => isDeerwoodCourseId(c.id));
+    }
+    return state.courses.filter((c) => c.name === name);
+  }
+
+  // Distinct tees available at a physical course — alphabetical, no dupes.
+  function getTeesForCourseName(name) {
+    return [...new Set(getCatalogEntriesForCourseName(name).map((c) => c.tee))].sort();
+  }
+
+  function getPreferredTee(courseName) {
+    try {
+      const raw = localStorage.getItem(PREFERRED_TEE_KEY);
+      const map = raw ? JSON.parse(raw) : {};
+      return map[courseName] || null;
+    } catch { return null; }
+  }
+
+  function setPreferredTee(courseName, tee) {
+    try {
+      const raw = localStorage.getItem(PREFERRED_TEE_KEY);
+      const map = raw ? JSON.parse(raw) : {};
+      map[courseName] = tee;
+      localStorage.setItem(PREFERRED_TEE_KEY, JSON.stringify(map));
+    } catch {}
+  }
+
   // ---- Chip-style form selectors ----------------------------------------
   //
   // Selects marked with [data-use-chips="true"] are hidden in CSS and mirrored
@@ -1123,9 +1193,25 @@
       select.parentNode.insertBefore(row, select.nextSibling);
       select.dataset.chipsInit = "true";
       row.addEventListener("click", (event) => {
+        // Course-name chips (round-setup roundCourse only) — collapse all
+        // tee variants under one chip and pick a sensible default tee.
+        const courseChip = event.target.closest("[data-chip-course-name]");
+        if (courseChip) {
+          handleCourseNameChipClick(select, courseChip.dataset.chipCourseName);
+          return;
+        }
         const chip = event.target.closest("[data-chip-value]");
         if (!chip) return;
         const value = chip.dataset.chipValue;
+        // Tee chip for non-Deerwood courses: changing tee should also swap
+        // roundCourse.value to the catalog entry matching {course, tee}.
+        if (select.id === "roundTee"
+            && els.roundCourse
+            && els.roundCourse.value !== DEERWOOD_COURSE_ID
+            && !isDeerwoodCourseId(els.roundCourse.value)) {
+          handleNonDeerwoodTeeChange(value);
+          return;
+        }
         if (select.value === value) return;
         select.value = value;
         // Bubbles so any listener on form / parent picks it up.
@@ -1135,6 +1221,44 @@
     syncAllChipsToSelects();
   }
 
+  // Click handler for the grouped Course chips. Picks the catalog entry for
+  // the user's preferred tee at that course (or the first available).
+  function handleCourseNameChipClick(select, courseName) {
+    let targetValue;
+    if (courseName === "Deerwood Golf Course") {
+      targetValue = DEERWOOD_COURSE_ID;
+    } else {
+      const entries = getCatalogEntriesForCourseName(courseName);
+      if (!entries.length) return;
+      const preferredTee = getPreferredTee(courseName);
+      const preferred = entries.find((e) => e.tee === preferredTee);
+      targetValue = preferred ? preferred.id : entries[0].id;
+    }
+    if (select.value === targetValue) return;
+    select.value = targetValue;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  // Click handler for the Tee chips when a non-Deerwood course is selected.
+  // Updates roundCourse.value to the catalog entry matching {course, newTee}
+  // and remembers the new tee as the user's preference for that course.
+  function handleNonDeerwoodTeeChange(newTee) {
+    const physicalName = physicalCourseName(els.roundCourse.value);
+    const matching = state.courses.find(
+      (c) => c.name === physicalName && c.tee === newTee
+    );
+    if (!matching) return;
+    setPreferredTee(physicalName, newTee);
+    if (els.roundTee) els.roundTee.value = newTee;
+    if (els.roundCourse.value !== matching.id) {
+      els.roundCourse.value = matching.id;
+      els.roundCourse.dispatchEvent(new Event("change", { bubbles: true }));
+    } else {
+      // Same entry — still refresh chip active state.
+      syncAllChipsToSelects();
+    }
+  }
+
   function syncAllChipsToSelects() {
     document.querySelectorAll('select[data-use-chips="true"]').forEach(syncChipsForSelect);
   }
@@ -1142,6 +1266,12 @@
   function syncChipsForSelect(select) {
     const row = document.querySelector(`[data-chips-for="${select.id}"]`);
     if (!row) return;
+    // The Course chip row is special — one chip per physical course name
+    // instead of one per catalog id, so Diamond Hawk's 5 tee entries
+    // collapse to a single tappable chip.
+    if (select.id === "roundCourse") {
+      return syncRoundCourseChips(select, row);
+    }
     const currentValue = select.value;
     // Skip placeholder options whose value is "" (e.g. the leading "Wind…").
     // The unselected state is communicated by no chip being active.
@@ -1151,6 +1281,18 @@
               class="select-chip${opt.value === currentValue ? " active" : ""}"
               data-chip-value="${escapeHtml(opt.value)}">
         ${escapeHtml(opt.text || opt.value)}
+      </button>
+    `).join("");
+  }
+
+  function syncRoundCourseChips(select, row) {
+    const names = getPhysicalCourseNames();
+    const currentName = physicalCourseName(select.value);
+    row.innerHTML = names.map((name) => `
+      <button type="button"
+              class="select-chip${name === currentName ? " active" : ""}"
+              data-chip-course-name="${escapeHtml(name)}">
+        ${escapeHtml(name)}
       </button>
     `).join("");
   }
@@ -1206,14 +1348,38 @@
   function renderRoundSetupOptions() {
     const isDeerwood = els.roundCourse.value === DEERWOOD_COURSE_ID;
     els.roundHoleCountField.hidden = !isDeerwood;
-    els.roundTeeField.hidden = !isDeerwood;
+
     if (!isDeerwood) {
+      // Non-Deerwood: populate the Tee dropdown with the available tees for
+      // the selected physical course, and show the tee field only when there
+      // is an actual choice to make (2+ tees).
+      const physicalName = physicalCourseName(els.roundCourse.value);
+      const entries = getCatalogEntriesForCourseName(physicalName);
+      const currentEntry = entries.find((e) => e.id === els.roundCourse.value)
+        || entries[0];
+      const currentTee = currentEntry ? currentEntry.tee : "";
+      const tees = getTeesForCourseName(physicalName);
+      els.roundTee.innerHTML = tees
+        .map((tee) => `<option value="${escapeHtml(tee)}">${escapeHtml(tee)}</option>`)
+        .join("");
+      if (tees.includes(currentTee)) els.roundTee.value = currentTee;
+      els.roundTeeField.hidden = tees.length < 2;
       els.roundLayoutField.hidden = true;
       els.roundFrontNineField.hidden = true;
       els.roundBackNineField.hidden = true;
+      syncAllChipsToSelects();
       return;
     }
 
+    // Deerwood: tee options are White / Blue, never anything else.
+    els.roundTeeField.hidden = false;
+    const teeOptionValues = [...els.roundTee.options].map((o) => o.value);
+    if (!DEERWOOD_TEE_OPTIONS.every((t) => teeOptionValues.includes(t))
+        || teeOptionValues.some((v) => !DEERWOOD_TEE_OPTIONS.includes(v))) {
+      els.roundTee.innerHTML = DEERWOOD_TEE_OPTIONS
+        .map((tee) => `<option value="${tee}">${tee}</option>`)
+        .join("");
+    }
     if (!els.roundHoleCount.value) els.roundHoleCount.value = "18";
     if (!DEERWOOD_TEE_OPTIONS.includes(els.roundTee.value)) els.roundTee.value = "White";
 
@@ -2656,17 +2822,28 @@
   }
 
   function renderCourseStats(rounds) {
-    const groups = groupBy(rounds, (round) => round.courseId);
-    const rows = Object.entries(groups).map(([courseId, courseRounds]) => {
-      const course = getCourse(courseId);
+    // Group by *physical* course name so all of Diamond Hawk's tees pool
+    // into one row, not five. The sub-text shows which tees the user has
+    // actually played at that course.
+    const groups = groupBy(rounds, (round) => physicalCourseName(round.courseId));
+    const rows = Object.entries(groups).map(([courseName, courseRounds]) => {
+      // Tee mix: which tees were actually played at this course, with counts.
+      const teeCounts = new Map();
+      courseRounds.forEach((r) => {
+        const tee = r.tee || "—";
+        teeCounts.set(tee, (teeCounts.get(tee) || 0) + 1);
+      });
+      const teeSummary = [...teeCounts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([tee, count]) => courseRounds.length === count ? tee : `${tee} (${count})`)
+        .join(" · ");
       const totals = courseRounds.map(roundTotals);
       const best = Math.min(...totals.map((item) => item.gross));
-      const yards = course ? course.holes.reduce((sum, hole) => sum + Number(hole.yards || 0), 0) : 0;
       return `
         <div class="course-stat-row">
           <div>
-            <strong>${escapeHtml(course ? course.name : "Unknown")}</strong>
-            <span class="subtext">${escapeHtml(course ? course.tee : "--")} | ${yards || "--"} yds | rating ${course && course.rating ? course.rating.toFixed(1) : "--"} | slope ${course && course.slope ? course.slope : "--"}</span>
+            <strong>${escapeHtml(courseName)}</strong>
+            <span class="subtext">${escapeHtml(teeSummary)}</span>
           </div>
           <div class="course-stat-metrics">
             <span><b>${courseRounds.length}</b> rounds</span>
@@ -3050,8 +3227,9 @@
   function renderHeatmapCourseChips(rounds, scope) {
     if (!els.heatmapCourseChips) return;
     // One chip per *physical* course the user has played. Deerwood collapses
-    // to a single "Deerwood" chip regardless of which child course id their
-    // rounds are tagged with.
+    // to a single "Deerwood" chip; non-Deerwood tee variants collapse to one
+    // chip per course name (so Diamond Hawk Black/Gold/Green/etc. show as a
+    // single "Diamond Hawk Golf Course" chip).
     const seen = new Set();
     const chips = [];
     rounds.forEach((round) => {
@@ -3060,10 +3238,11 @@
         seen.add("deerwood");
         chips.push({ key: "deerwood", label: "Deerwood", representativeId: round.courseId });
       } else {
-        if (seen.has(round.courseId)) return;
-        seen.add(round.courseId);
         const course = getCourse(round.courseId);
-        chips.push({ key: round.courseId, label: course ? course.name : round.courseId, representativeId: round.courseId });
+        const physicalName = course ? course.name : round.courseId;
+        if (seen.has(physicalName)) return;
+        seen.add(physicalName);
+        chips.push({ key: physicalName, label: physicalName, representativeId: round.courseId });
       }
     });
 
@@ -3155,7 +3334,11 @@
       if (!nine) nine = "buck";
       heatmapScope = { courseId: representativeId, nine };
     } else {
-      heatmapScope = { courseId: courseKey };
+      // Non-Deerwood courseKey is now the physical course name. Use the
+      // representative courseId (any catalog entry for that physical course
+      // works for heatmap aggregation since getHoleGroups pools by physical
+      // hole identity, not by tee).
+      heatmapScope = { courseId: representativeId };
     }
     persistHeatmapScope();
     renderHeatmap(rounds);
