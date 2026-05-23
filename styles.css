@@ -131,7 +131,6 @@ h2 {
 .course-row,
 .course-stat-row,
 .lookup-row,
-.hole-card,
 .toolbar {
   display: flex;
   align-items: center;
@@ -389,24 +388,6 @@ h2 {
   display: block;
 }
 
-.home-hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
-  padding: 18px;
-  border: 1px solid #d9e0d5;
-  border-radius: 8px;
-  background:
-    linear-gradient(135deg, #ffffff 0%, #f8f4e8 50%, #e9f1ee 100%);
-  box-shadow: var(--shadow);
-}
-
-.home-hero h2 {
-  font-size: 1.42rem;
-}
-
 .workflow-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -555,16 +536,10 @@ select:focus {
   flex: 1;
 }
 
-.primary-grid,
 .analytics-grid,
 .course-grid {
   display: grid;
   gap: 12px;
-}
-
-.primary-grid {
-  grid-template-columns: minmax(0, 1.8fr) minmax(300px, 0.8fr);
-  align-items: start;
 }
 
 .analytics-grid {
@@ -2603,31 +2578,6 @@ body.floating-card-nav-visible .floating-card-nav {
 
 /* Best/worst hole cards become clickable buttons. */
 
-.hole-card {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 11px 12px;
-  border: 1px solid #e0e7de;
-  border-radius: 8px;
-  background: #fffefa;
-  color: var(--ink);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 140ms ease, transform 100ms ease, box-shadow 140ms ease;
-}
-
-.hole-card:hover {
-  border-color: #bccfc1;
-  box-shadow: 0 6px 14px rgba(20, 32, 28, 0.06);
-}
-
-.hole-card:active {
-  transform: scale(0.99);
-}
-
 /* ============================================================
    Course Heatmap
    ============================================================
@@ -2886,13 +2836,6 @@ body.floating-card-nav-visible .floating-card-nav {
   border-radius: 4px;
   display: inline-block;
   border: 1px solid rgba(0,0,0,0.06);
-}
-
-.heatmap-empty-message {
-  color: var(--muted);
-  font-size: 0.9rem;
-  padding: 24px 0;
-  text-align: center;
 }
 
 /* ============================================================
@@ -3520,85 +3463,6 @@ body.floating-card-nav-visible .floating-card-nav {
 
 .hazard-chip-list-compact .hazard-chip-icon {
   font-size: 0.86rem;
-}
-
-.spotlight-notes {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.spotlight-section-title {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.74rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.spotlight-note-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.spotlight-note {
-  padding: 10px 12px;
-  border: 1px solid #e3ebe1;
-  border-radius: 10px;
-  background: #fbfdfa;
-}
-
-.spotlight-note-meta {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: baseline;
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.spotlight-note-meta strong {
-  color: var(--ink);
-  font-weight: 800;
-}
-
-.spotlight-note-sg {
-  display: inline-block;
-  padding: 1px 7px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 800;
-}
-
-.spotlight-note-sg.good {
-  background: #d6eedf;
-  color: #15573c;
-}
-
-.spotlight-note-sg.bad {
-  background: #f8dad4;
-  color: #843c33;
-}
-
-.spotlight-note-text {
-  margin: 6px 0 0;
-  color: var(--ink);
-  font-size: 0.92rem;
-  line-height: 1.45;
-}
-
-.spotlight-note-empty {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.86rem;
-  font-style: italic;
 }
 
 .round-row-main {
@@ -4275,12 +4139,6 @@ body.hole-picker-open {
   min-height: 220px;
 }
 
-.mini-svg {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-
 .trend-bars {
   min-height: 220px;
   display: grid;
@@ -4410,13 +4268,11 @@ td {
 }
 
 .bar-list,
-.hole-list,
 .round-list,
 .course-list,
 .course-stat-list,
 .lookup-results,
-.handicap-panel,
-.spotlight-stats {
+.handicap-panel {
   display: grid;
   gap: 10px;
 }
@@ -4455,7 +4311,6 @@ td {
   background: var(--blue);
 }
 
-.hole-card,
 .round-row,
 .course-row,
 .course-stat-row,
@@ -4469,7 +4324,6 @@ td {
   transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
 }
 
-.hole-card:hover,
 .round-row:hover,
 .course-row:hover,
 .course-stat-row:hover,
@@ -4491,7 +4345,6 @@ td {
   justify-content: flex-end;
 }
 
-.hole-card strong,
 .round-row strong,
 .course-row strong,
 .course-stat-row strong,
@@ -4726,37 +4579,6 @@ td {
   color: var(--muted);
   font-size: 0.82rem;
   font-weight: 750;
-}
-
-.spotlight-kpis {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.spotlight-kpis div {
-  min-height: 78px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fbfcfa;
-  padding: 10px;
-}
-
-.spotlight-kpis span {
-  color: var(--muted);
-  display: block;
-  font-size: 0.76rem;
-  font-weight: 800;
-}
-
-.spotlight-kpis strong {
-  display: block;
-  margin-top: 5px;
-  font-size: 1.3rem;
-}
-
-.mini-chart {
-  margin-top: 12px;
 }
 
 .panel-note {
