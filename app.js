@@ -3685,11 +3685,65 @@
     showToast("Bag reset to all clubs.");
   }
 
-  // Home-tab panel collapse: Home has ~13 stat panels and scrolling through
-  // them all every time is the wrong default. Each panel collapses behind
-  // its heading; only Recent Scorecards is open by default, and the user's
-  // per-panel choices persist. Metrics, latest narrative, insights, and the
-  // filter toolbar stay un-collapsible (always visible at the top).
+  // Home-tab structure: a chip strip at the top swaps between four thematic
+  // sections — Overview / Trends / Holes / Clubs. Each panel is tagged with
+  // a data-home-section matching one of those, and a CSS rule hides panels
+  // outside the active section. The active chip persists per user.
+  //
+  // (The older per-panel collapse mechanism below — initHomePanelCollapsibles
+  // etc. — is now dead code; chips replaced it. Kept in source for now in
+  // case a future "expand all" / "compact" mode wants it back.)
+  const HOME_SECTION_BY_PANEL_ID = {
+    "recent-scorecards": "overview",
+    "recent-rounds": "trends",
+    "handicap-calculator": "trends",
+    "strokes-gained": "trends",
+    "scoring-distribution": "trends",
+    "spotlight": "holes",
+    "best-holes": "holes",
+    "worst-holes": "holes",
+    "par-3-4-5": "holes",
+    "scoring-by-course": "holes",
+    "scoring-by-nine": "holes",
+    "tee-club-performance": "clubs",
+    "putting-by-distance": "clubs"
+  };
+  const HOME_SECTIONS = ["overview", "trends", "holes", "clubs"];
+  const HOME_SECTION_KEY = "fairwayLedger.homeSection.v1";
+
+  let activeHomeSection = (() => {
+    try {
+      const saved = localStorage.getItem(HOME_SECTION_KEY);
+      return HOME_SECTIONS.includes(saved) ? saved : "overview";
+    } catch { return "overview"; }
+  })();
+
+  function tagHomePanelsWithSections() {
+    document.querySelectorAll('.tab-panel[data-tab-panel="home"] .panel').forEach((panel) => {
+      const id = getPanelId(panel);
+      const section = HOME_SECTION_BY_PANEL_ID[id];
+      if (section) panel.dataset.homeSection = section;
+    });
+  }
+
+  function applyHomeSectionUi() {
+    const homeTab = document.querySelector('[data-tab-panel="home"]');
+    if (homeTab) homeTab.dataset.activeSection = activeHomeSection;
+    document.querySelectorAll(".home-chip").forEach((chip) => {
+      const active = chip.dataset.homeSectionTarget === activeHomeSection;
+      chip.classList.toggle("active", active);
+      chip.setAttribute("aria-selected", String(active));
+    });
+  }
+
+  function setActiveHomeSection(section) {
+    if (!HOME_SECTIONS.includes(section)) section = "overview";
+    activeHomeSection = section;
+    try { localStorage.setItem(HOME_SECTION_KEY, section); } catch {}
+    applyHomeSectionUi();
+  }
+
+  // ---- Legacy per-panel collapse (no longer wired up) --------------------
   const PANEL_DEFAULT_OPEN = new Set(["recent-scorecards"]);
 
   function getPanelId(panel) {
@@ -4188,7 +4242,8 @@
     updateBackupBadge();
     renderCourseList();
     renderProfileBag();
-    initHomePanelCollapsibles();
+    tagHomePanelsWithSections();
+    applyHomeSectionUi();
     renderSpotlight();
   }
 
@@ -4640,6 +4695,12 @@
       showToast("Hazard removed.");
     });
   }
+
+  document.querySelectorAll(".home-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      setActiveHomeSection(chip.dataset.homeSectionTarget);
+    });
+  });
 
   if (els.profileBagGrid) {
     els.profileBagGrid.addEventListener("click", (event) => {

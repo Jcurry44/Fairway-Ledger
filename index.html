@@ -4,10 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Fairway Ledger</title>
-    <link rel="stylesheet" href="./styles.css?v=2026-05-19n">
-    <script src="./data/courses.js?v=2026-05-19n" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-19n" defer></script>
-    <script src="./app.js?v=2026-05-19n" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-19o">
+    <script src="./data/courses.js?v=2026-05-19o" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-19o" defer></script>
+    <script src="./app.js?v=2026-05-19o" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -43,7 +43,7 @@
           <button class="tab-button" type="button" data-tab-target="profile" aria-selected="false">Profile</button>
         </nav>
 
-        <section class="tab-panel active" data-tab-panel="home">
+        <section class="tab-panel active" data-tab-panel="home" data-active-section="overview">
           <section class="home-hero" aria-label="Dashboard summary">
             <div>
               <p class="eyebrow">Player dashboard</p>
@@ -52,9 +52,16 @@
             <button class="primary-button tab-shortcut" type="button" data-tab-target="rounds">Add round</button>
           </section>
 
-          <section class="latest-narrative" id="latestNarrative" hidden aria-label="Latest round summary"></section>
+          <nav class="home-chips" aria-label="Home sections">
+            <button class="home-chip active" type="button" data-home-section-target="overview">Overview</button>
+            <button class="home-chip" type="button" data-home-section-target="trends">Trends</button>
+            <button class="home-chip" type="button" data-home-section-target="holes">Holes</button>
+            <button class="home-chip" type="button" data-home-section-target="clubs">Clubs</button>
+          </nav>
 
-          <section class="metrics-grid" aria-label="Score summary">
+          <section class="latest-narrative" id="latestNarrative" data-home-section="overview" hidden aria-label="Latest round summary"></section>
+
+          <section class="metrics-grid" data-home-section="overview" aria-label="Score summary">
             <article class="metric-card">
               <span>Rounds</span>
               <strong id="metricRounds">0</strong>
@@ -86,7 +93,7 @@
             </article>
           </section>
 
-          <section id="homeInsights" class="home-insights" aria-label="Key insights"></section>
+          <section id="homeInsights" class="home-insights" data-home-section="overview" aria-label="Key insights"></section>
 
           <section class="toolbar" aria-label="Stats filters">
             <label>
