@@ -4371,11 +4371,21 @@
     const holeCount = course.holes.length;
     // Round-level stats need rounds of the same shape — mixing 9- and 18-hole
     // grosses would corrupt the averages. For Deerwood that means every
-    // same-hole-count Deerwood round, regardless of routing.
+    // same-hole-count Deerwood round, regardless of routing. For non-Deerwood
+    // courses, pool ALL rounds at the same physical course (any tee) so
+    // selecting Diamond Hawk Gold today shows stats from your Black + Gold +
+    // Green rounds combined — the brief is about "how do you play this course",
+    // not "how do you play this exact tee box".
+    const physicalName = course.name;
     const courseRounds = state.rounds
-      .filter((round) => deerwood
-        ? (isDeerwoodCourseId(round.courseId) && round.holes.length === holeCount)
-        : round.courseId === courseId)
+      .filter((round) => {
+        if (deerwood) {
+          return isDeerwoodCourseId(round.courseId) && round.holes.length === holeCount;
+        }
+        // Non-Deerwood: match any tee variant of the same physical course.
+        const roundCourse = getCourse(round.courseId);
+        return roundCourse && roundCourse.name === physicalName;
+      })
       .sort((a, b) => b.date.localeCompare(a.date));
     if (courseRounds.length < 2) return null;
     // Per-hole stats are hole-count-agnostic, so pool every Deerwood round
