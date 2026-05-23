@@ -1,77 +1,116 @@
 # Fairway Ledger
 
-A first-pass personal golf stats tracker. It runs as a static browser app and stores courses and rounds in local storage.
+A personal golf stats tracker. Static browser app, no build step, no server, no cloud — courses and rounds live in browser `localStorage`. Designed to be used on a phone during real rounds.
 
-Open `index.html` in a browser to use it.
+Live: `https://jcurry44.github.io/Fairway-Ledger/`
+
+Open `index.html` locally to run it directly from the filesystem.
+
+## Architecture
+
+- **`index.html`** — single page, four tabs (Home / Add Round / Courses / Profile).
+- **`app.js`** — ~5.7k lines, one IIFE. Handles UI rendering, state, persistence, event wiring.
+- **`lib/golf-math.js`** — pure math (Strokes Gained, round totals, score classification, hole identity, handicap helpers, geo). Zero DOM/state. Imported in the browser as `window.GolfMath` and required in Node tests.
+- **`lib/shapes.js`** — canonical `Round` and `Hole` field definitions. `makeRound` / `makeHole` / `normalizeRound` builders that every read/write path routes through, so adding a new per-hole field is a one-line change.
+- **`data/courses.js`** — course catalog. 25 entries covering Deerwood Golf Course (per-nine, per-tee), Ridgeview, Lake County, and five Western New York courses (Arrowhead, Diamond Hawk, Glen Oak, Harvest Hill, Seneca Hickory Stick) including all their tee variants.
+- **`sw.js`** — service worker (network-first with offline fallback). Whole app shell is precached so it works on a phone with zero signal.
+- **`manifest.json` + `icon.svg`** — PWA manifest. Installs to home screen as a real-looking app with its own icon.
 
 ## Tests
 
-The pure golf math (Strokes Gained, round totals, score classification, hole identity, handicap helpers, geo) lives in `lib/golf-math.js` — no DOM, no storage, no app state — so it can be unit-tested directly. `app.js` loads it as a plain script and binds the functions into scope; the test suite `require()`s the same file in Node. No build step, no dependencies.
-
-Run the tests with the Node built-in runner:
-
 ```
-node --test tests/golf-math.test.js
+node --test tests/golf-math.test.js tests/shapes.test.js
 ```
 
-## MVP Scope
+80 tests across the pure-math and canonical-shapes libs. No build step, no dependencies, just Node's built-in test runner.
 
-- Manual round entry by hole
-- Course setup with 9-hole or 18-hole par sequences
-- Scoring averages by course
-- Scoring averages by par 3, par 4, par 5, and par 6
-- Best and worst holes by average score to par
-- Hole spotlight with score history
-- Recent-round trend chart
-- JSON import and export
-- Lookup-only course adding; no manual par or yardage entry
-- Handicap Index estimate using WHS-style score differentials for rated 18-hole rounds
-- Deerwood hole yardages, hole handicap indexes, ratings, and slopes
-- 9-hole rounds can feed the handicap estimate with an expected-differential approximation
-- Tabbed premium dashboard layout with Home, Add Round, and Courses views
-- Dedicated course catalog at `data/courses.js` (loaded as a script so the app works from a plain `file://` open with no local server)
-- Add Round scorecard sections with live gross, to-par, putts, FIR, GIR, penalty, and differential estimates
-- Course profile view with ratings, slope, yardage, hole handicaps, and personal scoring by hole
-- Strokes Gained (vs. PGA Tour benchmark) per round, per hole, and broken down by par 3 / 4 / 5; surfaced in the live scorecard, home metrics, par-type bars, hole spotlight, and a dedicated Strokes Gained panel with trend chart. Baselines are interpolated from Mark Broadie's tour averages. Note: this is a tour benchmark, NOT a scratch benchmark — tour pros average ~70-71 strokes, scratch golfers average ~73-74, so amateur SG against tour will skew more negative than SG against true scratch. We use the tour data because it's the published, citable baseline; just label it accurately.
-- Pre-round brief in the Add Round flow: when you select a course you have 2+ rounds at, a collapsible panel above the scorecard surfaces your round count and averages, recent rounds, top 3 leak holes and strength holes by SG, a "what-if you parred your 3 worst holes last round" counterfactual, and the note from your most recent round there.
-- One-hole-at-a-time card view for mobile/on-course entry: toggle between the desktop grid and a big-input card layout (Card view / Grid view button in the Add Round panel). Card view shows one hole per screen with large score input plus +/- shortcut buttons, Putts/Fairway/GIR/Pen secondary inputs, a per-hole narrative note textarea (iOS voice dictation works via the keyboard mic), and Prev/Next nav. The card header shows a tappable "Hole N of N" pill that opens a bottom-sheet hole picker listing all holes with par, label, current score, and active highlight. Defaults to card view on screens ≤640px, persists user preference in localStorage, and preserves entered scores when switching modes mid-round.
-- Per-hole narrative notes: capture what actually happened on each hole ("chipped twice and 2-putted from 15ft", "blocked driver OB right, hit 3W instead"). Notes save with the round and surface two places: (1) the Hole Spotlight panel shows the last 5 notes for that hole as a per-hole diary with date + score, and (2) the pre-round Brief embeds the most recent note inline on each leak and strength hole — so walking to the tee you already see "Buck 3 (Par 4) · -1.2/rd · 'always come up short with 7-iron'".
-- Round summary narrative: every saved round gets an auto-generated 2-4 sentence coach-style summary that opens with score + course + comparison to your recent form, calls out the dominant theme (penalties, three-putts, big leak hole, hot putter, dialed driver, GIR streak), and closes with a counterfactual ("Without your three worst holes you'd have shot 77"). Featured as a dark callout card at the top of Home for your most recent round, and available as an expandable "Summary" in every row of Recent Scorecards.
-- First-putt distance tracking: per-hole "1st putt (ft)" input in both the card and grid views. New "Putting by Distance" panel on Home shows make % by bucket (Inside 3 ft / 3-6 / 6-10 / 10-20 / 20+), plus total tracked greens and three-jack count. Make = 1-putt total on that hole. Until you've logged any distances the panel guides you to where to add them.
-- Shot distance tracking (tap-and-tap, hardware-free): per-hole "Shot tracker" section in card view. Tap "Mark starting position" before your first swing to capture your tee location via `navigator.geolocation`; tap "Mark next shot end" after each shot to record a position and auto-compute the distance from the previous point (Haversine, meters → yards). Each shot stores lat/lon/timestamp/club/accuracy and renders in a list with a club picker and delete button. Deleting recomputes distances. Saves with the round, restores on edit. Browser geolocation permission asked the first time. Friendly error messages on denied / timeout / unavailable. Phase 1 (capture + display); per-club distance dashboards and category-level Strokes Gained come later. Club picker uses degrees for wedges (PW / 50° / 52° / 54° / 56° / 58° / 60°) plus 7W, since modern bag setups vary too much to standardize on GW/SW/LW labels.
-- Per-hole hazards (manual course intelligence): each hole in the course catalog gets a hazards editor in the Course Profile detail view. Pick type (Water / Bunker / OB / Trees / Hill / Other), side (Left / Right / Center / Long / Short), carry yardage, and an optional strategy note. Hazards render as color-coded chips with type-specific icons. Surface in two places: (1) the pre-round Brief shows hazards on each leak and strength hole row inline, and (2) the card view shows hazards for the current hole below the par/yards/HCP meta. Walking to the tee on Buck 3, you already see "💧 Water Left · 245y · lay up if not pure". One-time entry per course; permanent across all rounds. Hazards mirror automatically across tee variants of the same physical layout (Buck White and Buck Blue share the same hazard list since they're the same holes from different boxes).
-- Independent Front 9 / Back 9 selectors for Deerwood 18-hole rounds: instead of a fixed list of layout combos, the Add Round form has separate Front 9 and Back 9 dropdowns (Buck / Doe / Fawn each). Fixing a wrong nine mid-round no longer wipes the half you already entered — changing the Front 9 preserves holes 10-18, changing the Back 9 preserves holes 1-9, and a tee change preserves everything. (Born from a real round where the pro shop's routing didn't match the only available preset and switching it erased a half-round of data.)
-- Per-hole stats pool by physical hole, not routing. With independent Front 9 / Back 9 selectors the same hole can land at different positions ("Buck 3" is hole 3 when Buck is the front nine, hole 12 when it's the back), and Deerwood stores each 18-hole routing under its own course id. Best/Worst Holes, the Hole Spotlight, and the pre-round Brief leak/strength holes now key on a physical-hole identity (the "Buck 3" label) instead of course id + 18-hole number — so a hole keeps one combined history across every routing and tee it was played from. Round-level Brief averages still only pool same-hole-count rounds (mixing 9- and 18-hole grosses would skew the numbers).
-- Smart defaults on the Add Round card view: a fresh hole pre-fills the "regulation par" scenario — putts default to 2, GIR is pre-checked, and the par value on the Score row is marked with a gold ring. When you leave a hole (tap Next/Prev, jump via the hole picker, or open Review) anything you didn't touch is auto-filled: Score → par, Clubs → Driver (tee shot) + Putter for par 4/5, or Putter for par 3s. Walking the course becomes mostly "tap Next" on the holes that went to plan, and you only stop to adjust the ones that didn't. Holes you never advanced past stay genuinely empty, so the completion check still catches skipped holes. Disabled in edit mode, where exact fidelity to the saved round matters.
-- Round-level wind selector: the Add Round form has a Wind dropdown (Calm / 5 / 10 / 15 / 20 / 25 / 30+ mph). Stored on the round and surfaced in the Recent Scorecards subtext so a windy day is visible context next to the score.
-- Traditional scorecard score marks: scores render with classic notation — a circle for birdie, double circle for eagle or better, a square for bogey, double square for double bogey, plain for par, and a solid filled red box for triple bogey or worse (there's no standard symbol for triple, so a "blow-up" fill is used). Marks appear in the hole-picker bottom sheet, as a live badge in the top-right of each entry card once a score is in, and in a new expandable per-round scorecard. The score-entry pills themselves also carry their tier shape — birdie/eagle pills stay round, bogey/double-bogey pills turn square — and the selected pill fills green for par-or-better, red for bogey-or-worse. Each row of Recent Scorecards now has a "Scorecard" disclosure that opens the full 18-hole marked-up scorecard split by nine, with per-nine and total scores.
-- GIR / FIR drill-down during a round: the live GIR% and FIR stat cards in the Add Round summary are tappable — they open a bottom sheet listing every hole played so far, flagged hit or missed, so mid-round you can see exactly which greens and fairways you've found.
-- Penalty club tracking: when you log a penalty on a hole (Pen ≥ 1 in card view), a Penalty club picker appears, pre-filled with the hole's tee club. Stored per hole and rolled up into a "Penalty strokes by club" breakdown in the Tee Club Performance panel — so you can see which club is quietly costing you strokes.
-- Collapsible in-round chrome: once a round is underway (first score entered), the round setup fields — course, playing, nine, tee, wind, rating/slope — collapse into a single tappable banner so the screen is just the scorecard. The banner shows the course/tee/wind summary; tap it to re-open the fields and change something mid-round. Resets to expanded for each new round.
-- Default clubs pre-selected per hole: par 4/5/6 holes start with Driver (tee shot, gold TEE badge) and Putter already selected, visible the moment you open the hole — not filled in after the fact. Par 3s are left blank since the tee shot is an iron you pick. Putter is never allowed to sit in the tee-club slot, so swapping a pre-seeded Driver for your real tee club just works.
-- Headline metrics (Avg score, Avg to par, Best round) filter to 18-hole rounds only — averaging a 9-hole 38 with an 18-hole 78 is nonsense. The Avg score card carries a "N of M rounds (9-hole excluded)" subtext when any 9-hole rounds are excluded, so the filtering is visible.
-- Deerwood "Scoring By Nine" panel: one row per physical nine (Buck / Doe / Fawn) showing average 9-hole gross, to-par, and best, pooled across every appearance — front of an 18, back of an 18, or a standalone 9-hole round. The per-nine view answers "where do I score best at Deerwood?" without 9- and 18-hole rounds polluting each other's averages.
-- Auto-derived GIR: green-in-regulation is now computed from score and putts (on green in `par − 2` strokes), so the user never ticks it. The GIR checkbox is disabled — it's a readout, not an input. A 3-putt from on-in-reg still counts as GIR; a chip-in for par correctly fails GIR.
-- Auto-Putter on putts > 0: whenever a hole has any putts logged, Putter is automatically added to Clubs Hit (never auto-removed). Par 3s are now seeded with `["Putter"]` and the TEE badge is suppressed when only Putter is selected, so a fresh par 3 doesn't misleadingly show Putter as the tee club.
-- Profile tab with bag customization: a fourth top-level tab ("Profile") whose first section is **Your Bag** — a pill grid of every known club; tap to include or remove. Only clubs in your bag appear as options in the in-round pickers (Clubs Hit, Penalty club, Shot tracker). Old rounds that used a club you've since removed keep that club on the round (visible and toggleable off), so historical data never silently disappears. Seeded defaults (Driver/Putter on par 4/5/6, Putter on par 3) are filtered through the bag — never pre-select a club you don't carry. The bag persists into `state.profile.bag`; new installs and any imported state without a profile default to the full club list, so existing behavior is unchanged until you trim it. Includes a "Reset to all clubs" button.
-- Home-tab chip nav: a row of 4 chips below the hero — **Overview / Trends / Holes / Clubs** — swaps the content below. Overview shows your KPI metrics, latest narrative, key insights, and Recent Scorecards. Trends shows the Recent Rounds chart, Handicap Calculator, Strokes Gained, and Scoring Distribution. Holes shows Spotlight, Best Holes, Worst Holes, Par 3/4/5, Scoring By Course, and Scoring By Nine. Clubs shows Tee Club Performance and Putting by Distance. The active chip persists in `fairwayLedger.homeSection.v1`, so you land on the chip you last used. No scrolling between sections.
-- Home-tab panel collapse (legacy / not active): each of the ~13 stat panels (Recent Rounds trend, Handicap Calculator, Strokes Gained, Putting, Scoring Distribution, Tee Club Performance, Scoring By Course, Scoring By Nine, Par 3/4/5, Spotlight, Best Holes, Worst Holes, Recent Scorecards) collapses behind its own heading. Tap the heading to toggle; a chevron at the right edge rotates to show the state. Default-open: Recent Scorecards only. Everything else default-collapsed, expandable on demand. Per-panel state persists in `fairwayLedger.panelCollapsed.v1`. The headline metrics, latest narrative, key insights, and filter toolbar stay un-collapsible (always visible at the top of Home).
-- "More on this hole" collapse on the Add Round card: only the navigation arrows, hole headline, Score pills, Putts pills, and a "More on this hole ▾" toggle are visible by default. The other inputs — 1st putt distance, Fairway, Pen + Penalty club, Clubs Hit, the note textarea, and the Shot tracker — live behind that one tap. Tapping the toggle stickies open for the session so detail-heavy rounds aren't fighting the collapse; closing it stickies closed again. Edit mode always opens it for full review. A typical par hole becomes a 3-tap flow: tap par-or-not on Score, tap Putts, tap the forward arrow.
-- Cache-busting query strings (`?v=2026-05-16c`) on the stylesheet and scripts in `index.html`. Bump the version before each push that ships code changes worth users seeing — mobile browsers cache JS/CSS aggressively, and the version string forces a fresh fetch without requiring users to manually clear cache.
-- In-progress round auto-save: while you're entering a round, every score, putt, fairway, GIR, pen, first-putt distance, narrative note, GPS shot, and club selection is auto-saved to localStorage 500ms after each input. If the page reloads, the tab closes, or your phone restarts mid-round, you're prompted on next open: "Resume round in progress? 7 holes scored, 14 GPS shots (saved 23 min ago)." OK to restore, Cancel to discard. Edit mode bypasses this (those rounds already live in state.rounds with their own lifecycle).
-- Pill-based fast input on the card view: every per-hole input is now a row of tap-to-select pills instead of typed numbers — Score (par-anchored: par-2 through par+3), Putts (0-5), 1st putt distance (3/6/10/15/20/30/50 ft), Fairway (Hit/Left/Right/Short/Long/Miss), Pen (0-3). Each row has a small typed escape-hatch for values outside the pill set. Big 44px+ tap targets, clear green active state, no more thumb-typing on the course. Grid view keeps typed inputs (desktop typing is fine).
-- Clubs hit per hole: multi-select pill grid of every club in the bag (Driver / 3W / 5W / 7W / Hybrid / 3-9i / PW / 50-60° / Putter / Other). Tap to toggle on/off — log every club you hit on the hole. **The first club you tap is treated as the tee shot** — a gold "TEE" badge appears on it. Tap the tee club to remove it; the next first-tapped club becomes the new tee shot. Used by the Tee Club Performance panel and future per-club distance dashboards.
-- Tee Club Performance panel on Home: aggregates avg score-to-par and avg SG by the tee club you used, sorted by tee-shot count. Tells you "I score +0.3 per hole with 3W vs +0.8 with Driver across 47 tee shots" — actionable for deciding whether to throttle back off the tee on certain holes. Breaks down par-3 / 4 / 5 mix per club so par-3 tee shots (irons/wedges) don't muddy par-4/5 driver/wood analysis.
-- Round summary field moved to bottom, post-round friendly: the round-level note now lives in a prominent green-tinted "Round summary" textarea just above the Save button. Placeholder invites reflection: "How did the round feel overall? Couldn't control driver, hit a few bad chips, putted decent on the back…" Last thing you fill out, naturally aligned with how you actually think about a round when it's finished.
-- Scoring Distribution panel on Home: color-coded bucket grid for Eagle+ / Birdie / Par / Bogey / Double / Triple / Worse with lifetime counts and percentages. Tap any tier to open a bottom-sheet listing every hole in that bucket chronologically — your career birdie list, your blow-up history, your par-or-better record at any course. Counts respect the current Home filter (course / tee / window).
-- Completion check + Review & save phase: in card view, the completion check, round summary textarea, and Save button are tucked into a dedicated "Review & save round" section that's hidden during per-hole entry. Each card has a "Review & save round →" button below the Prev/Next nav; tapping it reveals the review section, scrolls to it, and shows the missing-field chips and round summary. Missing-hole chips still jump back to specific cards. "← Back to entry" closes the review and scrolls back to the active card. Grid view keeps the always-visible layout (desktop typing-friendly). Cleans up the per-hole entry flow so each card is just heads-down inputs.
-- Best/Worst hole rows are clickable: tap any hole card in the Best Holes or Worst Holes panel to jump straight to the Hole Spotlight pre-loaded with that course + hole and scrolled into view. Lightweight version of "search a specific hole" — drill-in works from the rows you already see.
-- Edit existing rounds from the Recent Scorecards list (date, course, layout, tee, and every per-hole input); Cancel edit reverts the form to a fresh state.
-- Backup hygiene: Export filename is date-stamped, last-export timestamp is tracked, and the Export button shows a gold badge with the unbacked round count once 3+ rounds have been added since the last export.
+The pure math runs both as a browser global (`window.GolfMath`, `window.GolfShapes`) and as a CommonJS module via the same UMD wrapper, so the tests `require()` the exact same code the browser runs.
+
+## Home tab
+
+A chip strip at the top swaps between four sections:
+
+- **Overview** — KPI metrics (rounds, avg score, avg to-par, best round, GIR, SG, handicap) + auto-generated round summary narrative + key insights + Recent Scorecards.
+- **Trends** — sub-chips for Trend chart, Handicap Calculator, and Strokes Gained.
+- **Holes** — sub-chips for the **Heatmap** (the headline view), Scoring Distribution, Par 3/4/5, Scoring By Course, and Scoring By Nine (Deerwood).
+- **Clubs** — sub-chips for Tee Club Performance and Putting by Distance.
+
+The Heatmap is the killer view: a color-coded grid of every physical hole at the active course (green = under par, red = over par avg). Tap any hole to open a drill-down sheet with summary stats, scoring distribution, per-tee-club breakdown, recent rounds list, and per-hole notes.
+
+Per-physical-course filtering throughout: Deerwood's six per-nine/tee catalog entries collapse to one "Deerwood" chip; Diamond Hawk's five tee variants collapse to one "Diamond Hawk" chip; etc. The unit of "a course" in the UI is the physical course, not the tee variant.
+
+## Add Round
+
+Setup form opens fully blank — no chip pre-selected anywhere. User taps Course, then Tee (auto-revealed for the course's available tees), then Deerwood-specific fields if relevant. Once required setup is satisfied, the big "Start Round →" button enables and reveals the scorecard.
+
+Two scorecard views, persisted per user:
+
+- **Card view** (default on phones ≤640px wide) — one hole per screen. Big tap targets, pill-based input (par-anchored Score row, Putts 0-5, Pen 0-3, fairway result, 1st-putt distance, clubs hit, per-hole note, GPS shot tracker). Prev/Next arrows + floating mid-screen arrows + bottom-sheet hole picker. Auto-collapses round setup once you're scoring.
+- **Grid view** — all 18 holes at once, typed inputs. Desktop-friendly.
+
+Switching views mid-round preserves all entered scores.
+
+Auto-saved to `localStorage` every 500ms after any input. If you reload mid-round or your phone restarts, on next open you get prompted to resume.
+
+## Per-hole inputs
+
+Every input is captured per-hole for richest analytics later:
+
+- **Score** + **Putts** (required)
+- **GIR** (auto-derived from score + putts + par — not user input)
+- **Fairway result** (Hit / Left / Right / Short / Long / Miss; hidden on par 3s where it's structurally meaningless)
+- **Penalties** count
+- **Penalty club** (appears when penalties ≥ 1; pre-fills to the tee club used)
+- **1st putt distance** (pill row: 3 / 6 / 10 / 15 / 20 / 30 / 50 ft + custom)
+- **Clubs hit** — multi-select pill grid. First club tapped is the tee shot (gold "TEE" badge). Putter auto-added when putts ≥ 1. Default seeds for par 3/4/5 use the player's bag.
+- **Per-hole note** — narrative text, iOS voice dictation works via the keyboard mic.
+- **GPS shots** — tap to mark starting position, tap again to mark each shot's end; Haversine distance per shot, per-club tagging.
+
+All fields visible inline on every card (no hide-behind-toggle gimmicks — the point of the app is data completeness).
+
+## Round-level inputs
+
+- Date (defaults to today)
+- Wind (Calm / 5 / 10 / 15 / 20 / 25 / 30+ mph)
+- Round summary textarea — free-form reflection on the round, prominently placed in the post-round Review section
+- Auto-generated 2-4 sentence coach-style **round narrative** that opens with score vs. recent form, calls out a dominant theme (penalties / three-putts / hot putter / leak hole / clean back nine), and closes with a counterfactual ("Without your three worst holes you'd have shot 77")
+
+## Analytics
+
+- **Strokes Gained** vs. PGA Tour benchmark, broken down per hole and by par type. Surfaced on the live scorecard, par-type bars, drill-down sheets, and a dedicated SG panel with trend chart. Tour benchmark labeled honestly: pros average 70-71, scratch is 73-74, so amateur SG against tour skews more negative than against true scratch.
+- **Handicap Index** estimate using WHS-style score differentials for rated 18-hole rounds. 9-hole rounds feed an expected-differential approximation.
+- **Putting by Distance** — make % by bucket (Inside 3 ft / 3-6 / 6-10 / 10-20 / 20+), with three-jack count.
+- **Tee Club Performance** — avg score-to-par + avg SG by tee club (Driver vs 3W vs Hybrid vs Iron), with per-par-type breakdown and a "best avg" flag when there's a meaningful comparison.
+- **Penalty Clubs** — strokes lost per club. Surfaces the quiet costers (often the driver).
+- **Pre-round brief** — when you select a course you have 2+ rounds at, a collapsible panel above the scorecard surfaces your round count, averages, recent rounds, top 3 leak/strength holes (with most recent per-hole note inline), a counterfactual, and hazards per hole.
+
+## Deerwood specifics
+
+- 27 holes split into three named nines: Buck / Doe / Fawn.
+- 18-hole rounds use independent Front 9 / Back 9 selectors so every pro-shop routing works (including the same nine twice).
+- Per-hole stats pool by physical hole identity ("Buck 3" is one history regardless of whether it played as hole 3 or hole 12).
+- Two tees: White + Blue, with per-tee ratings/slopes and per-hole yardages.
+- Per-hole hazards live on the course profile (Water / Bunker / OB / Trees / Hill / Other; Left / Right / Center / Long / Short; carry yardage; strategy note). Hazards mirror across tee variants of the same physical layout.
+
+## Other features
+
+- **Backup hygiene** — Export filename date-stamped; gold badge on the Export button after 3+ unbacked rounds.
+- **JSON import / export** — full state round-trip. Imports route through the same migration pipeline as load so older exports pick up new shape defaults.
+- **Round editing** from Recent Scorecards (date, course, layout, tee, every per-hole input).
+- **Profile tab** with bag customization. Pill grid of every known club; tap to include/remove. Only bag clubs appear as pickable options in-round. Historical rounds keep clubs that have since been removed from the bag.
+- **PWA install** — manifest + service worker + Inter font + icon. "Add to Home Screen" gives a real-looking standalone app. Network-first caching means deploys land cleanly; full offline use possible on the course.
+- **First-launch welcome callout** for users with no saved rounds — friendly intro, "Add your first round" CTA, "Try with sample data" alternate.
+- **Cache-busting query strings** (`?v=YYYY-MM-DD<letter>`) on the stylesheet and scripts. Bump for deploys that need to bust mobile cache. Service worker `CACHE_VERSION` bumped for deploys that need to purge precache.
 
 ## Included Courses
 
-- Deerwood Golf Course with a round setup flow for 9 or 18 holes
-- Deerwood 18-hole rounds: independent Front 9 and Back 9 selectors — pick any of the three nines (Buck / Doe / Fawn) for each, so every routing the pro shop sends you out on is supported (including the same nine twice)
-- Deerwood 9-hole layouts: Buck, Doe, Fawn
-- Deerwood tee options: White by default, plus Blue
+- **Deerwood Golf Course** — Buck, Doe, Fawn nines. Each available in 9-hole or 18-hole rounds (independent Front 9 / Back 9 selection). White and Blue tees.
+- **Arrowhead Golf Club** (Akron, NY) — White tees.
+- **Diamond Hawk Golf Course** (Cheektowaga, NY) — Black, Gold, Green, Silver, Burgundy tees.
+- **Glen Oak Golf Club** (East Amherst, NY) — White tees.
+- **Harvest Hill Golf Course** (Orchard Park, NY) — Black, Gold, Silver, Bronze, Blue tees.
+- **Lake County Links** — White tees.
+- **Ridgeview Golf Club** — Blue tees.
+- **Seneca Hickory Stick Golf Course** (Lewiston, NY) — Black, Blue, White, Green, Red tees.
+
+Course yardages, ratings, and slopes verified against published scorecards (GolfPass / 18Birdies / Aimy Golf). Seneca Hickory Stick's non-Black tees use per-nine-scaled estimates from the Black scorecard (the only one publicly available with hole-by-hole data) — totals match published values exactly, individual hole yardages are within a few yards of the real scorecard.
