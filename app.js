@@ -19,7 +19,9 @@
     haversineMeters,
     metersToYards,
     expectedNineHoleDifferential,
-    handicapRuleForCount
+    handicapRuleForCount,
+    estimateRoundDifferential: estimateRoundDifferentialPure,
+    calculateHandicapEstimate: calculateHandicapEstimatePure
   } = window.GolfMath;
 
   const STORAGE_KEY = "fairwayLedger.v1";
@@ -2429,16 +2431,17 @@
     });
   }
 
-  function estimateRoundDifferential(course, holes) {
-    if (!course || !course.rating || !course.slope || !holes.length) return null;
-    const gross = holes.reduce((sum, hole) => sum + hole.score, 0);
-    const differential = ((gross - course.rating) * 113) / course.slope;
-    if (holes.length >= 18) return Number(differential.toFixed(1));
+  // Thin app-bound wrappers around the pure lib versions: they inject
+  // getCourse as the lookupCourse dependency and pull state.rounds when no
+  // round set is passed explicitly. All the math lives in lib/golf-math.js
+  // (and is unit-tested there).
+  function calculateHandicapEstimate(rounds) {
+    return calculateHandicapEstimatePure(rounds, getCourse);
+  }
 
+  function estimateRoundDifferential(course, holes) {
     const currentIndex = calculateHandicapEstimate(state.rounds).index;
-    const fallbackIndex = Math.max(0, differential * 2);
-    const expectedDifferential = expectedNineHoleDifferential(currentIndex ?? fallbackIndex);
-    return Number((differential + expectedDifferential).toFixed(1));
+    return estimateRoundDifferentialPure(course, holes, currentIndex);
   }
 
   function renderMetrics(rounds) {
@@ -2530,97 +2533,6 @@
         <small>${handicap.approximateNineCount || 0} nine-hole estimates included</small>
       </article>
     `;
-  }
-
-  function calculateHandicapEstimate(rounds) {
-    const fullOnly = buildHandicapResult(getRatedDifferentialEntries(rounds, null, false));
-    let seedIndex = fullOnly.index;
-    if (seedIndex === null) {
-      seedIndex = estimateSeedIndexFromNineHoleRounds(rounds);
-    }
-
-    let result = buildHandicapResult(getRatedDifferentialEntries(rounds, seedIndex, true));
-    for (let iteration = 0; iteration < 3 && result.index !== null; iteration += 1) {
-      result = buildHandicapResult(getRatedDifferentialEntries(rounds, result.index, true));
-    }
-
-    const approximateNineCount = result.eligible.filter((item) => item.approximate).length;
-    return {
-      ...result,
-      approximateNineCount,
-      note: approximateNineCount
-        ? "Estimate only: 9-hole rounds use official 9-hole differentials plus an expected 9-hole differential approximation. Official GHIN/WHS uses an unpublished expected-score model, PCC, score adjustments, safeguards, and verification."
-        : "Estimate only: uses gross score, Course Rating, Slope Rating, and PCC 0. Official GHIN/WHS posting also applies score adjustments, safeguards, and verification."
-    };
-  }
-
-  function getRatedDifferentialEntries(rounds, expectedIndex, includeNineHoleRounds) {
-    return rounds
-      .map((round) => {
-        const course = getCourse(round.courseId);
-        const totals = roundTotals(round);
-        if (!course || !course.rating || !course.slope) return undefined;
-        const baseDifferential = ((totals.gross - course.rating) * 113) / course.slope;
-
-        if (round.holes.length >= 18) {
-          return {
-            round,
-            course,
-            gross: totals.gross,
-            holes: round.holes.length,
-            differential: Number(baseDifferential.toFixed(1))
-          };
-        }
-
-        if (!includeNineHoleRounds || round.holes.length !== 9) return undefined;
-        const fallbackIndex = Math.max(0, baseDifferential * 2);
-        const expectedDifferential = expectedNineHoleDifferential(expectedIndex ?? fallbackIndex);
-        return {
-          round,
-          course,
-          gross: totals.gross,
-          holes: 9,
-          approximate: true,
-          nineHoleDifferential: Number(baseDifferential.toFixed(1)),
-          expectedDifferential: Number(expectedDifferential.toFixed(1)),
-          differential: Number((baseDifferential + expectedDifferential).toFixed(1))
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => b.round.date.localeCompare(a.round.date))
-      .slice(0, 20);
-  }
-
-  function buildHandicapResult(eligible) {
-    const rule = handicapRuleForCount(eligible.length);
-    if (!rule) {
-      return {
-        index: null,
-        eligible,
-        used: [],
-        rule: null,
-        note: "Need at least three rated score differentials for a WHS-style estimate."
-      };
-    }
-
-    const used = [...eligible]
-      .sort((a, b) => a.differential - b.differential)
-      .slice(0, rule.count);
-    const raw = average(used.map((item) => item.differential)) + rule.adjustment;
-    return {
-      index: Math.max(0, Number(raw.toFixed(1))),
-      eligible,
-      used,
-      rule
-    };
-  }
-
-  function estimateSeedIndexFromNineHoleRounds(rounds) {
-    const doubledDifferentials = getRatedDifferentialEntries(rounds, null, true)
-      .filter((item) => item.holes === 9)
-      .map((item) => item.nineHoleDifferential * 2);
-    if (!doubledDifferentials.length) return null;
-    return Math.max(0, average(doubledDifferentials));
   }
 
   function renderHandicapPanel() {

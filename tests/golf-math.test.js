@@ -303,6 +303,238 @@ test("handicapRuleForCount: too few rounds returns null", () => {
   assert.equal(G.handicapRuleForCount(2), null);
 });
 
+// ---- estimateRoundDifferential ------------------------------------------
+
+test("estimateRoundDifferential: 18-hole formula (gross - rating) * 113 / slope", () => {
+  // Rating 70.5, Slope 130, Gross 80 -> (80 - 70.5) * 113 / 130 = ~8.258 -> 8.3
+  const holes = Array.from({ length: 18 }, (_, i) => ({ score: i < 8 ? 5 : 4, par: 4 }));
+  // 8 fives + 10 fours = 40 + 40 = 80
+  near(G.estimateRoundDifferential({ rating: 70.5, slope: 130 }, holes), 8.3, 0.05);
+});
+
+test("estimateRoundDifferential: 9-hole rounds add expected-9-hole differential", () => {
+  // Gross 42 on 9 holes, rating 70.5, slope 130 -> base = (42-70.5)*113/130 = -24.77
+  // With currentIndex 10: expected9 = 0.52*10 + 1.2 = 6.4
+  // Final = -24.77 + 6.4 = -18.37 -> -18.4
+  const holes = Array.from({ length: 9 }, () => ({ score: 42 / 9, par: 4 }));
+  // Use exact gross via integer-ish scores
+  const holes9 = Array.from({ length: 9 }, (_, i) => ({ score: i < 6 ? 5 : 4, par: 4 }));
+  // 6 fives + 3 fours = 30 + 12 = 42
+  const diff = G.estimateRoundDifferential({ rating: 70.5, slope: 130 }, holes9, 10);
+  // base = (42 - 70.5) * 113 / 130 = -24.77
+  // expected9(10) = 6.4
+  // total = -18.4 (rounded)
+  near(diff, -18.4, 0.1);
+});
+
+test("estimateRoundDifferential: 9-hole with no currentIndex uses fallback doubling", () => {
+  const holes9 = Array.from({ length: 9 }, (_, i) => ({ score: i < 6 ? 5 : 4, par: 4 }));
+  const diffNullIndex = G.estimateRoundDifferential({ rating: 70.5, slope: 130 }, holes9, null);
+  // base = -24.77, fallbackIndex = max(0, -24.77 * 2) = 0
+  // expected9(0) = 1.2
+  // total = -24.77 + 1.2 = -23.57 -> -23.6
+  near(diffNullIndex, -23.6, 0.1);
+});
+
+test("estimateRoundDifferential: missing course/rating/slope/holes returns null", () => {
+  assert.equal(G.estimateRoundDifferential(null, [{ score: 4 }]), null);
+  assert.equal(G.estimateRoundDifferential({ rating: 70 }, [{ score: 4 }]), null); // no slope
+  assert.equal(G.estimateRoundDifferential({ slope: 130 }, [{ score: 4 }]), null); // no rating
+  assert.equal(G.estimateRoundDifferential({ rating: 70, slope: 130 }, []), null); // no holes
+});
+
+// ---- buildHandicapResult ------------------------------------------------
+
+test("buildHandicapResult: <3 differentials returns null index", () => {
+  const result = G.buildHandicapResult([
+    { differential: 8.3 },
+    { differential: 9.1 }
+  ]);
+  assert.equal(result.index, null);
+  assert.ok(result.note.includes("three rated"));
+});
+
+test("buildHandicapResult: 3 differentials uses best 1 with adjustment -2", () => {
+  const result = G.buildHandicapResult([
+    { differential: 12.0 },
+    { differential: 9.0 },
+    { differential: 15.0 }
+  ]);
+  // Best 1: 9.0. Adjustment -2. Index = 9.0 - 2 = 7.0
+  near(result.index, 7.0);
+  assert.deepEqual(result.rule, { count: 1, adjustment: -2 });
+});
+
+test("buildHandicapResult: 8 differentials uses best 2 with no adjustment", () => {
+  const result = G.buildHandicapResult([
+    { differential: 12 }, { differential: 9 }, { differential: 15 },
+    { differential: 11 }, { differential: 13 }, { differential: 8 },
+    { differential: 10 }, { differential: 14 }
+  ]);
+  // Best 2: 8 and 9. Avg = 8.5. No adjustment. Index = 8.5
+  near(result.index, 8.5);
+  assert.deepEqual(result.rule, { count: 2, adjustment: 0 });
+});
+
+test("buildHandicapResult: negative result clamps to 0", () => {
+  // Three very low differentials that would average below the adjustment
+  const result = G.buildHandicapResult([
+    { differential: 1.0 }, { differential: 0.5 }, { differential: 2.0 }
+  ]);
+  // Best 1: 0.5. Adjustment -2. Raw = -1.5. Clamped to 0.
+  near(result.index, 0);
+});
+
+// ---- getRatedDifferentialEntries ----------------------------------------
+
+function mkRound(date, courseId, gross, holesCount) {
+  const baseScore = Math.floor(gross / holesCount);
+  const remainder = gross - baseScore * holesCount;
+  const holes = Array.from({ length: holesCount }, (_, i) => ({
+    number: i + 1,
+    par: 4,
+    score: baseScore + (i < remainder ? 1 : 0),
+    putts: 2,
+    gir: true,
+    fairway: "hit",
+    penalties: 0
+  }));
+  return { date, courseId, holes, tee: "White" };
+}
+
+test("getRatedDifferentialEntries: skips rounds whose course lookup returns null", () => {
+  const rounds = [
+    mkRound("2024-01-01", "ridgeview", 85, 18),
+    mkRound("2024-01-02", "unknown", 90, 18)
+  ];
+  const lookup = (id) => (id === "ridgeview" ? { rating: 70.5, slope: 130 } : null);
+  const entries = G.getRatedDifferentialEntries(rounds, lookup, null, false);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].round.courseId, "ridgeview");
+});
+
+test("getRatedDifferentialEntries: 9-hole excluded when includeNineHoleRounds=false", () => {
+  const rounds = [
+    mkRound("2024-01-01", "rv", 85, 18),
+    mkRound("2024-01-02", "rv", 42, 9)
+  ];
+  const lookup = () => ({ rating: 70.5, slope: 130 });
+  const without9 = G.getRatedDifferentialEntries(rounds, lookup, null, false);
+  const with9 = G.getRatedDifferentialEntries(rounds, lookup, 10, true);
+  assert.equal(without9.length, 1);
+  assert.equal(with9.length, 2);
+});
+
+test("getRatedDifferentialEntries: 9-hole entries carry the approximate flag", () => {
+  const rounds = [mkRound("2024-01-02", "rv", 42, 9)];
+  const lookup = () => ({ rating: 70.5, slope: 130 });
+  const entries = G.getRatedDifferentialEntries(rounds, lookup, 10, true);
+  assert.equal(entries[0].approximate, true);
+  assert.ok("nineHoleDifferential" in entries[0]);
+  assert.ok("expectedDifferential" in entries[0]);
+});
+
+test("getRatedDifferentialEntries: sorted by date desc, capped at 20", () => {
+  const rounds = Array.from({ length: 25 }, (_, i) =>
+    mkRound(`2024-${String(Math.floor(i / 12) + 1).padStart(2, "0")}-${String((i % 12) + 1).padStart(2, "0")}`, "rv", 80, 18)
+  );
+  const lookup = () => ({ rating: 70.5, slope: 130 });
+  const entries = G.getRatedDifferentialEntries(rounds, lookup, null, false);
+  assert.equal(entries.length, 20);
+  // First entry should be the most recent date
+  const dates = entries.map((e) => e.round.date);
+  const sortedDesc = [...dates].sort((a, b) => b.localeCompare(a));
+  assert.deepEqual(dates, sortedDesc);
+});
+
+// ---- calculateHandicapEstimate ------------------------------------------
+
+test("calculateHandicapEstimate: empty rounds returns null index", () => {
+  const result = G.calculateHandicapEstimate([], () => null);
+  assert.equal(result.index, null);
+  assert.equal(result.approximateNineCount, 0);
+});
+
+test("calculateHandicapEstimate: <3 rated rounds returns null index", () => {
+  const rounds = [
+    mkRound("2024-01-01", "rv", 85, 18),
+    mkRound("2024-01-02", "rv", 82, 18)
+  ];
+  const lookup = () => ({ rating: 70.5, slope: 130 });
+  const result = G.calculateHandicapEstimate(rounds, lookup);
+  assert.equal(result.index, null);
+  assert.ok(result.note.includes("Estimate only"));
+});
+
+test("calculateHandicapEstimate: 3 18-hole rounds, best 1 - 2", () => {
+  const rounds = [
+    mkRound("2024-01-01", "rv", 85, 18), // diff = (85-70.5)*113/130 = 12.6
+    mkRound("2024-01-08", "rv", 82, 18), // diff = (82-70.5)*113/130 = 10.0
+    mkRound("2024-01-15", "rv", 80, 18)  // diff = (80-70.5)*113/130 = 8.3
+  ];
+  const lookup = () => ({ rating: 70.5, slope: 130 });
+  const result = G.calculateHandicapEstimate(rounds, lookup);
+  // Best 1: 8.3. Adjustment -2. Index = 6.3.
+  near(result.index, 6.3, 0.05);
+  assert.equal(result.eligible.length, 3);
+  assert.equal(result.used.length, 1);
+});
+
+test("calculateHandicapEstimate: rounds w/o rated course are silently skipped", () => {
+  const rounds = [
+    mkRound("2024-01-01", "rv", 85, 18),
+    mkRound("2024-01-02", "unrated", 75, 18), // skipped
+    mkRound("2024-01-08", "rv", 82, 18),
+    mkRound("2024-01-15", "rv", 80, 18)
+  ];
+  const lookup = (id) => (id === "rv" ? { rating: 70.5, slope: 130 } : null);
+  const result = G.calculateHandicapEstimate(rounds, lookup);
+  assert.equal(result.eligible.length, 3); // only "rv" rounds
+  near(result.index, 6.3, 0.05);
+});
+
+test("calculateHandicapEstimate: 9-hole rounds mark approximateNineCount", () => {
+  const rounds = [
+    mkRound("2024-01-01", "rv", 85, 18),
+    mkRound("2024-01-08", "rv", 82, 18),
+    mkRound("2024-01-15", "rv", 80, 18),
+    mkRound("2024-01-22", "rv", 42, 9), // 9-hole, approximate
+    mkRound("2024-01-29", "rv", 40, 9)  // 9-hole, approximate
+  ];
+  const lookup = () => ({ rating: 70.5, slope: 130 });
+  const result = G.calculateHandicapEstimate(rounds, lookup);
+  assert.equal(result.approximateNineCount, 2);
+  assert.ok(result.note.includes("9-hole"));
+  // index is positive and finite
+  assert.ok(result.index !== null);
+  assert.ok(Number.isFinite(result.index));
+});
+
+test("calculateHandicapEstimate: 9-hole-only seeds from doubled differentials", () => {
+  // Three 9-hole rounds, no 18-hole. Should still produce an index via the
+  // estimateSeedIndexFromNineHoleRounds path.
+  const rounds = [
+    mkRound("2024-01-01", "rv", 42, 9),
+    mkRound("2024-01-08", "rv", 40, 9),
+    mkRound("2024-01-15", "rv", 38, 9)
+  ];
+  const lookup = () => ({ rating: 70.5, slope: 130 });
+  const result = G.calculateHandicapEstimate(rounds, lookup);
+  assert.equal(result.eligible.length, 3);
+  assert.equal(result.approximateNineCount, 3);
+  assert.ok(result.index !== null);
+});
+
+test("calculateHandicapEstimate: 19 rounds uses best 7", () => {
+  const rounds = Array.from({ length: 19 }, (_, i) =>
+    mkRound(`2024-${String(Math.floor(i / 12) + 1).padStart(2, "0")}-${String((i % 12) + 1).padStart(2, "0")}`, "rv", 80 + i, 18)
+  );
+  const lookup = () => ({ rating: 70.5, slope: 130 });
+  const result = G.calculateHandicapEstimate(rounds, lookup);
+  assert.deepEqual(result.rule, { count: 7, adjustment: 0 });
+  assert.equal(result.used.length, 7);
+});
+
 test("handicapRuleForCount: WHS count + adjustment table", () => {
   assert.deepEqual(G.handicapRuleForCount(3), { count: 1, adjustment: -2 });
   assert.deepEqual(G.handicapRuleForCount(4), { count: 1, adjustment: -1 });
