@@ -1858,6 +1858,11 @@ body.floating-card-nav-visible .floating-card-nav {
   background: #fbfdfa;
 }
 
+.tee-club-row.is-best {
+  background: #eaf4ed;
+  border-color: #b6d6c1;
+}
+
 .tee-club-row-main {
   display: flex;
   flex-direction: column;
@@ -1869,6 +1874,9 @@ body.floating-card-nav-visible .floating-card-nav {
   color: var(--ink);
   font-size: 1rem;
   font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .tee-club-row-main .subtext {
@@ -1878,29 +1886,16 @@ body.floating-card-nav-visible .floating-card-nav {
 
 .tee-club-row-stats {
   display: flex;
-  gap: 14px;
+  gap: 10px;
   align-items: center;
+  font-variant-numeric: tabular-nums;
 }
 
-.tee-club-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 1px;
-}
-
-.tee-club-stat small {
+.tee-club-sg {
+  font-size: 0.78rem;
   color: var(--muted);
-  font-size: 0.7rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.tee-club-stat strong {
-  color: var(--green-dark, #15573c);
-  font-size: 1.05rem;
-  font-weight: 900;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 /* Deerwood "scoring by nine" panel — one row per physical nine, pooled
@@ -2914,6 +2909,91 @@ body.floating-card-nav-visible .floating-card-nav {
   font-size: 0.85rem;
   padding: 6px 0;
 }
+
+/* Per-hole tee-club breakdown in the drill-down sheet. Compact rows;
+   each row: club name | count | avg score with a colored vs-par chip.
+   The lowest-avg club (when it has 2+ rounds) gets a subtle highlight. */
+.hd-tc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hd-tc-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hd-tc-row.is-best {
+  background: #eaf4ed;
+  border-color: #b6d6c1;
+}
+
+.hd-tc-club {
+  font-weight: 700;
+  color: var(--ink);
+  font-size: 0.92rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hd-tc-best-flag {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--green);
+  color: #ffffff;
+  padding: 2px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.hd-tc-count {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.hd-tc-avg {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  border: 1px solid transparent;
+  min-width: 70px;
+  justify-content: center;
+}
+
+.hd-tc-avg small {
+  font-size: 0.72rem;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.hd-tc-avg.tier-eagle  { background: #14633f; color: #f3fff5; }
+.hd-tc-avg.tier-birdie { background: #1f7a59; color: #ffffff; }
+.hd-tc-avg.tier-under  { background: #c5e3d1; color: #123f32; border-color: #9ec8ae; }
+.hd-tc-avg.tier-par    { background: #f1f2ec; color: var(--ink); border-color: var(--line); }
+.hd-tc-avg.tier-bogey  { background: #f1d39b; color: #6b4513; }
+.hd-tc-avg.tier-double { background: #d97a6a; color: #ffffff; }
+.hd-tc-avg.tier-triple { background: #8e2419; color: #fff0ec; }
+.hd-tc-avg.tier-empty  { background: var(--panel-soft); color: var(--muted); border-color: var(--line); }
 
 /* Scoring distribution panel — birdies/pars/bogeys/etc with drill-down. */
 

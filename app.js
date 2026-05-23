@@ -3125,6 +3125,46 @@
     return "triple";
   }
 
+  // Per-hole tee-club scoring breakdown. For each unique tee club tagged on
+  // this physical hole, compute how many rounds it was used and what the
+  // average score was. The "first club tapped" convention from the Add Round
+  // flow means hole.clubsHit[0] is the tee shot — no separate field needed.
+  // Sorted most-used first so the column the user gravitates to leads.
+  function getHoleTeeClubBreakdown(physicalId, rounds) {
+    if (!physicalId) return [];
+    const grouped = new Map();
+    rounds.forEach((round) => {
+      if (!Array.isArray(round.holes)) return;
+      round.holes.forEach((hole) => {
+        if (physicalHoleId(round.courseId, hole) !== physicalId) return;
+        if (!Number.isFinite(hole.score) || hole.score <= 0) return;
+        const teeClub = Array.isArray(hole.clubsHit) && hole.clubsHit.length
+          ? hole.clubsHit[0]
+          : null;
+        if (!teeClub) return;
+        if (!grouped.has(teeClub)) grouped.set(teeClub, { club: teeClub, scores: [], pars: [] });
+        const entry = grouped.get(teeClub);
+        entry.scores.push(hole.score);
+        entry.pars.push(hole.par);
+      });
+    });
+    const rows = [...grouped.values()].map((entry) => {
+      const avgScore = average(entry.scores);
+      const avgPar = average(entry.pars);
+      return {
+        club: entry.club,
+        count: entry.scores.length,
+        avgScore,
+        avgVsPar: avgScore - avgPar,
+        best: Math.min(...entry.scores),
+      };
+    });
+    // Sort by usage descending; tie-break by lower avg vs par so the more
+    // useful club leads when counts are equal.
+    rows.sort((a, b) => b.count - a.count || a.avgVsPar - b.avgVsPar);
+    return rows;
+  }
+
   // Pure-ish: walk every round once and pull everything that touches this
   // physical hole. Returns null if the hole has no history at all.
   function getHoleDetailData(physicalId, rounds) {
@@ -3229,6 +3269,34 @@
       return `<span class="hd-dist-chip ${cls}"><span class="hd-dist-count">${count}</span><span class="hd-dist-label">${distLabel[tier]}</span></span>`;
     }).join("");
 
+    // Tee club breakdown. Only flag a "best avg" when there's an actual
+    // comparison — at least two clubs with 2+ rounds each. Otherwise a single
+    // dominant club would get flagged as "best" against alternatives we don't
+    // have enough data on, which would mislead more than help.
+    const teeClubRows = getHoleTeeClubBreakdown(activeDrilldownPhysicalId, rounds);
+    const eligibleForBest = teeClubRows.filter((r) => r.count >= 2);
+    const bestClub = eligibleForBest.length >= 2
+      ? eligibleForBest.reduce((best, r) => (r.avgVsPar < best.avgVsPar ? r : best))
+      : null;
+    const teeClubHtml = teeClubRows.length
+      ? `
+        <h4 class="hd-section-title">Tee club on this hole</h4>
+        <ul class="hd-tc-list">
+          ${teeClubRows.map((r) => {
+            const tier = heatmapTier(r.avgVsPar);
+            const isBest = bestClub && r.club === bestClub.club && teeClubRows.length > 1;
+            return `
+              <li class="hd-tc-row${isBest ? " is-best" : ""}">
+                <span class="hd-tc-club">${escapeHtml(r.club)}${isBest ? `<span class="hd-tc-best-flag">best avg</span>` : ""}</span>
+                <span class="hd-tc-count">${r.count} rd${r.count === 1 ? "" : "s"}</span>
+                <span class="hd-tc-avg ${tier}">${r.avgScore.toFixed(1)}<small>${formatDelta(r.avgVsPar)}</small></span>
+              </li>
+            `;
+          }).join("")}
+        </ul>
+      `
+      : "";
+
     const roundsList = data.entries.slice(0, 12).map((e) => {
       const tier = scoreTier(e.score, e.par) || "par";
       const metaParts = [];
@@ -3294,6 +3362,8 @@
 
       <h4 class="hd-section-title">Scoring distribution</h4>
       <div class="hd-distribution">${distChips}</div>
+
+      ${teeClubHtml}
 
       <h4 class="hd-section-title">Recent rounds</h4>
       <ul class="hd-rounds-list">${roundsList}</ul>
@@ -3675,22 +3745,32 @@
       return;
     }
     const total = data.reduce((sum, entry) => sum + entry.count, 0);
+    // Highlight the lowest-avg club, but only when there's a real comparison
+    // (at least 2 clubs with 5+ tee shots each). Tightened threshold vs the
+    // per-hole version because this aggregates across many different holes.
+    const eligibleForBest = data.filter((d) => d.count >= 5);
+    const bestClub = eligibleForBest.length >= 2
+      ? eligibleForBest.reduce((best, d) => (d.avgToPar < best.avgToPar ? d : best))
+      : null;
     const rows = data.map((entry) => {
       const parParts = [];
-      if (entry.par3) parParts.push(`${entry.par3} par 3`);
-      if (entry.par4) parParts.push(`${entry.par4} par 4`);
-      if (entry.par5) parParts.push(`${entry.par5} par 5`);
-      if (entry.par6) parParts.push(`${entry.par6} par 6`);
+      if (entry.par3) parParts.push(`${entry.par3}× par 3`);
+      if (entry.par4) parParts.push(`${entry.par4}× par 4`);
+      if (entry.par5) parParts.push(`${entry.par5}× par 5`);
+      if (entry.par6) parParts.push(`${entry.par6}× par 6`);
       const parBreakdown = parParts.length ? parParts.join(" · ") : "";
+      const tier = heatmapTier(entry.avgToPar);
+      const isBest = bestClub && entry.club === bestClub.club && data.length > 1;
+      const sgText = Number.isFinite(entry.avgSg) ? formatSigned(entry.avgSg, 2) : "—";
       return `
-        <li class="tee-club-row">
+        <li class="tee-club-row${isBest ? " is-best" : ""}">
           <div class="tee-club-row-main">
-            <strong>${escapeHtml(entry.club)}</strong>
+            <strong>${escapeHtml(entry.club)}${isBest ? `<span class="hd-tc-best-flag">best avg</span>` : ""}</strong>
             <span class="subtext">${entry.count} tee shot${entry.count === 1 ? "" : "s"}${parBreakdown ? ` · ${escapeHtml(parBreakdown)}` : ""}</span>
           </div>
           <div class="tee-club-row-stats">
-            <span class="tee-club-stat"><small>Score to par</small><strong>${formatSigned(entry.avgToPar, 2)}</strong></span>
-            <span class="tee-club-stat"><small>Avg SG</small><strong>${Number.isFinite(entry.avgSg) ? formatSigned(entry.avgSg, 2) : "--"}</strong></span>
+            <span class="hd-tc-avg ${tier}" title="Avg score-to-par">${formatSigned(entry.avgToPar, 2)}</span>
+            <span class="tee-club-sg" title="Strokes gained per tee shot">SG ${sgText}</span>
           </div>
         </li>`;
     }).join("");
