@@ -4,10 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Fairway Ledger</title>
-    <link rel="stylesheet" href="./styles.css?v=2026-05-19k">
-    <script src="./data/courses.js?v=2026-05-19k" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-19k" defer></script>
-    <script src="./app.js?v=2026-05-19k" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-19l">
+    <script src="./data/courses.js?v=2026-05-19l" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-19l" defer></script>
+    <script src="./app.js?v=2026-05-19l" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -40,6 +40,7 @@
           <button class="tab-button active" type="button" data-tab-target="home" aria-selected="true">Home</button>
           <button class="tab-button" type="button" data-tab-target="rounds" aria-selected="false">Add Round</button>
           <button class="tab-button" type="button" data-tab-target="courses" aria-selected="false">Courses</button>
+          <button class="tab-button" type="button" data-tab-target="profile" aria-selected="false">Profile</button>
         </nav>
 
         <section class="tab-panel active" data-tab-panel="home">
@@ -406,6 +407,21 @@
             <div id="courseDetail" class="course-detail"></div>
           </article>
           </section>
+        </section>
+
+        <section class="tab-panel" data-tab-panel="profile">
+          <article class="panel wide-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">You</p>
+                <h2>Your Bag</h2>
+              </div>
+              <button type="button" id="bagResetButton" class="ghost-button">Reset to all clubs</button>
+            </div>
+            <p class="profile-bag-hint">Tap clubs to add or remove them from your bag. Only clubs in your bag appear as options when you log a round. Old rounds that used a club you've since removed still keep it.</p>
+            <div id="profileBagGrid" class="profile-bag-grid"></div>
+            <p id="profileBagSummary" class="profile-bag-summary"></p>
+          </article>
         </section>
       </main>
     </div>

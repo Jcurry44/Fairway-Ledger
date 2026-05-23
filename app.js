@@ -99,7 +99,11 @@
     if (editingRoundId || !course || !Array.isArray(course.holes)) return;
     course.holes.forEach((hole) => {
       if (getHoleClubs(hole.number).length > 0) return;
-      setHoleClubs(hole.number, hole.par === 3 ? ["Putter"] : ["Driver", "Putter"]);
+      // Default seed depends on hole type, then is filtered to the bag —
+      // never pre-select a club the user has said they don't carry.
+      const desired = hole.par === 3 ? ["Putter"] : ["Driver", "Putter"];
+      const filtered = desired.filter(isInBag);
+      if (filtered.length) setHoleClubs(hole.number, filtered);
     });
   }
 
@@ -288,7 +292,7 @@
   };
 
   let sampleRounds = [];
-  let state = { courses: [], rounds: [] };
+  let state = { courses: [], rounds: [], profile: { bag: [] } };
 
   const els = {
     metricRounds: document.getElementById("metricRounds"),
@@ -349,6 +353,9 @@
     teeClubPanel: document.getElementById("teeClubPanel"),
     deerwoodByNinePanel: document.getElementById("deerwoodByNinePanel"),
     deerwoodByNineCard: document.getElementById("deerwoodByNineCard"),
+    profileBagGrid: document.getElementById("profileBagGrid"),
+    profileBagSummary: document.getElementById("profileBagSummary"),
+    bagResetButton: document.getElementById("bagResetButton"),
     bucketSheetOverlay: document.getElementById("bucketSheetOverlay"),
     bucketSheetBackdrop: document.getElementById("bucketSheetBackdrop"),
     bucketSheetClose: document.getElementById("bucketSheetClose"),
@@ -532,15 +539,35 @@
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
       if (saved && Array.isArray(saved.courses) && Array.isArray(saved.rounds)) {
-        return ensureCourseDataShape(mergeNewDefaultCourses(saved));
+        return ensureProfileShape(ensureCourseDataShape(mergeNewDefaultCourses(saved)));
       }
     } catch (error) {
       console.warn("Could not load saved golf data", error);
     }
-    return ensureCourseDataShape({
+    return ensureProfileShape(ensureCourseDataShape({
       courses: structuredClone(sampleCourses),
       rounds: structuredClone(sampleRounds)
-    });
+    }));
+  }
+
+  // Profile is new (#56-era) — older saved states won't have it. Default the
+  // bag to every known club so existing behavior is unchanged until the user
+  // trims it on the Profile tab.
+  function ensureProfileShape(stateValue) {
+    if (!stateValue) return stateValue;
+    if (!stateValue.profile || typeof stateValue.profile !== "object") {
+      stateValue.profile = {};
+    }
+    if (!Array.isArray(stateValue.profile.bag) || !stateValue.profile.bag.length) {
+      stateValue.profile.bag = [...CLUB_OPTIONS];
+    } else {
+      // Strip any clubs that aren't part of our known set (defensive against
+      // hand-edited JSON imports).
+      const known = new Set(CLUB_OPTIONS);
+      stateValue.profile.bag = stateValue.profile.bag.filter((club) => known.has(club));
+      if (!stateValue.profile.bag.length) stateValue.profile.bag = [...CLUB_OPTIONS];
+    }
+    return stateValue;
   }
 
   function ensureCourseDataShape(stateValue) {
@@ -1341,7 +1368,10 @@
     // freshly-seeded par 3) suppress the TEE badge until a real tee club
     // joins the list.
     const teeClub = (selected[0] && !(selected[0] === "Putter" && selected.length === 1)) ? selected[0] : null;
-    const pills = CLUB_OPTIONS.map((club) => {
+    // Only render pills for clubs in the user's bag (plus any already
+    // selected on this hole, even if they're no longer in the bag).
+    const available = clubsForHole(hole.number);
+    const pills = available.map((club) => {
       const isActive = selectedSet.has(club);
       const isTee = club === teeClub;
       const cls = `pill pill-club${isActive ? " active" : ""}${isTee ? " pill-club-tee" : ""}`;
@@ -1362,11 +1392,44 @@
     "Putter", "Other"
   ];
 
+  // The user's bag (their selected subset of CLUB_OPTIONS) drives every
+  // club picker in the app. Saved rounds can still reference clubs that
+  // aren't in the current bag — clubsForHole keeps them visible on edit
+  // so no historical data is hidden.
+  function getBag() {
+    const bag = state.profile && Array.isArray(state.profile.bag) ? state.profile.bag : null;
+    if (bag && bag.length) return bag;
+    return [...CLUB_OPTIONS];
+  }
+
+  function isInBag(club) {
+    return getBag().includes(club);
+  }
+
+  // Clubs available to render for a given hole's pickers: the bag, plus any
+  // clubs already saved on this hole (so a hole that used a 60° back when
+  // you carried one still shows the 60° pill, active, ready to toggle off).
+  function clubsForHole(holeNumber) {
+    const bag = getBag();
+    const onHole = getHoleClubs(holeNumber);
+    const penaltyClub = getHolePenaltyClub(holeNumber);
+    const extras = [];
+    onHole.forEach((club) => {
+      if (!bag.includes(club) && !extras.includes(club)) extras.push(club);
+    });
+    if (penaltyClub && !bag.includes(penaltyClub) && !extras.includes(penaltyClub)) {
+      extras.push(penaltyClub);
+    }
+    // Preserve canonical CLUB_OPTIONS order: bag clubs first (in canon order),
+    // then any extras (in canon order).
+    return CLUB_OPTIONS.filter((c) => bag.includes(c) || extras.includes(c));
+  }
+
   // Shown only when a hole has a penalty logged — captures which club caused
   // it. syncPenaltyClubRows() toggles visibility and defaults to the tee club.
   function renderPenaltyClubRow(hole) {
     const current = getHolePenaltyClub(hole.number);
-    const options = CLUB_OPTIONS
+    const options = clubsForHole(hole.number)
       .map((club) => `<option value="${escapeHtml(club)}"${club === current ? " selected" : ""}>${escapeHtml(club)}</option>`)
       .join("");
     return `
@@ -1396,7 +1459,11 @@
       const distanceLabel = isStart
         ? `<span class="card-shot-distance start">Start</span>`
         : `<span class="card-shot-distance">${shot.distanceYards} yds</span>`;
-      const clubOptions = CLUB_OPTIONS.map((club) => `<option value="${escapeHtml(club)}"${club === shot.club ? " selected" : ""}>${escapeHtml(club)}</option>`).join("");
+      // Show bag clubs + the club that was already chosen for this shot (if
+      // it's no longer in the bag) so existing data stays editable.
+      const bag = getBag();
+      const shotClubs = CLUB_OPTIONS.filter((c) => bag.includes(c) || c === shot.club);
+      const clubOptions = shotClubs.map((club) => `<option value="${escapeHtml(club)}"${club === shot.club ? " selected" : ""}>${escapeHtml(club)}</option>`).join("");
       const clubPicker = isStart
         ? `<span class="card-shot-club-static">Tee position</span>`
         : `<select class="card-shot-club" data-shot-club="${holeNumber}" data-shot-index="${index}" aria-label="Club for shot ${index}"><option value="">Club…</option>${clubOptions}</select>`;
@@ -1764,10 +1831,15 @@
       if (!show) return;
       const select = row.querySelector(".penalty-club-input");
       if (select && !select.value && !getHolePenaltyClub(hole)) {
-        const teeClub = getHoleClubs(hole)[0] || "Driver";
-        if ([...select.options].some((option) => option.value === teeClub)) {
-          select.value = teeClub;
-          setHolePenaltyClub(hole, teeClub);
+        // Default to the hole's tee club; fall back to Driver, or the first
+        // non-Putter club in the bag if Driver isn't carried.
+        const bag = getBag();
+        const tee = getHoleClubs(hole)[0];
+        const fallback = bag.includes("Driver") ? "Driver" : (bag.find((c) => c !== "Putter") || "");
+        const guess = tee || fallback;
+        if (guess && [...select.options].some((option) => option.value === guess)) {
+          select.value = guess;
+          setHolePenaltyClub(hole, guess);
         }
       }
     });
@@ -1791,7 +1863,7 @@
     if (girInput) {
       girInput.checked = derivedGir(score, putts, par);
     }
-    if (Number.isFinite(putts) && putts > 0 && !getHoleClubs(hole).includes("Putter")) {
+    if (Number.isFinite(putts) && putts > 0 && isInBag("Putter") && !getHoleClubs(hole).includes("Putter")) {
       setHoleClubs(hole, [...getHoleClubs(hole), "Putter"]);
       const row = els.scorecardGrid.querySelector(`.card-clubs-row[data-hole="${hole}"]`);
       if (row) row.outerHTML = renderClubsHitPills({ number: hole });
@@ -3500,6 +3572,65 @@
     });
   }
 
+  // Profile tab — bag editor. Each known club is a toggleable pill; the
+  // active set is state.profile.bag. Other surfaces (in-round pickers,
+  // seeded defaults) consult getBag()/clubsForHole() so changes here
+  // propagate without their own state.
+  function renderProfileBag() {
+    if (!els.profileBagGrid) return;
+    const bag = new Set(getBag());
+    els.profileBagGrid.innerHTML = CLUB_OPTIONS.map((club) => {
+      const active = bag.has(club);
+      return `<button type="button" class="pill pill-club${active ? " active" : ""}" data-bag-toggle="${escapeHtml(club)}" aria-pressed="${active}">${escapeHtml(club)}</button>`;
+    }).join("");
+    if (els.profileBagSummary) {
+      els.profileBagSummary.textContent = `${bag.size} of ${CLUB_OPTIONS.length} clubs in your bag.`;
+    }
+  }
+
+  // Re-render every club picker that's currently in the DOM so a bag change
+  // is reflected immediately if the user is mid-round.
+  function refreshBagDependentUi() {
+    if (!els.scorecardGrid) return;
+    els.scorecardGrid.querySelectorAll(".card-clubs-row[data-hole]").forEach((row) => {
+      const holeNumber = Number(row.dataset.hole);
+      row.outerHTML = renderClubsHitPills({ number: holeNumber });
+    });
+    els.scorecardGrid.querySelectorAll(".card-penalty-club-row[data-hole]").forEach((row) => {
+      const holeNumber = Number(row.dataset.hole);
+      row.outerHTML = renderPenaltyClubRow({ number: holeNumber });
+    });
+    syncPenaltyClubRows();
+  }
+
+  function toggleClubInBag(club) {
+    if (!CLUB_OPTIONS.includes(club)) return;
+    const bag = getBag().slice();
+    const idx = bag.indexOf(club);
+    if (idx >= 0) {
+      // Refuse to remove the last club — empty bag has no useful behaviour.
+      if (bag.length <= 1) {
+        showToast("Your bag needs at least one club.");
+        return;
+      }
+      bag.splice(idx, 1);
+    } else {
+      bag.push(club);
+    }
+    state.profile.bag = bag;
+    saveState();
+    renderProfileBag();
+    refreshBagDependentUi();
+  }
+
+  function resetBagToAll() {
+    state.profile.bag = [...CLUB_OPTIONS];
+    saveState();
+    renderProfileBag();
+    refreshBagDependentUi();
+    showToast("Bag reset to all clubs.");
+  }
+
   function renderCourseList() {
     // Sort so courses you've actually played show first, but every course is
     // visible (including Deerwood layouts you haven't logged a round on) so
@@ -3922,6 +4053,7 @@
     renderRecentRounds();
     updateBackupBadge();
     renderCourseList();
+    renderProfileBag();
     renderSpotlight();
   }
 
@@ -4371,6 +4503,20 @@
       const reopened = els.courseDetail.querySelector(`.course-hole-block[data-hole-number="${holeNumber}"]`);
       if (reopened) reopened.open = true;
       showToast("Hazard removed.");
+    });
+  }
+
+  if (els.profileBagGrid) {
+    els.profileBagGrid.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-bag-toggle]");
+      if (!button) return;
+      toggleClubInBag(button.dataset.bagToggle);
+    });
+  }
+  if (els.bagResetButton) {
+    els.bagResetButton.addEventListener("click", () => {
+      if (!window.confirm("Reset your bag to include every club?")) return;
+      resetBagToAll();
     });
   }
 
