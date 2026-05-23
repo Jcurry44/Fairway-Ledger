@@ -11,10 +11,10 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Fairway Ledger</title>
-    <link rel="stylesheet" href="./styles.css?v=2026-05-19r">
-    <script src="./data/courses.js?v=2026-05-19r" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-19r" defer></script>
-    <script src="./app.js?v=2026-05-19r" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-19s">
+    <script src="./data/courses.js?v=2026-05-19s" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-19s" defer></script>
+    <script src="./app.js?v=2026-05-19s" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -434,6 +434,15 @@
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <!--
+      Floating mid-screen nav tabs for the Add Round card view. They're
+      shown only when (a) the Add Round tab is active, (b) card view is on,
+      (c) at least one card is rendered, and (d) the review section is
+      closed. Toggled by JS via body.floating-card-nav-visible.
+    -->
+    <button id="floatingNavPrev" class="floating-card-nav floating-card-nav-prev" type="button" aria-label="Previous hole">‹</button>
+    <button id="floatingNavNext" class="floating-card-nav floating-card-nav-next" type="button" aria-label="Next hole">›</button>
 
     <div id="bucketSheetOverlay" class="hole-picker-overlay" hidden>
       <button id="bucketSheetBackdrop" class="hole-picker-backdrop" type="button" aria-label="Close"></button>

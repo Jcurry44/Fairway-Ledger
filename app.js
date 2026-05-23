@@ -362,6 +362,8 @@
     filtersSheetBackdrop: document.getElementById("filtersSheetBackdrop"),
     filtersSheetClose: document.getElementById("filtersSheetClose"),
     filtersResetButton: document.getElementById("filtersResetButton"),
+    floatingNavPrev: document.getElementById("floatingNavPrev"),
+    floatingNavNext: document.getElementById("floatingNavNext"),
     bucketSheetOverlay: document.getElementById("bucketSheetOverlay"),
     bucketSheetBackdrop: document.getElementById("bucketSheetBackdrop"),
     bucketSheetClose: document.getElementById("bucketSheetClose"),
@@ -1173,6 +1175,7 @@
     // Initial GIR auto-derive + Putter auto-add for whatever values just landed.
     syncAllDerivedFlags();
     refreshReviewVisibility();
+    updateFloatingNavVisibility();
   }
 
   function refreshReviewVisibility() {
@@ -1198,6 +1201,7 @@
     requestAnimationFrame(() => {
       els.reviewSection.scrollIntoView({ block: "start", behavior: "smooth" });
     });
+    updateFloatingNavVisibility();
   }
 
   function closeReviewSection() {
@@ -1213,6 +1217,7 @@
         });
       }
     }
+    updateFloatingNavVisibility();
   }
 
   function resetReviewState() {
@@ -1691,6 +1696,25 @@
     scoreInput.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
+  // Are the floating mid-screen prev/next tabs eligible to show right now?
+  // Visible only on Add Round, in card view, with cards rendered and the
+  // review section closed. Called from anywhere those conditions change.
+  function updateFloatingNavVisibility() {
+    if (!els.floatingNavPrev || !els.floatingNavNext) return;
+    const onRoundsTab = !!document.querySelector('.tab-panel[data-tab-panel="rounds"].active');
+    const inCardMode = viewMode === "card";
+    const hasCards = !!(els.scorecardGrid && els.scorecardGrid.querySelector(".scorecard-card"));
+    const reviewOpen = !!(els.reviewSection && !els.reviewSection.hidden);
+    const visible = onRoundsTab && inCardMode && hasCards && !reviewOpen;
+    document.body.classList.toggle("floating-card-nav-visible", visible);
+    if (visible) {
+      const activeIndex = getActiveCardIndex();
+      const last = getCardCount() - 1;
+      els.floatingNavPrev.disabled = activeIndex <= 0;
+      els.floatingNavNext.disabled = activeIndex >= last;
+    }
+  }
+
   function setActiveCardIndex(index) {
     const stack = els.scorecardGrid.querySelector(".scorecard-cards");
     if (!stack) return;
@@ -1716,6 +1740,8 @@
       scoreInput.focus({ preventScroll: true });
       scoreInput.select();
     }
+    // Refresh the floating-nav arrow disabled-at-ends state.
+    updateFloatingNavVisibility();
   }
 
   function getCardCount() {
@@ -4380,6 +4406,7 @@
       }
     });
     localStorage.setItem(ACTIVE_TAB_KEY, targetName);
+    updateFloatingNavVisibility();
   }
 
   function refreshRoundSetup() {
@@ -4791,6 +4818,12 @@
       setActiveHomeSection(chip.dataset.homeSectionTarget);
     });
   });
+  if (els.floatingNavPrev) {
+    els.floatingNavPrev.addEventListener("click", () => setActiveCardIndex(getActiveCardIndex() - 1));
+  }
+  if (els.floatingNavNext) {
+    els.floatingNavNext.addEventListener("click", () => setActiveCardIndex(getActiveCardIndex() + 1));
+  }
   if (els.homeFiltersButton) els.homeFiltersButton.addEventListener("click", openFiltersSheet);
   if (els.filtersSheetBackdrop) els.filtersSheetBackdrop.addEventListener("click", closeFiltersSheet);
   if (els.filtersSheetClose) els.filtersSheetClose.addEventListener("click", closeFiltersSheet);
