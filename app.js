@@ -3729,7 +3729,7 @@
     "recent-rounds": "trends",
     "handicap-calculator": "trends",
     "strokes-gained": "trends",
-    "scoring-distribution": "trends",
+    "scoring-distribution": "holes",
     "spotlight": "holes",
     "best-holes": "holes",
     "worst-holes": "holes",
@@ -3747,7 +3747,7 @@
   // Scorecards form a single combined view).
   const SUBSECTION_DEFAULTS = {
     trends: "recent-rounds",
-    holes: "par-3-4-5",
+    holes: "scoring-distribution",
     clubs: "tee-club-performance"
   };
 
