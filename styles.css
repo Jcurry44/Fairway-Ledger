@@ -1207,7 +1207,7 @@ select[data-use-chips] {
 
 .scorecard-card {
   display: none;
-  padding: 18px;
+  padding: 14px;
   border: 1px solid #d6e2d9;
   border-radius: 12px;
   background: #fff;
@@ -1219,7 +1219,7 @@ select[data-use-chips] {
 .scorecard-card.active {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
 }
 
 .card-top {
@@ -1358,8 +1358,8 @@ body.floating-card-nav-visible .floating-card-nav {
 .card-extra {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  margin-top: 4px;
+  gap: 6px;
+  margin-top: 2px;
 }
 
 .card-headline {
@@ -1497,8 +1497,8 @@ body.floating-card-nav-visible .floating-card-nav {
 .card-note-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  font-size: 0.78rem;
+  gap: 4px;
+  font-size: 0.7rem;
   font-weight: 800;
   text-transform: uppercase;
   color: var(--muted);
@@ -1507,16 +1507,16 @@ body.floating-card-nav-visible .floating-card-nav {
 
 .card-note-input {
   width: 100%;
-  min-height: 64px;
-  padding: 12px 13px;
+  min-height: 52px;
+  padding: 8px 10px;
   border: 1px solid var(--line, #d6e2d9);
-  border-radius: 10px;
+  border-radius: 8px;
   background: #fbfdfa;
   color: var(--ink);
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   font-weight: 500;
   font-family: inherit;
-  line-height: 1.5;
+  line-height: 1.4;
   letter-spacing: normal;
   text-transform: none;
   resize: vertical;
@@ -1539,8 +1539,8 @@ body.floating-card-nav-visible .floating-card-nav {
 .card-shots {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding-top: 12px;
+  gap: 8px;
+  padding-top: 8px;
   border-top: 1px dashed #dde6da;
 }
 
@@ -1703,19 +1703,19 @@ body.floating-card-nav-visible .floating-card-nav {
 .card-penalty-club-row {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 0;
+  gap: 4px;
+  padding: 6px 0;
   border-top: 1px solid #edf1eb;
 }
 
 .card-penalty-club-row .penalty-club-input {
-  min-height: 44px;
-  padding: 8px 12px;
-  border-radius: 10px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 8px;
   border: 1.5px solid var(--line, #d6e2d9);
   background: #fff;
   color: var(--ink);
-  font-size: 0.95rem;
+  font-size: 0.88rem;
   font-weight: 700;
 }
 
@@ -1725,7 +1725,7 @@ body.floating-card-nav-visible .floating-card-nav {
 }
 
 .card-pill-label {
-  font-size: 0.78rem;
+  font-size: 0.7rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1735,7 +1735,7 @@ body.floating-card-nav-visible .floating-card-nav {
 .card-pill-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
 }
 
@@ -1749,14 +1749,14 @@ body.floating-card-nav-visible .floating-card-nav {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
-  min-width: 48px;
-  padding: 6px 14px;
+  min-height: 36px;
+  min-width: 40px;
+  padding: 4px 12px;
   border: 1.5px solid var(--line, #d6e2d9);
   border-radius: 999px;
   background: #ffffff;
   color: var(--ink);
-  font-size: 0.95rem;
+  font-size: 0.88rem;
   font-weight: 800;
   cursor: pointer;
   transition: background 100ms ease, border-color 100ms ease, color 100ms ease, transform 80ms ease;
@@ -1867,13 +1867,13 @@ body.floating-card-nav-visible .floating-card-nav {
 }
 
 .card-pill-custom {
-  width: 64px;
-  min-height: 44px;
-  padding: 6px 10px;
+  width: 52px;
+  min-height: 36px;
+  padding: 4px 8px;
   border: 1.5px dashed #cfd9d2;
-  border-radius: 12px;
+  border-radius: 10px;
   text-align: center;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 700;
   background: #fbfdfa;
   color: var(--ink);
@@ -1905,8 +1905,8 @@ body.floating-card-nav-visible .floating-card-nav {
 .card-clubs-row {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 0;
+  gap: 4px;
+  padding: 6px 0;
   border-top: 1px solid #edf1eb;
 }
 
@@ -1917,10 +1917,10 @@ body.floating-card-nav-visible .floating-card-nav {
 }
 
 .pill-club {
-  min-height: 36px;
+  min-height: 32px;
   min-width: 0;
-  padding: 4px 12px;
-  font-size: 0.82rem;
+  padding: 3px 10px;
+  font-size: 0.78rem;
   font-weight: 700;
 }
 

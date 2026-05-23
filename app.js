@@ -1788,13 +1788,10 @@
   }
 
   function renderFairwayPills(hole) {
-    if (hole.par === 3) {
-      return `
-        <div class="card-pill-row" data-pill-group="fairway-input" data-hole="${hole.number}">
-          <span class="card-pill-label">Fairway</span>
-          <span class="card-pill-na">N/A (par 3)</span>
-        </div>`;
-    }
+    // No fairway exists on a par 3 — skip the row entirely instead of
+    // rendering "N/A (par 3)" filler. Keeps the card tighter without
+    // hiding any actually-captured data.
+    if (hole.par === 3) return "";
     const options = [
       { value: "hit", label: "Hit" },
       { value: "left", label: "Left" },
