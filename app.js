@@ -394,6 +394,7 @@
     scoringDistribution: document.getElementById("scoringDistribution"),
     heatmapCourseChips: document.getElementById("heatmapCourseChips"),
     heatmapNineChips: document.getElementById("heatmapNineChips"),
+    heatmapSummary: document.getElementById("heatmapSummary"),
     heatmapGrid: document.getElementById("heatmapGrid"),
     heatmapLegend: document.getElementById("heatmapLegend"),
     heatmapNote: document.getElementById("heatmapNote"),
@@ -2831,6 +2832,70 @@
     return { cells, roundsCount: cells.reduce((s, g) => s + g.rounds, 0) };
   }
 
+  // Round-level summary across the scope — average gross score for that
+  // nine (or full course), avg vs par, best, rounds count. Only counts
+  // rounds where the full slice was played (e.g. for Deerwood:Buck only
+  // rounds with all 9 Buck holes scored), otherwise the average would
+  // mix partial and full nines and become misleading.
+  function getHeatmapSummary(scope, rounds) {
+    if (!scope) return null;
+    const deerwood = isDeerwoodCourseId(scope.courseId);
+    const matchesScope = (round, hole) => {
+      const id = physicalHoleId(round.courseId, hole);
+      if (deerwood && scope.nine) return id.startsWith(`deerwood:${scope.nine}:`);
+      return id.startsWith(`course:${scope.courseId}:`);
+    };
+    // Expected hole-slice size to qualify as a "complete" round for the scope.
+    // Non-Deerwood: take whatever the course's hole count is from any round.
+    // Deerwood:nine: 9.
+    const expectedSize = deerwood && scope.nine ? 9 : null;
+
+    const entries = [];
+    rounds.forEach((round) => {
+      if (!Array.isArray(round.holes)) return;
+      const inScope = round.holes.filter((h) =>
+        matchesScope(round, h) && Number.isFinite(h.score) && h.score > 0
+      );
+      if (!inScope.length) return;
+      // For Deerwood nines: only count full-nine rounds so the gross average
+      // is apples-to-apples. For non-Deerwood: assume the whole round was at
+      // that course (which is always true today).
+      if (expectedSize !== null && inScope.length !== expectedSize) return;
+      const gross = inScope.reduce((s, h) => s + h.score, 0);
+      const par = inScope.reduce((s, h) => s + h.par, 0);
+      entries.push({ date: round.date, gross, par });
+    });
+    if (!entries.length) return null;
+    const avgGross = average(entries.map((e) => e.gross));
+    const avgPar = average(entries.map((e) => e.par));
+    const best = entries.reduce((b, e) => (e.gross < b.gross ? e : b), entries[0]);
+    return {
+      avgGross,
+      avgPar,
+      avgVsPar: avgGross - avgPar,
+      rounds: entries.length,
+      best: best.gross,
+      bestDate: best.date,
+    };
+  }
+
+  function heatmapVsParClass(v) {
+    if (!Number.isFinite(v)) return "even";
+    if (v <= -0.5) return "under";
+    if (v < 0.5) return "even";
+    if (v < 4) return "over";
+    return "way-over";
+  }
+
+  function scopeLabel(scope) {
+    if (!scope) return "";
+    if (isDeerwoodCourseId(scope.courseId) && scope.nine) {
+      return `${scope.nine.charAt(0).toUpperCase() + scope.nine.slice(1)} Nine`;
+    }
+    const course = getCourse(scope.courseId);
+    return course ? course.name : scope.courseId;
+  }
+
   // Map avg-vs-par to a CSS tier class. Thresholds chosen so a hole you
   // typically birdie reads green, a typical par reads neutral, and the deep
   // red is reserved for holes that consistently destroy you (avg double+).
@@ -2870,6 +2935,7 @@
 
     if (!scope) {
       els.heatmapGrid.innerHTML = `<div class="heatmap-empty-message">Add a round to see your heatmap.</div>`;
+      if (els.heatmapSummary) els.heatmapSummary.innerHTML = "";
       if (els.heatmapLegend) els.heatmapLegend.innerHTML = "";
       if (els.heatmapNote) els.heatmapNote.textContent = "average vs par per hole";
       return;
@@ -2878,9 +2944,12 @@
     const { cells } = getHeatmapData(scope, rounds);
     if (!cells.length) {
       els.heatmapGrid.innerHTML = `<div class="heatmap-empty-message">No rounds for this view yet.</div>`;
+      if (els.heatmapSummary) els.heatmapSummary.innerHTML = "";
       if (els.heatmapLegend) els.heatmapLegend.innerHTML = "";
       return;
     }
+
+    renderHeatmapSummary(scope, rounds);
 
     els.heatmapGrid.innerHTML = cells.map((cell) => {
       const tier = heatmapTier(cell.avgToPar);
@@ -2976,6 +3045,37 @@
         ${nine.charAt(0).toUpperCase() + nine.slice(1)}
       </button>
     `).join("");
+  }
+
+  // The summary band above the grid — headline numbers for the active scope.
+  // Always renders something when we have at least one qualifying round;
+  // hides itself silently when there's nothing to summarize.
+  function renderHeatmapSummary(scope, rounds) {
+    if (!els.heatmapSummary) return;
+    const summary = getHeatmapSummary(scope, rounds);
+    if (!summary) {
+      els.heatmapSummary.innerHTML = "";
+      return;
+    }
+    const vsParClass = heatmapVsParClass(summary.avgVsPar);
+    const vsParText = formatDelta(summary.avgVsPar);
+    const label = scopeLabel(scope);
+    // par tends to be a constant for a given nine (36 for Buck, 72 for an
+    // 18-hole non-Deerwood course). Round to int for display since fractional
+    // par would only happen if the user changed course par mid-history.
+    const parDisplay = Math.round(summary.avgPar);
+    els.heatmapSummary.innerHTML = `
+      <div class="heatmap-summary-label">${escapeHtml(label)}</div>
+      <div class="heatmap-summary-main">
+        <span class="heatmap-summary-gross">${summary.avgGross.toFixed(1)}<span class="heatmap-summary-gross-unit">avg</span></span>
+        <span class="heatmap-summary-vspar ${vsParClass}">${vsParText} vs par</span>
+      </div>
+      <div class="heatmap-summary-meta">
+        <span>Par <strong>${parDisplay}</strong></span>
+        <span><strong>${summary.rounds}</strong> round${summary.rounds === 1 ? "" : "s"}</span>
+        <span>Best <strong>${summary.best}</strong>${summary.bestDate ? ` (${escapeHtml(summary.bestDate)})` : ""}</span>
+      </div>
+    `;
   }
 
   function persistHeatmapScope() {

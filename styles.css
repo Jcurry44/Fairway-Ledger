@@ -2491,6 +2491,79 @@ body.floating-card-nav-visible .floating-card-nav {
   border-color: var(--green-dark);
 }
 
+/* Summary band above the grid — gives the heatmap a headline number
+   (avg gross + vs-par) so it works as both an overview AND a per-hole
+   exploration. Sits between the chips and the grid. */
+.heatmap-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 18px;
+  padding: 12px 14px;
+  margin: 0 0 12px;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.heatmap-summary-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: auto;
+}
+
+.heatmap-summary-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.heatmap-summary-gross {
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.heatmap-summary-gross-unit {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-left: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.heatmap-summary-vspar {
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.heatmap-summary-vspar.under { color: var(--green); }
+.heatmap-summary-vspar.over  { color: var(--gold); }
+.heatmap-summary-vspar.way-over { color: var(--red); }
+.heatmap-summary-vspar.even { color: var(--muted); }
+
+.heatmap-summary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  width: 100%;
+  margin-top: 4px;
+}
+
+.heatmap-summary-meta strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
 .heatmap-grid {
   display: grid;
   grid-template-columns: repeat(9, 1fr);
