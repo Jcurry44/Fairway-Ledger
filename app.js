@@ -3747,7 +3747,7 @@
   // Scorecards form a single combined view).
   const SUBSECTION_DEFAULTS = {
     trends: "recent-rounds",
-    holes: "spotlight",
+    holes: "par-3-4-5",
     clubs: "tee-club-performance"
   };
 
