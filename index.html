@@ -11,10 +11,26 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Fairway Ledger</title>
-    <link rel="stylesheet" href="./styles.css?v=2026-05-19x">
-    <script src="./data/courses.js?v=2026-05-19x" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-19x" defer></script>
-    <script src="./app.js?v=2026-05-19x" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-23a">
+    <script src="./data/courses.js?v=2026-05-23a" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-23a" defer></script>
+    <script src="./app.js?v=2026-05-23a" defer></script>
+    <script>
+      // Register the service worker after the page settles. SW takes over on
+      // the *next* visit (skipWaiting + clients.claim inside the SW make it
+      // a bit faster, but we still don't want to block first paint here).
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker
+            .register('./sw.js')
+            .catch((err) => {
+              // Non-fatal — the app works fine without offline support.
+              // Surface it in the console so a real failure isn't silent.
+              console.warn('Service worker registration failed:', err);
+            });
+        });
+      }
+    </script>
   </head>
   <body>
     <div class="app-shell">
