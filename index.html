@@ -3,6 +3,13 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Hint browsers not to aggressively cache index.html, so a deploy
+         doesn't get masked by an old HTML referencing old ?v= bundles.
+         Advisory only — GitHub Pages still serves with its own headers —
+         but most mobile browsers respect these meta directives. -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Fairway Ledger</title>
     <link rel="stylesheet" href="./styles.css?v=2026-05-19p">
     <script src="./data/courses.js?v=2026-05-19p" defer></script>
