@@ -4,10 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Fairway Ledger</title>
-    <link rel="stylesheet" href="./styles.css?v=2026-05-19o">
-    <script src="./data/courses.js?v=2026-05-19o" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-19o" defer></script>
-    <script src="./app.js?v=2026-05-19o" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-19p">
+    <script src="./data/courses.js?v=2026-05-19p" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-19p" defer></script>
+    <script src="./app.js?v=2026-05-19p" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -44,22 +44,12 @@
         </nav>
 
         <section class="tab-panel active" data-tab-panel="home" data-active-section="overview">
-          <section class="home-hero" aria-label="Dashboard summary">
-            <div>
-              <p class="eyebrow">Player dashboard</p>
-              <h2>Scoring, course form, and handicap pulse</h2>
-            </div>
-            <button class="primary-button tab-shortcut" type="button" data-tab-target="rounds">Add round</button>
-          </section>
-
           <nav class="home-chips" aria-label="Home sections">
             <button class="home-chip active" type="button" data-home-section-target="overview">Overview</button>
             <button class="home-chip" type="button" data-home-section-target="trends">Trends</button>
             <button class="home-chip" type="button" data-home-section-target="holes">Holes</button>
             <button class="home-chip" type="button" data-home-section-target="clubs">Clubs</button>
           </nav>
-
-          <section class="latest-narrative" id="latestNarrative" data-home-section="overview" hidden aria-label="Latest round summary"></section>
 
           <section class="metrics-grid" data-home-section="overview" aria-label="Score summary">
             <article class="metric-card">
