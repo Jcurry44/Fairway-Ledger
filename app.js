@@ -675,6 +675,10 @@
   // it — so just opening Add Round and looking around never writes a draft
   // or triggers a spurious "resume round in progress?" prompt next time.
   let roundTouched = false;
+  // Per-session sticky state for the card's "More on this hole" collapse —
+  // open it once and subsequent holes start open too. Resets on every new
+  // round (resetRoundChrome). Edit mode always opens it regardless.
+  let cardMoreSticky = false;
 
   function captureInProgressRound() {
     const snapshot = captureScorecardSnapshot();
@@ -1159,6 +1163,7 @@
     updateRoundPreview();
     if (viewMode === "card") syncAllPillActiveStates();
     if (viewMode === "card") prefillActiveCardPar();
+    if (viewMode === "card") applyCardMoreToActive();
     // Initial GIR auto-derive + Putter auto-add for whatever values just landed.
     syncAllDerivedFlags();
     refreshReviewVisibility();
@@ -1603,16 +1608,22 @@
           </div>
           ${renderScorePills(hole)}
           ${renderPuttsPills(hole)}
-          ${renderFirstPuttPills(hole)}
-          ${renderFairwayPills(hole)}
-          ${renderPenPills(hole)}
-          ${renderPenaltyClubRow(hole)}
-          ${renderClubsHitPills(hole)}
-          <label class="card-note-field">
-            <span>What happened on this hole?</span>
-            <textarea class="card-note-input" data-hole="${hole.number}" rows="2" placeholder="Drove left, chipped twice, 2-putt from 12ft… (tap the mic on your keyboard for voice)">${escapeHtml(getHoleNote(hole.number))}</textarea>
-          </label>
-          <div class="card-shots" data-hole="${hole.number}">${renderShotsBlock(hole.number)}</div>
+          <button type="button" class="card-more-toggle" data-toggle-more aria-expanded="false">
+            <span class="card-more-toggle-text">More on this hole</span>
+            <span class="card-more-toggle-caret" aria-hidden="true">▾</span>
+          </button>
+          <div class="card-more" hidden>
+            ${renderFirstPuttPills(hole)}
+            ${renderFairwayPills(hole)}
+            ${renderPenPills(hole)}
+            ${renderPenaltyClubRow(hole)}
+            ${renderClubsHitPills(hole)}
+            <label class="card-note-field">
+              <span>What happened on this hole?</span>
+              <textarea class="card-note-input" data-hole="${hole.number}" rows="2" placeholder="Drove left, chipped twice, 2-putt from 12ft… (tap the mic on your keyboard for voice)">${escapeHtml(getHoleNote(hole.number))}</textarea>
+            </label>
+            <div class="card-shots" data-hole="${hole.number}">${renderShotsBlock(hole.number)}</div>
+          </div>
         </article>`;
     }).join("");
 
@@ -1633,6 +1644,34 @@
   // Holes you never navigate to stay genuinely empty, so the completion
   // check still catches skipped holes. Disabled in edit mode, where exact
   // fidelity to the saved round matters.
+  // Open/close the "More on this hole" collapse on a card. The Score and
+  // Putts rows are always visible; everything else (1st putt, fairway, pen,
+  // clubs hit, note, shot tracker) lives inside the .card-more block.
+  function setCardMore(card, open) {
+    if (!card) return;
+    const moreDiv = card.querySelector(".card-more");
+    const toggleBtn = card.querySelector(".card-more-toggle");
+    if (moreDiv) moreDiv.hidden = !open;
+    if (toggleBtn) {
+      toggleBtn.setAttribute("aria-expanded", String(open));
+      toggleBtn.classList.toggle("is-open", open);
+      const text = toggleBtn.querySelector(".card-more-toggle-text");
+      const caret = toggleBtn.querySelector(".card-more-toggle-caret");
+      if (text) text.textContent = open ? "Hide details" : "More on this hole";
+      if (caret) caret.textContent = open ? "▴" : "▾";
+    }
+  }
+
+  function applyCardMoreToActive() {
+    if (viewMode !== "card") return;
+    const card = els.scorecardGrid.querySelector(".scorecard-card.active");
+    if (!card) return;
+    // Edit mode reveals everything for review; a fresh round starts closed
+    // unless the user has stickied it open on an earlier hole this session.
+    const open = !!editingRoundId || cardMoreSticky;
+    setCardMore(card, open);
+  }
+
   function prefillActiveCardPar() {
     if (editingRoundId || viewMode !== "card") return;
     const activeCard = els.scorecardGrid.querySelector(".scorecard-card.active");
@@ -1659,6 +1698,8 @@
     if (!activeCard) return;
     // Pre-select par on the hole we just landed on.
     prefillActiveCardPar();
+    // Apply the user's "More on this hole" preference to the new card.
+    applyCardMoreToActive();
     // Scroll the card to the top so the Score row is right where the user
     // needs it — no hunting after tapping the forward arrow.
     requestAnimationFrame(() => {
@@ -1700,6 +1741,16 @@
       if (positionButton) {
         event.preventDefault();
         openHolePicker();
+        return;
+      }
+      const moreToggle = event.target.closest("[data-toggle-more]");
+      if (moreToggle) {
+        event.preventDefault();
+        const card = moreToggle.closest(".scorecard-card");
+        const moreDiv = card ? card.querySelector(".card-more") : null;
+        const nextOpen = moreDiv ? moreDiv.hidden : true; // open if currently hidden
+        cardMoreSticky = nextOpen;
+        setCardMore(card, nextOpen);
         return;
       }
       const pill = event.target.closest(".pill[data-pill-value]");
@@ -2159,6 +2210,8 @@
     roundChromeAutoCollapsed = false;
     // A fresh round hasn't been touched yet — pre-filled defaults don't count.
     roundTouched = false;
+    // Per-hole "More" collapse goes back to closed for a new round.
+    cardMoreSticky = false;
     renderRoundSetupChrome();
   }
 
