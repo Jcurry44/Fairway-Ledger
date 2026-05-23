@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Fairway Ledger">
+  <title>Fairway Ledger</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1f7a59"/>
+      <stop offset="100%" stop-color="#143f2e"/>
+    </linearGradient>
+    <linearGradient id="flag" x1="0" y1="0" x2="1" y2="0.6">
+      <stop offset="0%" stop-color="#d99a3a"/>
+      <stop offset="100%" stop-color="#b07419"/>
+    </linearGradient>
+  </defs>
+
+  <!-- iOS-style rounded square background (radius ~22% per Apple HIG) -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- Flag pole -->
+  <rect x="174" y="116" width="10" height="286" fill="#fbfaf3" rx="3"/>
+
+  <!-- Flag — triangular, waving to the right -->
+  <path d="M184 124 L360 168 L184 212 Z" fill="url(#flag)"/>
+
+  <!-- Ground line (subtle, suggests the green) -->
+  <line x1="120" y1="408" x2="392" y2="408" stroke="#fbfaf3" stroke-width="4" stroke-linecap="round" opacity="0.55"/>
+
+  <!-- Golf ball -->
+  <circle cx="284" cy="392" r="18" fill="#fbfaf3"/>
+  <!-- subtle inner shadow for depth -->
+  <circle cx="280" cy="389" r="6" fill="#ffffff" opacity="0.6"/>
+</svg>

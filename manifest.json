@@ -1,0 +1,19 @@
+{
+  "name": "Fairway Ledger",
+  "short_name": "Fairway",
+  "description": "Personal golf analytics tracker. Local-only, no ads, no cloud.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#eef1ec",
+  "theme_color": "#1f7a59",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

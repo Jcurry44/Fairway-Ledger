@@ -11,11 +11,32 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Fairway Ledger</title>
-    <link rel="stylesheet" href="./styles.css?v=2026-05-23f">
-    <script src="./data/courses.js?v=2026-05-23f" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-23f" defer></script>
-    <script src="./lib/shapes.js?v=2026-05-23f" defer></script>
-    <script src="./app.js?v=2026-05-23f" defer></script>
+
+    <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
+         icon, theme color in the browser chrome, and a standalone display
+         mode instead of a tab. -->
+    <link rel="manifest" href="./manifest.json?v=2026-05-23g">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-05-23g">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-05-23g">
+    <meta name="theme-color" content="#1f7a59">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Fairway">
+
+    <!-- Inter via Google Fonts. The CSS already names Inter as the first
+         font in the stack; without this <link> it silently fell back to
+         the system sans. With it, the app looks consistently designed
+         across iOS / Android / desktop. Falls back gracefully offline
+         because the system fonts are still in the CSS chain. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+
+    <link rel="stylesheet" href="./styles.css?v=2026-05-23g">
+    <script src="./data/courses.js?v=2026-05-23g" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-23g" defer></script>
+    <script src="./lib/shapes.js?v=2026-05-23g" defer></script>
+    <script src="./app.js?v=2026-05-23g" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -38,7 +59,12 @@
       <header class="app-header">
         <div class="brand">
           <div class="brand-mark" aria-hidden="true">
-            <span></span>
+            <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+              <rect x="174" y="116" width="10" height="286" fill="#fbfaf3" rx="3"/>
+              <path d="M184 124 L360 168 L184 212 Z" fill="#d99a3a"/>
+              <line x1="120" y1="408" x2="392" y2="408" stroke="#fbfaf3" stroke-width="4" stroke-linecap="round" opacity="0.55"/>
+              <circle cx="284" cy="392" r="18" fill="#fbfaf3"/>
+            </svg>
           </div>
           <div>
             <p class="eyebrow">Personal golf analytics</p>
@@ -96,6 +122,15 @@
             <button class="home-subchip" type="button" data-home-subsection-target="tee-club-performance">Tee shots</button>
             <button class="home-subchip" type="button" data-home-subsection-target="putting-by-distance">Putting</button>
           </nav>
+
+          <section id="welcomeCallout" class="welcome-callout" data-home-section="overview" hidden>
+            <h2>Welcome to Fairway Ledger</h2>
+            <p>Track your rounds, see your patterns, no ads or cloud. Your data lives on this device only.</p>
+            <div class="welcome-actions">
+              <button class="welcome-primary" type="button" data-tab-target="rounds">Add your first round &rarr;</button>
+              <button class="welcome-secondary" type="button" id="welcomeSampleButton">Try with sample data</button>
+            </div>
+          </section>
 
           <section class="metrics-grid" data-home-section="overview" aria-label="Score summary">
             <article class="metric-card">

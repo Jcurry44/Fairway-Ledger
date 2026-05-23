@@ -77,25 +77,26 @@ button {
   min-width: 0;
 }
 
+/* Mini app-icon — the flag + ball motif from icon.svg, scaled down and
+   shown against the dark header background. The SVG draws on top of a
+   subtle cream tile so the cream flag pole / ball read against the dark
+   header gradient. */
 .brand-mark {
-  width: 48px;
-  height: 48px;
-  border: 1px solid rgba(255, 255, 255, 0.36);
-  border-radius: 8px;
-  background:
-    linear-gradient(90deg, transparent 49%, rgba(255, 255, 255, 0.18) 50%, transparent 51%),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.14) 0 9px, rgba(255, 255, 255, 0.25) 9px 18px);
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #1f7a59 0%, #143f2e 100%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   display: grid;
   place-items: center;
   flex: 0 0 auto;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
 }
 
-.brand-mark span {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #f5d073;
-  box-shadow: 14px -9px 0 -2px #79b6d8, -12px 10px 0 -3px #85c49f;
+.brand-mark svg {
+  width: 30px;
+  height: 30px;
+  display: block;
 }
 
 .eyebrow {
@@ -217,6 +218,77 @@ h2 {
 
 .danger-button:hover {
   background: #ffe9e4;
+}
+
+/* First-launch welcome callout — visible only when state.rounds is empty.
+   Sits at the top of the Home Overview section in place of the empty
+   KPI tiles, so a fresh install shows a friendly "you're here, here's
+   what to do" instead of a wall of "--" placeholders. */
+.welcome-callout {
+  background: linear-gradient(135deg, #ffffff 0%, var(--panel-soft) 100%);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 22px 22px 20px;
+  margin: 0 0 18px;
+  box-shadow: var(--shadow);
+}
+
+.welcome-callout h2 {
+  margin: 0 0 6px;
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.welcome-callout p {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.welcome-primary,
+.welcome-secondary {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s ease, transform 0.08s ease;
+}
+
+.welcome-primary {
+  background: var(--green);
+  color: #ffffff;
+  border-color: var(--green-dark);
+}
+
+.welcome-primary:hover {
+  background: var(--green-dark);
+}
+
+.welcome-primary:active {
+  transform: scale(0.98);
+}
+
+.welcome-secondary {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.welcome-secondary:hover {
+  border-color: #b8c4b9;
 }
 
 .export-stale {

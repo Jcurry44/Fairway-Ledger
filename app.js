@@ -396,6 +396,8 @@
     heatmapDrilldownClose: document.getElementById("heatmapDrilldownClose"),
     heatmapDrilldownTitle: document.getElementById("heatmapDrilldownTitle"),
     heatmapDrilldownBody: document.getElementById("heatmapDrilldownBody"),
+    welcomeCallout: document.getElementById("welcomeCallout"),
+    welcomeSampleButton: document.getElementById("welcomeSampleButton"),
     teeClubPanel: document.getElementById("teeClubPanel"),
     deerwoodByNinePanel: document.getElementById("deerwoodByNinePanel"),
     deerwoodByNineCard: document.getElementById("deerwoodByNineCard"),
@@ -606,9 +608,14 @@
     } catch (error) {
       console.warn("Could not load saved golf data", error);
     }
+    // First launch: ship with the course catalog but no sample rounds.
+    // The header's "Sample data" button still loads the sample rounds for
+    // anyone who wants to poke at populated UI without playing a round.
+    // Showing strangers Jeff's test scores on first open is the previous
+    // behavior we deliberately ditched.
     return ensureProfileShape(ensureCourseDataShape({
       courses: structuredClone(sampleCourses),
-      rounds: structuredClone(sampleRounds)
+      rounds: []
     }));
   }
 
@@ -4757,6 +4764,11 @@
     tagHomePanelsWithSections();
     applyHomeSectionUi();
     updateFiltersButtonState();
+    // Show the welcome callout only when there are no rounds at all. Once
+    // the user has logged a single round, the regular KPI tiles take over.
+    if (els.welcomeCallout) {
+      els.welcomeCallout.hidden = state.rounds.length > 0;
+    }
     // If the drill-down sheet is open, refresh its contents against the
     // freshly-rendered data (e.g. after saving a new round).
     if (activeDrilldownPhysicalId && els.heatmapDrilldownOverlay && !els.heatmapDrilldownOverlay.hidden) {
@@ -5441,7 +5453,7 @@
     renderCourseLookupResults(results, query);
   });
 
-  els.loadSampleButton.addEventListener("click", () => {
+  function loadSampleData() {
     if (state.rounds.length && !window.confirm("Replace current data with sample data?")) return;
     state = {
       courses: structuredClone(sampleCourses),
@@ -5453,7 +5465,9 @@
     saveState();
     renderAll();
     showToast("Sample data loaded.");
-  });
+  }
+  els.loadSampleButton.addEventListener("click", loadSampleData);
+  if (els.welcomeSampleButton) els.welcomeSampleButton.addEventListener("click", loadSampleData);
 
   els.clearButton.addEventListener("click", () => {
     if (!window.confirm("Clear all courses and rounds?")) return;
