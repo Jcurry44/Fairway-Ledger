@@ -1349,47 +1349,13 @@ body.floating-card-nav-visible .floating-card-nav {
 
 /* "More on this hole" toggle — collapses 1st putt, Fairway, Pen, Clubs Hit,
    Note, and Shot tracker into a single tap. Sticky open within a session. */
-.card-more-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  margin-top: 4px;
-  padding: 10px 14px;
-  border: 1px dashed var(--line, #d6e2d9);
-  border-radius: 10px;
-  background: #f8faf6;
-  color: var(--green-dark, #15573c);
-  font-size: 0.85rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.card-more-toggle:hover {
-  background: #f1f6ee;
-  border-color: #b8c8bd;
-}
-
-.card-more-toggle:active {
-  transform: scale(0.995);
-}
-
-.card-more-toggle.is-open {
-  background: #eef4ec;
-  border-style: solid;
-}
-
-.card-more-toggle-caret {
-  font-size: 0.95rem;
-  color: var(--green, #1f7a59);
-}
-
-/* The collapse holds the secondary inputs. The .card-field /
-   .card-pill-row / .card-clubs-row / .card-note-field / .card-shots
-   children retain all their own styling — this just bounds them. */
-.card-more {
+/* Container for the per-hole secondary inputs (1st putt, fairway, pen,
+   clubs, note, shots). Used to live behind a "More on this hole" toggle;
+   the toggle was removed because the collapse never actually hid the
+   children (display: flex won over the hidden attribute). Everything
+   is just always visible now — simpler and matches what most users
+   expected anyway. */
+.card-extra {
   display: flex;
   flex-direction: column;
   gap: 14px;
