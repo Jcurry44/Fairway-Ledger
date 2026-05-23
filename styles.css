@@ -1929,6 +1929,39 @@ select:focus {
   line-height: 1.3;
 }
 
+/* Home tab — collapsible stat panels. Each panel's heading becomes a click
+   target; clicking toggles "is-collapsed", which hides everything in the
+   panel except the heading itself. Per-panel state persists. */
+.panel.collapsible > .panel-heading {
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.panel.collapsible > .panel-heading:hover {
+  background: #f6fbf2;
+}
+
+.panel.collapsible.is-collapsed > *:not(.panel-heading) {
+  display: none;
+}
+
+.panel.collapsible.is-collapsed {
+  padding-bottom: 4px;
+}
+
+.panel-collapse-caret {
+  flex-shrink: 0;
+  margin-left: 10px;
+  font-size: 0.95rem;
+  color: var(--green, #1f7a59);
+  transition: transform 140ms ease;
+}
+
+.panel.collapsible:not(.is-collapsed) > .panel-heading .panel-collapse-caret {
+  transform: rotate(180deg);
+}
+
 /* Profile tab — bag editor. */
 .profile-bag-hint {
   margin: 0 0 16px;

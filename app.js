@@ -28,6 +28,7 @@
   const BRIEF_COLLAPSED_KEY = "fairwayLedger.briefCollapsed.v1";
   const VIEW_MODE_KEY = "fairwayLedger.viewMode.v1";
   const IN_PROGRESS_KEY = "fairwayLedger.inProgressRound.v1";
+  const PANEL_COLLAPSED_KEY = "fairwayLedger.panelCollapsed.v1";
   const IN_PROGRESS_DEBOUNCE_MS = 500;
   const BACKUP_NAG_THRESHOLD = 3;
   const today = new Date().toISOString().slice(0, 10);
@@ -3684,6 +3685,86 @@
     showToast("Bag reset to all clubs.");
   }
 
+  // Home-tab panel collapse: Home has ~13 stat panels and scrolling through
+  // them all every time is the wrong default. Each panel collapses behind
+  // its heading; only Recent Scorecards is open by default, and the user's
+  // per-panel choices persist. Metrics, latest narrative, insights, and the
+  // filter toolbar stay un-collapsible (always visible at the top).
+  const PANEL_DEFAULT_OPEN = new Set(["recent-scorecards"]);
+
+  function getPanelId(panel) {
+    if (panel.dataset.panelId) return panel.dataset.panelId;
+    const h2 = panel.querySelector(".panel-heading h2");
+    if (!h2) return null;
+    const id = h2.textContent.trim().toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    panel.dataset.panelId = id;
+    return id;
+  }
+
+  let panelCollapsedState = (function loadPanelCollapsedState() {
+    try {
+      const raw = localStorage.getItem(PANEL_COLLAPSED_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return (parsed && typeof parsed === "object") ? parsed : {};
+    } catch { return {}; }
+  })();
+
+  function isPanelCollapsed(panelId) {
+    if (panelId in panelCollapsedState) return !!panelCollapsedState[panelId];
+    return !PANEL_DEFAULT_OPEN.has(panelId);
+  }
+
+  function setPanelCollapsed(panelId, collapsed) {
+    panelCollapsedState[panelId] = !!collapsed;
+    try { localStorage.setItem(PANEL_COLLAPSED_KEY, JSON.stringify(panelCollapsedState)); } catch {}
+  }
+
+  function applyPanelCollapse(panel) {
+    const id = getPanelId(panel);
+    if (!id) return;
+    panel.classList.toggle("is-collapsed", isPanelCollapsed(id));
+  }
+
+  function initHomePanelCollapsibles() {
+    const panels = document.querySelectorAll('.tab-panel[data-tab-panel="home"] .panel');
+    panels.forEach((panel) => {
+      const heading = panel.querySelector(".panel-heading");
+      if (!heading) return;
+      panel.classList.add("collapsible");
+      // One-time wiring: chevron + click handler.
+      if (!heading.dataset.collapsibleWired) {
+        heading.dataset.collapsibleWired = "true";
+        heading.setAttribute("role", "button");
+        heading.setAttribute("tabindex", "0");
+        const caret = document.createElement("span");
+        caret.className = "panel-collapse-caret";
+        caret.setAttribute("aria-hidden", "true");
+        caret.textContent = "▾";
+        heading.appendChild(caret);
+        const toggle = () => {
+          const id = getPanelId(panel);
+          if (!id) return;
+          const nextCollapsed = !panel.classList.contains("is-collapsed");
+          setPanelCollapsed(id, nextCollapsed);
+          panel.classList.toggle("is-collapsed", nextCollapsed);
+          heading.setAttribute("aria-expanded", String(!nextCollapsed));
+        };
+        heading.addEventListener("click", toggle);
+        heading.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggle();
+          }
+        });
+      }
+      applyPanelCollapse(panel);
+      const id = getPanelId(panel);
+      heading.setAttribute("aria-expanded", String(!isPanelCollapsed(id)));
+    });
+  }
+
   function renderCourseList() {
     // Sort so courses you've actually played show first, but every course is
     // visible (including Deerwood layouts you haven't logged a round on) so
@@ -4107,6 +4188,7 @@
     updateBackupBadge();
     renderCourseList();
     renderProfileBag();
+    initHomePanelCollapsibles();
     renderSpotlight();
   }
 
