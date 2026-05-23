@@ -36,40 +36,66 @@
   let sampleCourses = [];
   let selectedCourseDetailId = null;
   let editingRoundId = null;
-  let pendingHoleNotes = {};
   let viewMode = readInitialViewMode();
 
-  function resetHoleNotes() {
-    pendingHoleNotes = {};
+  // ---- Per-hole pending state (in-progress round data) -------------------
+  //
+  // One map of hole-number -> { note, shots, clubs, penaltyClub } holds every
+  // per-hole input that isn't a DOM field. Adding a new per-hole field means
+  // extending this shape + one getter/setter pair — NOT a new top-level map
+  // and a new entry in every reset call site.
+  //
+  // The serialized in-progress draft still uses the older flat layout
+  // (holeNotes, holeShots, holeClubs, holePenaltyClubs) so existing saved
+  // drafts continue to restore unchanged. captureInProgressRound translates
+  // on write; restoreInProgressRound uses the same setters that pre-existed.
+
+  let pendingHoles = {};
+
+  function resetPendingHoles() {
+    pendingHoles = {};
+  }
+
+  // Internal accessor — lazily creates the per-hole entry.
+  function getOrCreatePendingHole(holeNumber) {
+    const key = String(holeNumber);
+    if (!pendingHoles[key]) pendingHoles[key] = {};
+    return pendingHoles[key];
+  }
+
+  // Drop the per-hole entry if every field is now empty/missing, so iterating
+  // pendingHoles (e.g. in refreshRoundPreservingHoles) doesn't see ghosts.
+  function compactPendingHole(holeNumber) {
+    const key = String(holeNumber);
+    const entry = pendingHoles[key];
+    if (!entry) return;
+    const empty = !entry.note
+      && !(entry.shots && entry.shots.length)
+      && !(entry.clubs && entry.clubs.length)
+      && !entry.penaltyClub;
+    if (empty) delete pendingHoles[key];
+  }
+
+  // ---- Notes -------------------------------------------------------------
+
+  function getHoleNote(holeNumber) {
+    const entry = pendingHoles[String(holeNumber)];
+    return (entry && entry.note) || "";
   }
 
   function setHoleNote(holeNumber, value) {
-    const key = String(holeNumber);
     const trimmed = String(value || "").trim();
-    if (trimmed) {
-      pendingHoleNotes[key] = trimmed;
-    } else {
-      delete pendingHoleNotes[key];
-    }
+    const entry = getOrCreatePendingHole(holeNumber);
+    if (trimmed) entry.note = trimmed;
+    else delete entry.note;
+    compactPendingHole(holeNumber);
   }
 
-  function getHoleNote(holeNumber) {
-    return pendingHoleNotes[String(holeNumber)] || "";
-  }
-
-  let pendingHoleShots = {};
-  let pendingHoleClubs = {};
-
-  function resetHoleShots() {
-    pendingHoleShots = {};
-  }
-
-  function resetHoleClubs() {
-    pendingHoleClubs = {};
-  }
+  // ---- Clubs hit ---------------------------------------------------------
 
   function getHoleClubs(holeNumber) {
-    return pendingHoleClubs[String(holeNumber)] || [];
+    const entry = pendingHoles[String(holeNumber)];
+    return (entry && entry.clubs) || [];
   }
 
   // The tee club is whatever sits at index 0. Putter is never a tee shot, so
@@ -83,12 +109,13 @@
   }
 
   function setHoleClubs(holeNumber, clubs) {
-    const key = String(holeNumber);
+    const entry = getOrCreatePendingHole(holeNumber);
     if (Array.isArray(clubs) && clubs.length) {
-      pendingHoleClubs[key] = normalizeClubOrder([...clubs]);
+      entry.clubs = normalizeClubOrder([...clubs]);
     } else {
-      delete pendingHoleClubs[key];
+      delete entry.clubs;
     }
+    compactPendingHole(holeNumber);
   }
 
   // Pre-select the likely clubs on every hole so the card shows them ready:
@@ -115,59 +142,58 @@
     return next;
   }
 
+  // ---- Penalty club ------------------------------------------------------
+  //
   // The club blamed for a hole's penalty stroke(s) — one per hole, defaults
   // to the tee club when a penalty is first logged.
-  let pendingHolePenaltyClubs = {};
-
-  function resetHolePenaltyClubs() {
-    pendingHolePenaltyClubs = {};
-  }
 
   function getHolePenaltyClub(holeNumber) {
-    return pendingHolePenaltyClubs[String(holeNumber)] || "";
+    const entry = pendingHoles[String(holeNumber)];
+    return (entry && entry.penaltyClub) || "";
   }
 
   function setHolePenaltyClub(holeNumber, club) {
-    const key = String(holeNumber);
-    if (club) {
-      pendingHolePenaltyClubs[key] = club;
-    } else {
-      delete pendingHolePenaltyClubs[key];
-    }
+    const entry = getOrCreatePendingHole(holeNumber);
+    if (club) entry.penaltyClub = club;
+    else delete entry.penaltyClub;
+    compactPendingHole(holeNumber);
   }
 
+  // ---- GPS shots ---------------------------------------------------------
+
   function getHoleShots(holeNumber) {
-    return pendingHoleShots[String(holeNumber)] || [];
+    const entry = pendingHoles[String(holeNumber)];
+    return (entry && entry.shots) || [];
   }
 
   function setHoleShots(holeNumber, shots) {
-    const key = String(holeNumber);
+    const entry = getOrCreatePendingHole(holeNumber);
     if (Array.isArray(shots) && shots.length) {
-      pendingHoleShots[key] = shots;
+      entry.shots = shots;
     } else {
-      delete pendingHoleShots[key];
+      delete entry.shots;
     }
+    compactPendingHole(holeNumber);
   }
 
   function appendHoleShot(holeNumber, shot) {
-    const key = String(holeNumber);
-    const existing = pendingHoleShots[key] || [];
-    pendingHoleShots[key] = [...existing, shot];
-    return pendingHoleShots[key];
+    const entry = getOrCreatePendingHole(holeNumber);
+    entry.shots = [...(entry.shots || []), shot];
+    return entry.shots;
   }
 
   function updateHoleShotAtIndex(holeNumber, index, partial) {
-    const key = String(holeNumber);
-    const existing = pendingHoleShots[key] || [];
+    const entry = pendingHoles[String(holeNumber)];
+    const existing = (entry && entry.shots) || [];
     if (!existing[index]) return existing;
     const next = existing.map((shot, i) => (i === index ? { ...shot, ...partial } : shot));
-    pendingHoleShots[key] = next;
+    if (entry) entry.shots = next;
     return next;
   }
 
   function deleteHoleShotAtIndex(holeNumber, index) {
-    const key = String(holeNumber);
-    const existing = pendingHoleShots[key] || [];
+    const entry = pendingHoles[String(holeNumber)];
+    const existing = (entry && entry.shots) || [];
     const next = existing.filter((_shot, i) => i !== index);
     // Recompute distances since shot positions are relative to predecessors.
     const rebuilt = next.map((shot, i) => {
@@ -176,12 +202,15 @@
       const meters = haversineMeters(prev.lat, prev.lon, shot.lat, shot.lon);
       return { ...shot, distanceYards: Math.round(metersToYards(meters)) };
     });
-    if (rebuilt.length) {
-      pendingHoleShots[key] = rebuilt;
-    } else {
-      delete pendingHoleShots[key];
+    if (entry) {
+      if (rebuilt.length) {
+        entry.shots = rebuilt;
+      } else {
+        delete entry.shots;
+        compactPendingHole(holeNumber);
+      }
     }
-    return pendingHoleShots[key] || [];
+    return rebuilt;
   }
 
   // Subscribes to GPS updates via watchPosition, collects samples, returns
@@ -705,10 +734,21 @@
       wind: els.roundWind ? els.roundWind.value || "" : "",
       note: els.roundNote ? els.roundNote.value || "" : "",
       holes,
-      holeNotes: { ...pendingHoleNotes },
-      holeShots: JSON.parse(JSON.stringify(pendingHoleShots || {})),
-      holeClubs: JSON.parse(JSON.stringify(pendingHoleClubs || {})),
-      holePenaltyClubs: { ...pendingHolePenaltyClubs }
+      // Wire format mirrors the older flat-map layout so existing in-progress
+      // drafts continue to restore — translate from unified pendingHoles.
+      ...(() => {
+        const holeNotes = {};
+        const holeShots = {};
+        const holeClubs = {};
+        const holePenaltyClubs = {};
+        Object.entries(pendingHoles).forEach(([key, data]) => {
+          if (data.note) holeNotes[key] = data.note;
+          if (data.shots && data.shots.length) holeShots[key] = JSON.parse(JSON.stringify(data.shots));
+          if (data.clubs && data.clubs.length) holeClubs[key] = [...data.clubs];
+          if (data.penaltyClub) holePenaltyClubs[key] = data.penaltyClub;
+        });
+        return { holeNotes, holeShots, holeClubs, holePenaltyClubs };
+      })()
     };
   }
 
@@ -784,8 +824,7 @@
       }
       renderRoundSetupOptions();
     }
-    resetHoleNotes();
-    resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
+    resetPendingHoles(); resetReviewState();
     Object.entries(data.holeNotes || {}).forEach(([num, note]) => setHoleNote(num, note));
     Object.entries(data.holeShots || {}).forEach(([num, shots]) => {
       if (Array.isArray(shots) && shots.length) setHoleShots(Number(num), shots);
@@ -4424,11 +4463,9 @@
   function refreshRoundPreservingHoles(preserveHoleNumbers) {
     const preserve = new Set(preserveHoleNumbers);
     const snapshot = captureScorecardSnapshot();
-    // Drop per-hole notes/shots/clubs for holes that are NOT being preserved.
-    [pendingHoleNotes, pendingHoleShots, pendingHoleClubs].forEach((map) => {
-      Object.keys(map).forEach((key) => {
-        if (!preserve.has(Number(key))) delete map[key];
-      });
+    // Drop the per-hole entry for any hole NOT being preserved.
+    Object.keys(pendingHoles).forEach((key) => {
+      if (!preserve.has(Number(key))) delete pendingHoles[key];
     });
     renderRoundSetupOptions();
     renderScorecard(getSelectedRoundCourse());
@@ -4585,8 +4622,7 @@
     els.roundNote.value = "";
     if (els.roundWind) els.roundWind.value = "";
     clearInProgressRound();
-    resetHoleNotes();
-    resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
+    resetPendingHoles(); resetReviewState();
     updateEditModeUi();
     resetRoundChrome();
     if (rerender) renderScorecard(getSelectedRoundCourse());
@@ -4599,8 +4635,7 @@
     els.roundNote.value = round.note || "";
     if (els.roundWind) els.roundWind.value = round.wind || "";
 
-    resetHoleNotes();
-    resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
+    resetPendingHoles(); resetReviewState();
     round.holes.forEach((hole) => {
       if (hole && hole.note) setHoleNote(hole.number, hole.note);
       if (hole && Array.isArray(hole.shots) && hole.shots.length) {
@@ -4671,12 +4706,11 @@
   els.roundCourse.addEventListener("change", () => {
     if (els.roundCourse.value === DEERWOOD_COURSE_ID) els.roundTee.value = "White";
     clearInProgressRound();
-    resetHoleNotes();
-    resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
+    resetPendingHoles(); resetReviewState();
     refreshRoundSetup();
   });
-  els.roundHoleCount.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState(); refreshRoundSetup(); });
-  els.roundLayout.addEventListener("change", () => { clearInProgressRound(); resetHoleNotes(); resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState(); refreshRoundSetup(); });
+  els.roundHoleCount.addEventListener("change", () => { clearInProgressRound(); resetPendingHoles(); resetReviewState(); refreshRoundSetup(); });
+  els.roundLayout.addEventListener("change", () => { clearInProgressRound(); resetPendingHoles(); resetReviewState(); refreshRoundSetup(); });
   // Front 9 change keeps the back 9 (holes 10-18); back 9 change keeps the
   // front 9 (holes 1-9). This means fixing a wrong nine mid-round no longer
   // wipes the half you already entered.
@@ -4707,8 +4741,7 @@
       showToast("Edit cancelled.");
     } else {
       clearInProgressRound();
-      resetHoleNotes();
-      resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
+      resetPendingHoles(); resetReviewState();
       resetRoundChrome();
       renderScorecard(getSelectedRoundCourse());
     }
@@ -4980,8 +5013,7 @@
         state.rounds[existingIndex] = updatedRound;
         editingRoundId = null;
         clearInProgressRound();
-        resetHoleNotes();
-        resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
+        resetPendingHoles(); resetReviewState();
         saveState();
         updateEditModeUi();
         els.roundNote.value = "";
@@ -5003,8 +5035,7 @@
         newRound.narrative = generateRoundNarrative(newRound, state.rounds);
         state.rounds.push(newRound);
         clearInProgressRound();
-        resetHoleNotes();
-        resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
+        resetPendingHoles(); resetReviewState();
         saveState();
         els.roundNote.value = "";
         if (els.roundWind) els.roundWind.value = "";
@@ -5035,8 +5066,7 @@
     };
     clearEditState({ rerender: false });
     clearInProgressRound();
-    resetHoleNotes();
-    resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
+    resetPendingHoles(); resetReviewState();
     saveState();
     renderAll();
     showToast("Sample data loaded.");
@@ -5047,8 +5077,7 @@
     state = { courses: [], rounds: [] };
     clearEditState({ rerender: false });
     clearInProgressRound();
-    resetHoleNotes();
-    resetHoleShots(); resetHoleClubs(); resetHolePenaltyClubs(); resetReviewState();
+    resetPendingHoles(); resetReviewState();
     saveState();
     renderAll();
     showToast("Data cleared.");
