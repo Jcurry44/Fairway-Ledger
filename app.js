@@ -357,6 +357,11 @@
     profileBagGrid: document.getElementById("profileBagGrid"),
     profileBagSummary: document.getElementById("profileBagSummary"),
     bagResetButton: document.getElementById("bagResetButton"),
+    homeFiltersButton: document.getElementById("homeFiltersButton"),
+    filtersSheetOverlay: document.getElementById("filtersSheetOverlay"),
+    filtersSheetBackdrop: document.getElementById("filtersSheetBackdrop"),
+    filtersSheetClose: document.getElementById("filtersSheetClose"),
+    filtersResetButton: document.getElementById("filtersResetButton"),
     bucketSheetOverlay: document.getElementById("bucketSheetOverlay"),
     bucketSheetBackdrop: document.getElementById("bucketSheetBackdrop"),
     bucketSheetClose: document.getElementById("bucketSheetClose"),
@@ -3795,6 +3800,38 @@
     applyHomeSectionUi();
   }
 
+  // Filters live in a bottom sheet, opened from a small icon button in the
+  // chip strip. A gold dot on the icon shows when any filter is non-default.
+  function openFiltersSheet() {
+    if (!els.filtersSheetOverlay) return;
+    els.filtersSheetOverlay.hidden = false;
+    document.body.classList.add("hole-picker-open");
+    if (els.filtersSheetClose) els.filtersSheetClose.focus();
+  }
+
+  function closeFiltersSheet() {
+    if (!els.filtersSheetOverlay) return;
+    els.filtersSheetOverlay.hidden = true;
+    document.body.classList.remove("hole-picker-open");
+  }
+
+  function updateFiltersButtonState() {
+    if (!els.homeFiltersButton) return;
+    const courseVal = els.filterCourse ? els.filterCourse.value : "all";
+    const teeVal = els.filterTee ? els.filterTee.value : "all";
+    const windowVal = els.filterWindow ? els.filterWindow.value : "all";
+    const hasActive = (courseVal && courseVal !== "all") || (teeVal && teeVal !== "all") || (windowVal && windowVal !== "all");
+    els.homeFiltersButton.classList.toggle("has-active-filter", hasActive);
+  }
+
+  function resetAllFilters() {
+    if (els.filterCourse) els.filterCourse.value = "all";
+    if (els.filterTee) els.filterTee.value = "all";
+    if (els.filterWindow) els.filterWindow.value = "all";
+    // Fire a single change event — the existing handler re-reads all three.
+    if (els.filterCourse) els.filterCourse.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
   // ---- Legacy per-panel collapse (no longer wired up) --------------------
   const PANEL_DEFAULT_OPEN = new Set(["recent-scorecards"]);
 
@@ -4296,6 +4333,7 @@
     renderProfileBag();
     tagHomePanelsWithSections();
     applyHomeSectionUi();
+    updateFiltersButtonState();
     renderSpotlight();
   }
 
@@ -4753,6 +4791,10 @@
       setActiveHomeSection(chip.dataset.homeSectionTarget);
     });
   });
+  if (els.homeFiltersButton) els.homeFiltersButton.addEventListener("click", openFiltersSheet);
+  if (els.filtersSheetBackdrop) els.filtersSheetBackdrop.addEventListener("click", closeFiltersSheet);
+  if (els.filtersSheetClose) els.filtersSheetClose.addEventListener("click", closeFiltersSheet);
+  if (els.filtersResetButton) els.filtersResetButton.addEventListener("click", resetAllFilters);
   document.querySelectorAll(".home-subchip").forEach((chip) => {
     chip.addEventListener("click", () => {
       setActiveSubsection(activeHomeSection, chip.dataset.homeSubsectionTarget);
@@ -4812,6 +4854,7 @@
     if (event.key === "Escape") {
       if (els.holePickerOverlay && !els.holePickerOverlay.hidden) closeHolePicker();
       if (els.bucketSheetOverlay && !els.bucketSheetOverlay.hidden) closeScoringBucketSheet();
+      if (els.filtersSheetOverlay && !els.filtersSheetOverlay.hidden) closeFiltersSheet();
     }
   });
 
@@ -4862,6 +4905,7 @@
       renderParStats(rounds);
       renderHoleLists(rounds);
       renderHandicapPanel();
+      updateFiltersButtonState();
     });
   });
 

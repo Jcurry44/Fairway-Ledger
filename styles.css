@@ -1974,6 +1974,48 @@ select:focus {
   box-shadow: 0 4px 12px rgba(31, 122, 89, 0.22);
 }
 
+/* Filter icon button — tucked at the right end of the chip strip. Tap to
+   open the filters bottom sheet. A gold dot signals an active filter. */
+.home-filter-button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  margin-left: 4px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink, #1c2a22);
+  cursor: pointer;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.home-filter-button:hover {
+  background: #eef4ec;
+  border-color: var(--line, #d8dfd7);
+}
+
+.home-filter-button:active {
+  transform: scale(0.96);
+}
+
+.home-filter-button.has-active-filter::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gold, #c58b2e);
+  border: 2px solid #fbfdfa;
+}
+
 /* Hide everything tagged for a non-active section. */
 [data-tab-panel="home"][data-active-section="overview"] [data-home-section]:not([data-home-section="overview"]) { display: none; }
 [data-tab-panel="home"][data-active-section="trends"] [data-home-section]:not([data-home-section="trends"]) { display: none; }
@@ -2024,6 +2066,40 @@ select:focus {
 
 /* Subsection filtering — applied by JS based on the active sub-chip. */
 .subsection-hidden { display: none; }
+
+/* Filters bottom sheet — opened from the chip-strip filter icon. */
+.filters-sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 8px 4px 4px;
+}
+
+.filters-sheet-body label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--green-dark, #15573c);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.filters-sheet-body select {
+  font-size: 1rem;
+  padding: 10px 12px;
+  border: 1.5px solid var(--line, #d8dfd7);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--ink, #1c2a22);
+  font-weight: 700;
+}
+
+.filters-sheet-body .ghost-button {
+  margin-top: 6px;
+  align-self: flex-start;
+}
 
 /* Home tab — collapsible stat panels. Each panel's heading becomes a click
    target; clicking toggles "is-collapsed", which hides everything in the

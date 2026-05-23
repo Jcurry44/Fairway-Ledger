@@ -11,10 +11,10 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Fairway Ledger</title>
-    <link rel="stylesheet" href="./styles.css?v=2026-05-19q">
-    <script src="./data/courses.js?v=2026-05-19q" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-19q" defer></script>
-    <script src="./app.js?v=2026-05-19q" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-19r">
+    <script src="./data/courses.js?v=2026-05-19r" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-19r" defer></script>
+    <script src="./app.js?v=2026-05-19r" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -56,6 +56,9 @@
             <button class="home-chip" type="button" data-home-section-target="trends">Trends</button>
             <button class="home-chip" type="button" data-home-section-target="holes">Holes</button>
             <button class="home-chip" type="button" data-home-section-target="clubs">Clubs</button>
+            <button id="homeFiltersButton" class="home-filter-button" type="button" data-open-filters aria-label="Filters" title="Filters">
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+            </button>
           </nav>
 
           <nav class="home-subchips" data-home-section="trends" aria-label="Trends">
@@ -112,27 +115,6 @@
           </section>
 
           <section id="homeInsights" class="home-insights" data-home-section="overview" aria-label="Key insights"></section>
-
-          <section class="toolbar" aria-label="Stats filters">
-            <label>
-              Course
-              <select id="filterCourse"></select>
-            </label>
-            <label>
-              Tee
-              <select id="filterTee"></select>
-            </label>
-            <label>
-              Window
-              <select id="filterWindow">
-                <option value="all">All rounds</option>
-                <option value="last5">Last 5</option>
-                <option value="last10">Last 10</option>
-                <option value="last20">Last 20</option>
-                <option value="year">This year</option>
-              </select>
-            </label>
-          </section>
 
           <section class="analytics-grid" aria-label="Analytics">
             <article class="panel wide-panel">
@@ -462,6 +444,38 @@
           <button id="bucketSheetClose" class="hole-picker-close" type="button" aria-label="Close">&times;</button>
         </div>
         <ul id="bucketSheetList" class="hole-picker-list bucket-sheet-list"></ul>
+      </div>
+    </div>
+
+    <div id="filtersSheetOverlay" class="hole-picker-overlay" hidden>
+      <button id="filtersSheetBackdrop" class="hole-picker-backdrop" type="button" aria-label="Close filters"></button>
+      <div class="hole-picker-sheet" role="dialog" aria-modal="true" aria-labelledby="filtersSheetTitle">
+        <div class="hole-picker-handle" aria-hidden="true"></div>
+        <div class="hole-picker-header">
+          <h3 id="filtersSheetTitle">Filters</h3>
+          <button id="filtersSheetClose" class="hole-picker-close" type="button" aria-label="Close">&times;</button>
+        </div>
+        <div class="filters-sheet-body">
+          <label>
+            Course
+            <select id="filterCourse"></select>
+          </label>
+          <label>
+            Tee
+            <select id="filterTee"></select>
+          </label>
+          <label>
+            Window
+            <select id="filterWindow">
+              <option value="all">All rounds</option>
+              <option value="last5">Last 5</option>
+              <option value="last10">Last 10</option>
+              <option value="last20">Last 20</option>
+              <option value="year">This year</option>
+            </select>
+          </label>
+          <button type="button" id="filtersResetButton" class="ghost-button">Reset all filters</button>
+        </div>
       </div>
     </div>
 
