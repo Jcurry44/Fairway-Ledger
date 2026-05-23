@@ -696,6 +696,80 @@ select[data-use-chips] {
   grid-column: 1 / -1;
 }
 
+/* Start Round container — visible when the user is on Add Round but
+   hasn't yet committed to playing. Holds the hint + the big CTA. */
+.start-round-container {
+  margin: 18px 0 10px;
+  padding: 18px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, var(--panel-soft) 100%);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.start-round-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.start-round-button {
+  appearance: none;
+  border: 1px solid var(--green-dark);
+  background: var(--green);
+  color: #ffffff;
+  padding: 14px 22px;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s ease, transform 0.08s ease, opacity 0.12s ease;
+}
+
+.start-round-button:hover:not(:disabled) {
+  background: var(--green-dark);
+}
+
+.start-round-button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.start-round-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Setup placeholder — replaces the live scorecard when the round
+   hasn't been started yet. Quiet, doesn't compete with the form above. */
+.scorecard-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 38px 18px;
+  background: var(--panel-soft);
+  border: 1px dashed #c7d3c7;
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  text-align: center;
+  min-height: 200px;
+}
+
+.scorecard-placeholder strong {
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
 .scorecard {
   margin-top: 14px;
   max-height: 560px;

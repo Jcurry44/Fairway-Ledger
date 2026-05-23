@@ -376,6 +376,9 @@
     roundEntryTitle: document.getElementById("roundEntryTitle"),
     roundSubmitButton: document.getElementById("roundSubmitButton"),
     scorecardGrid: document.getElementById("scorecardGrid"),
+    startRoundContainer: document.getElementById("startRoundContainer"),
+    startRoundButton: document.getElementById("startRoundButton"),
+    startRoundHint: document.getElementById("startRoundHint"),
     roundPreview: document.getElementById("roundPreview"),
     trendChart: document.getElementById("trendChart"),
     handicapPanel: document.getElementById("handicapPanel"),
@@ -752,6 +755,29 @@
   // it — so just opening Add Round and looking around never writes a draft
   // or triggers a spurious "resume round in progress?" prompt next time.
   let roundTouched = false;
+
+  // Add Round flow has two phases:
+  //   - setup    : the user has just opened Add Round; no chips are
+  //                pre-selected (blank by design), scorecard is hidden,
+  //                "Start Round" CTA is the only path forward.
+  //   - playing  : after the user picks course + tee and taps Start
+  //                Round; scorecard is live, setup banner auto-collapses.
+  // The flag flips back to "setup" on save / reset / clear so the next
+  // round starts fresh again.
+  //
+  // Edit + resume-in-progress paths set roundStarted = true directly so
+  // they skip the Start Round step entirely.
+  let roundStarted = false;
+  // Track which chip rows the user has explicitly tapped this setup. Chips
+  // in untapped rows render with no active chip, even if the underlying
+  // <select> has a value, so the form really does feel blank on entry.
+  let setupChipRowsTapped = new Set();
+
+  function resetRoundSetupState() {
+    roundStarted = false;
+    setupChipRowsTapped = new Set();
+    applyRoundStartedUi();
+  }
   // Per-session sticky state for the card's "More on this hole" collapse —
   // open it once and subsequent holes start open too. Resets on every new
   // round (resetRoundChrome). Edit mode always opens it regardless.
@@ -841,6 +867,11 @@
 
   function restoreInProgressRound(data) {
     if (!data) return;
+    // Resuming an in-progress round means the user already passed the
+    // Start Round step — flip the flag so chips render their selection
+    // and the scorecard is live (not the setup placeholder).
+    roundStarted = true;
+    SETUP_CHIP_ROW_IDS.forEach((id) => setupChipRowsTapped.add(id));
     if (data.date) els.roundDate.value = data.date;
     if (data.course) els.roundCourse.value = data.course;
     if (data.note) els.roundNote.value = data.note;
@@ -1197,12 +1228,14 @@
         // tee variants under one chip and pick a sensible default tee.
         const courseChip = event.target.closest("[data-chip-course-name]");
         if (courseChip) {
+          markSetupChipRowTapped(select.id);
           handleCourseNameChipClick(select, courseChip.dataset.chipCourseName);
           return;
         }
         const chip = event.target.closest("[data-chip-value]");
         if (!chip) return;
         const value = chip.dataset.chipValue;
+        markSetupChipRowTapped(select.id);
         // Tee chip for non-Deerwood courses: changing tee should also swap
         // roundCourse.value to the catalog entry matching {course, tee}.
         if (select.id === "roundTee"
@@ -1259,6 +1292,105 @@
     }
   }
 
+  // ---- Start Round flow --------------------------------------------------
+  //
+  // The Add Round form opens "blank" — no chip is shown as active until the
+  // user explicitly taps within that row. Once the required rows are tapped
+  // (course + tee, plus Deerwood-specific rows for Deerwood), the Start
+  // Round button enables. Tapping it flips into "playing" mode and the
+  // scorecard renders.
+
+  // Round-setup chip rows whose tapped-state we track for the "blank by
+  // default" feel. roundWind is intentionally NOT in this list — wind is
+  // an optional field, not a gate for starting the round.
+  const SETUP_CHIP_ROW_IDS = new Set([
+    "roundCourse",
+    "roundTee",
+    "roundHoleCount",
+    "roundLayout",
+    "roundFrontNine",
+    "roundBackNine",
+  ]);
+
+  function markSetupChipRowTapped(rowId) {
+    if (!SETUP_CHIP_ROW_IDS.has(rowId)) return;
+    if (setupChipRowsTapped.has(rowId)) return;
+    setupChipRowsTapped.add(rowId);
+    // The tap may have just satisfied the Start Round requirements — refresh.
+    applyRoundStartedUi();
+  }
+
+  function isSetupChipRowActiveForRender(rowId) {
+    // When the round is in progress (or being edited), chip rows always
+    // show their selection. Only the pre-Start-Round phase needs the
+    // "blank until tapped" behavior.
+    if (roundStarted || editingRoundId) return true;
+    if (!SETUP_CHIP_ROW_IDS.has(rowId)) return true;
+    return setupChipRowsTapped.has(rowId);
+  }
+
+  function isCourseDeerwoodSelected() {
+    return els.roundCourse && els.roundCourse.value === DEERWOOD_COURSE_ID;
+  }
+
+  // Conditions that must be met before Start Round enables. Returns an
+  // explanatory hint string when not ready, or "" when ready to start.
+  function getStartRoundBlocker() {
+    if (!setupChipRowsTapped.has("roundCourse")) {
+      return "Pick a course to begin.";
+    }
+    if (isCourseDeerwoodSelected()) {
+      if (!setupChipRowsTapped.has("roundHoleCount")) return "Pick 9 or 18 holes.";
+      if (!setupChipRowsTapped.has("roundTee")) return "Pick your tee box.";
+      const isNineHole = els.roundHoleCount.value === "9";
+      if (isNineHole) {
+        if (!setupChipRowsTapped.has("roundLayout")) return "Pick which nine you're playing.";
+      } else {
+        if (!setupChipRowsTapped.has("roundFrontNine")) return "Pick your front 9.";
+        if (!setupChipRowsTapped.has("roundBackNine")) return "Pick your back 9.";
+      }
+      return "";
+    }
+    // Non-Deerwood: tee row may auto-resolve when the course has only one tee.
+    const physicalName = physicalCourseName(els.roundCourse.value);
+    const tees = getTeesForCourseName(physicalName);
+    if (tees.length > 1 && !setupChipRowsTapped.has("roundTee")) {
+      return "Pick your tee box.";
+    }
+    return "";
+  }
+
+  function applyRoundStartedUi() {
+    if (!els.startRoundContainer || !els.startRoundButton) return;
+    // Edit and resumed-in-progress rounds skip the Start Round step entirely.
+    const showStart = !roundStarted && !editingRoundId;
+    els.startRoundContainer.hidden = !showStart;
+    if (showStart) {
+      const blocker = getStartRoundBlocker();
+      els.startRoundButton.disabled = !!blocker;
+      if (els.startRoundHint) {
+        els.startRoundHint.textContent = blocker || "Looks good — tap below to start scoring.";
+      }
+    }
+    // Chip rows need re-sync so newly-tapped / un-tapped rows show right.
+    syncAllChipsToSelects();
+  }
+
+  function startRound() {
+    const blocker = getStartRoundBlocker();
+    if (blocker) {
+      showToast(blocker);
+      return;
+    }
+    roundStarted = true;
+    roundChromeAutoCollapsed = false; // let renderRoundSetupChrome collapse it again now that the round is "live"
+    applyRoundStartedUi();
+    // Re-render the scorecard now that we're in "playing" mode.
+    renderScorecard(getSelectedRoundCourse());
+    // Auto-collapse the setup section so the scorecard gets the screen.
+    if (typeof renderRoundSetupChrome === "function") renderRoundSetupChrome();
+  }
+
   function syncAllChipsToSelects() {
     document.querySelectorAll('select[data-use-chips="true"]').forEach(syncChipsForSelect);
   }
@@ -1272,13 +1404,16 @@
     if (select.id === "roundCourse") {
       return syncRoundCourseChips(select, row);
     }
+    // For setup rows in the "blank by default" pre-Start-Round phase,
+    // suppress the active class until the user has tapped a chip here.
+    const showActive = isSetupChipRowActiveForRender(select.id);
     const currentValue = select.value;
     // Skip placeholder options whose value is "" (e.g. the leading "Wind…").
     // The unselected state is communicated by no chip being active.
     const opts = [...select.options].filter((opt) => opt.value !== "");
     row.innerHTML = opts.map((opt) => `
       <button type="button"
-              class="select-chip${opt.value === currentValue ? " active" : ""}"
+              class="select-chip${showActive && opt.value === currentValue ? " active" : ""}"
               data-chip-value="${escapeHtml(opt.value)}">
         ${escapeHtml(opt.text || opt.value)}
       </button>
@@ -1287,10 +1422,11 @@
 
   function syncRoundCourseChips(select, row) {
     const names = getPhysicalCourseNames();
+    const showActive = isSetupChipRowActiveForRender("roundCourse");
     const currentName = physicalCourseName(select.value);
     row.innerHTML = names.map((name) => `
       <button type="button"
-              class="select-chip${name === currentName ? " active" : ""}"
+              class="select-chip${showActive && name === currentName ? " active" : ""}"
               data-chip-course-name="${escapeHtml(name)}">
         ${escapeHtml(name)}
       </button>
@@ -1407,6 +1543,19 @@
 
   function renderScorecard(courseOrId) {
     const course = typeof courseOrId === "string" ? getCourse(courseOrId) : courseOrId;
+    // Pre-Start-Round phase — show a friendly placeholder instead of the
+    // scorecard so the user's eye lands on the setup form + Start Round CTA.
+    if (!roundStarted && !editingRoundId) {
+      els.roundCourseMeta.innerHTML = "";
+      els.scorecardGrid.innerHTML = `
+        <div class="scorecard-placeholder">
+          <strong>Set up your round above</strong>
+          <span>Tap a course, pick your tee, then tap Start Round to begin scoring.</span>
+        </div>`;
+      els.roundPreview.textContent = "--";
+      updateViewToggleLabel();
+      return;
+    }
     if (!course) {
       els.roundCourseMeta.innerHTML = "";
       els.scorecardGrid.innerHTML = `<div class="empty-state">Add a course to start logging rounds.</div>`;
@@ -4948,8 +5097,12 @@
   function renderAll() {
     renderSelectOptions();
     if (!els.roundDate.value) els.roundDate.value = today;
-    if (!els.roundCourse.value) els.roundCourse.value = DEERWOOD_COURSE_ID;
+    // Note: roundCourse is intentionally NOT auto-defaulted to Deerwood.
+    // Pre-Start-Round, the chips render blank by design; the underlying
+    // select might still have a stale value, but the chip-row sync uses
+    // setupChipRowsTapped to suppress "active" rendering.
     renderScorecard(getSelectedRoundCourse());
+    applyRoundStartedUi();
     renderCourseBrief();
     const rounds = getFilteredRounds();
     renderMetrics(rounds);
@@ -5219,6 +5372,8 @@
     if (els.roundWind) els.roundWind.value = "";
     clearInProgressRound();
     resetPendingHoles(); resetReviewState();
+    // Cancelling an edit returns the form to fresh-setup state.
+    resetRoundSetupState();
     updateEditModeUi();
     resetRoundChrome();
     if (rerender) renderScorecard(getSelectedRoundCourse());
@@ -5227,6 +5382,10 @@
   function loadRoundIntoForm(round) {
     if (!round) return;
     editingRoundId = round.id;
+    // Editing skips the Start Round gate — the round is already real.
+    // Mark every setup chip row tapped so chips render their selection
+    // (otherwise the form would look blank while the user is editing).
+    SETUP_CHIP_ROW_IDS.forEach((id) => setupChipRowsTapped.add(id));
     els.roundDate.value = round.date || today;
     els.roundNote.value = round.note || "";
     if (els.roundWind) els.roundWind.value = round.wind || "";
@@ -5338,10 +5497,15 @@
     } else {
       clearInProgressRound();
       resetPendingHoles(); resetReviewState();
+      resetRoundSetupState();
       resetRoundChrome();
       renderScorecard(getSelectedRoundCourse());
     }
   });
+
+  if (els.startRoundButton) {
+    els.startRoundButton.addEventListener("click", startRound);
+  }
 
   if (els.viewToggleButton) {
     els.viewToggleButton.addEventListener("click", () => {
@@ -5631,6 +5795,7 @@
         editingRoundId = null;
         clearInProgressRound();
         resetPendingHoles(); resetReviewState();
+        resetRoundSetupState();
         saveState();
         updateEditModeUi();
         els.roundNote.value = "";
@@ -5653,6 +5818,7 @@
         state.rounds.push(newRound);
         clearInProgressRound();
         resetPendingHoles(); resetReviewState();
+        resetRoundSetupState();
         saveState();
         els.roundNote.value = "";
         if (els.roundWind) els.roundWind.value = "";
