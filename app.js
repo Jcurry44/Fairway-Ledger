@@ -30,7 +30,6 @@
   const BRIEF_COLLAPSED_KEY = "fairwayLedger.briefCollapsed.v1";
   const VIEW_MODE_KEY = "fairwayLedger.viewMode.v1";
   const IN_PROGRESS_KEY = "fairwayLedger.inProgressRound.v1";
-  const PANEL_COLLAPSED_KEY = "fairwayLedger.panelCollapsed.v1";
   const IN_PROGRESS_DEBOUNCE_MS = 500;
   const BACKUP_NAG_THRESHOLD = 3;
   const today = new Date().toISOString().slice(0, 10);
@@ -3671,10 +3670,6 @@
   // sections — Overview / Trends / Holes / Clubs. Each panel is tagged with
   // a data-home-section matching one of those, and a CSS rule hides panels
   // outside the active section. The active chip persists per user.
-  //
-  // (The older per-panel collapse mechanism below — initHomePanelCollapsibles
-  // etc. — is now dead code; chips replaced it. Kept in source for now in
-  // case a future "expand all" / "compact" mode wants it back.)
   const HOME_SECTION_BY_PANEL_ID = {
     "recent-scorecards": "overview",
     "recent-rounds": "trends",
@@ -3809,9 +3804,8 @@
     if (els.filterCourse) els.filterCourse.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
-  // ---- Legacy per-panel collapse (no longer wired up) --------------------
-  const PANEL_DEFAULT_OPEN = new Set(["recent-scorecards"]);
-
+  // Derive a stable panel identifier from its h2 text — used by both the
+  // chip nav (to assign panels to sections) and any future per-panel feature.
   function getPanelId(panel) {
     if (panel.dataset.panelId) return panel.dataset.panelId;
     const h2 = panel.querySelector(".panel-heading h2");
@@ -3821,68 +3815,6 @@
       .replace(/^-+|-+$/g, "");
     panel.dataset.panelId = id;
     return id;
-  }
-
-  let panelCollapsedState = (function loadPanelCollapsedState() {
-    try {
-      const raw = localStorage.getItem(PANEL_COLLAPSED_KEY);
-      const parsed = raw ? JSON.parse(raw) : null;
-      return (parsed && typeof parsed === "object") ? parsed : {};
-    } catch { return {}; }
-  })();
-
-  function isPanelCollapsed(panelId) {
-    if (panelId in panelCollapsedState) return !!panelCollapsedState[panelId];
-    return !PANEL_DEFAULT_OPEN.has(panelId);
-  }
-
-  function setPanelCollapsed(panelId, collapsed) {
-    panelCollapsedState[panelId] = !!collapsed;
-    try { localStorage.setItem(PANEL_COLLAPSED_KEY, JSON.stringify(panelCollapsedState)); } catch {}
-  }
-
-  function applyPanelCollapse(panel) {
-    const id = getPanelId(panel);
-    if (!id) return;
-    panel.classList.toggle("is-collapsed", isPanelCollapsed(id));
-  }
-
-  function initHomePanelCollapsibles() {
-    const panels = document.querySelectorAll('.tab-panel[data-tab-panel="home"] .panel');
-    panels.forEach((panel) => {
-      const heading = panel.querySelector(".panel-heading");
-      if (!heading) return;
-      panel.classList.add("collapsible");
-      // One-time wiring: chevron + click handler.
-      if (!heading.dataset.collapsibleWired) {
-        heading.dataset.collapsibleWired = "true";
-        heading.setAttribute("role", "button");
-        heading.setAttribute("tabindex", "0");
-        const caret = document.createElement("span");
-        caret.className = "panel-collapse-caret";
-        caret.setAttribute("aria-hidden", "true");
-        caret.textContent = "▾";
-        heading.appendChild(caret);
-        const toggle = () => {
-          const id = getPanelId(panel);
-          if (!id) return;
-          const nextCollapsed = !panel.classList.contains("is-collapsed");
-          setPanelCollapsed(id, nextCollapsed);
-          panel.classList.toggle("is-collapsed", nextCollapsed);
-          heading.setAttribute("aria-expanded", String(!nextCollapsed));
-        };
-        heading.addEventListener("click", toggle);
-        heading.addEventListener("keydown", (event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            toggle();
-          }
-        });
-      }
-      applyPanelCollapse(panel);
-      const id = getPanelId(panel);
-      heading.setAttribute("aria-expanded", String(!isPanelCollapsed(id)));
-    });
   }
 
   function renderCourseList() {
