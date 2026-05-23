@@ -2618,7 +2618,7 @@
 
     els.courseStats.innerHTML = rows
       ? `<div class="course-stat-list">${rows}</div>`
-      : emptyState("No course stats yet.");
+      : emptyState("Save a round to see scoring broken down by course.", { action: "rounds" });
   }
 
   function renderParStats(rounds) {
@@ -2648,7 +2648,7 @@
           </div>`;
       }).join("");
 
-    els.parStats.innerHTML = html || emptyState("No par-type stats yet.");
+    els.parStats.innerHTML = html || emptyState("Save a round to see how you score on par 3s, 4s, and 5s.", { action: "rounds" });
   }
 
   // Wind is stored as the raw selector value: "", "calm", "5".."25", "30+".
@@ -2929,7 +2929,7 @@
     renderHeatmapNineChips(scope);
 
     if (!scope) {
-      els.heatmapGrid.innerHTML = `<div class="heatmap-empty-message">Add a round to see your heatmap.</div>`;
+      els.heatmapGrid.innerHTML = emptyState("Save a round to see a color-coded view of every hole you've played.", { action: "rounds" });
       if (els.heatmapSummary) els.heatmapSummary.innerHTML = "";
       if (els.heatmapLegend) els.heatmapLegend.innerHTML = "";
       if (els.heatmapNote) els.heatmapNote.textContent = "average vs par per hole";
@@ -2938,7 +2938,7 @@
 
     const { cells } = getHeatmapData(scope, rounds);
     if (!cells.length) {
-      els.heatmapGrid.innerHTML = `<div class="heatmap-empty-message">No rounds for this view yet.</div>`;
+      els.heatmapGrid.innerHTML = emptyState("No rounds at this course yet — switch courses above or save a round.", { action: "rounds" });
       if (els.heatmapSummary) els.heatmapSummary.innerHTML = "";
       if (els.heatmapLegend) els.heatmapLegend.innerHTML = "";
       return;
@@ -4235,7 +4235,7 @@
           </div>`;
       }).join("");
 
-    els.recentRounds.innerHTML = rows || emptyState("No rounds saved yet.");
+    els.recentRounds.innerHTML = rows || emptyState("Your scorecards will appear here once you save a round.", { action: "rounds" });
     els.recentRounds.querySelectorAll("[data-edit-round]").forEach((button) => {
       button.addEventListener("click", () => {
         const round = state.rounds.find((candidate) => candidate.id === button.dataset.editRound);
@@ -4498,7 +4498,7 @@
         </div>`;
     }).join("");
 
-    els.courseList.innerHTML = rows || emptyState("No courses saved.");
+    els.courseList.innerHTML = rows || emptyState("No saved courses yet. Add one from the course catalog or look one up.");
     els.courseList.querySelectorAll("[data-view-course]").forEach((button) => {
       button.addEventListener("click", () => {
         selectedCourseDetailId = button.dataset.viewCourse;
@@ -4716,7 +4716,7 @@
   function renderTrend(rounds) {
     const ordered = [...rounds].sort((a, b) => a.date.localeCompare(b.date)).slice(-12);
     if (!ordered.length) {
-      els.trendChart.innerHTML = emptyState("No trend data yet.");
+      els.trendChart.innerHTML = emptyState("Need at least 2 rounds to plot a trend.", { action: "rounds" });
       return;
     }
 
@@ -4794,8 +4794,19 @@
     }, {});
   }
 
-  function emptyState(message) {
-    return `<div class="empty-state">${message}</div>`;
+  // Empty state for a panel with nothing to show. Pass options.action with
+  // a tab id ("rounds" / "courses" / "profile") to render a CTA button that
+  // navigates there — the existing [data-tab-target] click delegation
+  // handles the actual switch.
+  function emptyState(message, options) {
+    const action = options && options.action;
+    const cta = action
+      ? `<button type="button" class="empty-state-cta" data-tab-target="${escapeHtml(action)}">${escapeHtml(options.actionLabel || "Add a round")} &rarr;</button>`
+      : "";
+    return `<div class="empty-state">
+      <div class="empty-state-message">${message}</div>
+      ${cta}
+    </div>`;
   }
 
   function showToast(message) {
