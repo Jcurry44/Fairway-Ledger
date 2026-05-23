@@ -180,6 +180,56 @@ test("scoreMarkClass: empty string when there is no real score", () => {
   assert.equal(G.scoreMarkClass(4, NaN), "");
 });
 
+// ---- derivedGir ----------------------------------------------------------
+
+test("derivedGir: par 4 score 4 with 2 putts = GIR (on in reg)", () => {
+  assert.equal(G.derivedGir(4, 2, 4), true);
+});
+
+test("derivedGir: par 4 score 5 with 2 putts = no GIR (on in 3, one over reg)", () => {
+  assert.equal(G.derivedGir(5, 2, 4), false);
+});
+
+test("derivedGir: 3-putt from on-in-reg still GIR", () => {
+  // par 4, on in 2, 3-putt, score 5 -> (5-3)=2 ≤ 2 -> GIR
+  assert.equal(G.derivedGir(5, 3, 4), true);
+});
+
+test("derivedGir: chip-in for par fails GIR (not on in reg)", () => {
+  // par 4, missed green, chip in (0 putts), score 4 -> (4-0)=4 > 2 -> no GIR
+  assert.equal(G.derivedGir(4, 0, 4), false);
+});
+
+test("derivedGir: par 3 hole-in-one is GIR", () => {
+  // par 3, score 1, 0 putts -> (1-0)=1 ≤ 1 -> GIR
+  assert.equal(G.derivedGir(1, 0, 3), true);
+});
+
+test("derivedGir: par 3 birdie via on-in-1 and 1-putt is GIR", () => {
+  // par 3, score 2, 1 putt -> (2-1)=1 ≤ 1 -> GIR
+  assert.equal(G.derivedGir(2, 1, 3), true);
+});
+
+test("derivedGir: par 5 reached in 3 with 2 putts (par) is GIR", () => {
+  assert.equal(G.derivedGir(5, 2, 5), true);
+});
+
+test("derivedGir: par 5 reached in 4 (bogey or with up-and-down) is not GIR", () => {
+  // par 5, score 5, 1 putt -> (5-1)=4 > 3 -> no GIR
+  assert.equal(G.derivedGir(5, 1, 5), false);
+});
+
+test("derivedGir: missing or zero score is not GIR", () => {
+  assert.equal(G.derivedGir(0, 2, 4), false);
+  assert.equal(G.derivedGir(NaN, 2, 4), false);
+  assert.equal(G.derivedGir(4, 2, NaN), false);
+});
+
+test("derivedGir: missing putts treated as 0", () => {
+  // par 4, score 2 (an albatross/eagle), no putt count -> (2-0)=2 ≤ 2 -> GIR
+  assert.equal(G.derivedGir(2, undefined, 4), true);
+});
+
 // ---- isDeerwoodCourseId --------------------------------------------------
 
 test("isDeerwoodCourseId", () => {

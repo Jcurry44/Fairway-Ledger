@@ -4,10 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Fairway Ledger</title>
-    <link rel="stylesheet" href="./styles.css?v=2026-05-19j">
-    <script src="./data/courses.js?v=2026-05-19j" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-19j" defer></script>
-    <script src="./app.js?v=2026-05-19j" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-19k">
+    <script src="./data/courses.js?v=2026-05-19k" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-19k" defer></script>
+    <script src="./app.js?v=2026-05-19k" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -61,6 +61,7 @@
             <article class="metric-card">
               <span>Avg score</span>
               <strong id="metricAverageScore">--</strong>
+              <small id="metricAverageScoreNote" class="metric-card-note" hidden></small>
             </article>
             <article class="metric-card">
               <span>Avg to par</span>
@@ -180,6 +181,17 @@
                 </div>
               </div>
               <div id="courseStats" class="table-wrap"></div>
+            </article>
+
+            <article class="panel wide-panel" id="deerwoodByNineCard" hidden>
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Deerwood</p>
+                  <h2>Scoring By Nine</h2>
+                </div>
+                <span class="panel-note">average 9-hole gross — pooled across every routing</span>
+              </div>
+              <div id="deerwoodByNinePanel" class="deerwood-by-nine-panel"></div>
             </article>
 
             <article class="panel">

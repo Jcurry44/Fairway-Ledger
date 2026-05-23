@@ -13,6 +13,7 @@
     roundStrokesGained,
     roundTotals,
     scoreMarkClass,
+    derivedGir,
     isDeerwoodCourseId,
     physicalHoleId,
     haversineMeters,
@@ -90,14 +91,15 @@
   }
 
   // Pre-select the likely clubs on every hole so the card shows them ready:
-  // Driver (tee shot) + Putter on par 4/5/6. A par-3 tee shot is an iron the
-  // player picks, so those are left blank. Skipped in edit mode.
+  // Driver (tee shot) + Putter on par 4/5/6; just Putter on par 3 (the iron
+  // tee shot is up to the player). The TEE badge is suppressed when only
+  // Putter is selected, so a fresh par 3 doesn't mislead. Skipped in edit
+  // mode.
   function seedDefaultClubs(course) {
     if (editingRoundId || !course || !Array.isArray(course.holes)) return;
     course.holes.forEach((hole) => {
       if (getHoleClubs(hole.number).length > 0) return;
-      if (hole.par === 3) return;
-      setHoleClubs(hole.number, ["Driver", "Putter"]);
+      setHoleClubs(hole.number, hole.par === 3 ? ["Putter"] : ["Driver", "Putter"]);
     });
   }
 
@@ -291,6 +293,7 @@
   const els = {
     metricRounds: document.getElementById("metricRounds"),
     metricAverageScore: document.getElementById("metricAverageScore"),
+    metricAverageScoreNote: document.getElementById("metricAverageScoreNote"),
     metricAveragePar: document.getElementById("metricAveragePar"),
     metricBestRound: document.getElementById("metricBestRound"),
     metricGir: document.getElementById("metricGir"),
@@ -344,6 +347,8 @@
     puttingPanel: document.getElementById("puttingPanel"),
     scoringDistribution: document.getElementById("scoringDistribution"),
     teeClubPanel: document.getElementById("teeClubPanel"),
+    deerwoodByNinePanel: document.getElementById("deerwoodByNinePanel"),
+    deerwoodByNineCard: document.getElementById("deerwoodByNineCard"),
     bucketSheetOverlay: document.getElementById("bucketSheetOverlay"),
     bucketSheetBackdrop: document.getElementById("bucketSheetBackdrop"),
     bucketSheetClose: document.getElementById("bucketSheetClose"),
@@ -1092,7 +1097,7 @@
       <span>Slope ${course.slope || "--"}</span>
     `;
 
-    if (viewMode === "card") seedDefaultClubs(course);
+    seedDefaultClubs(course);
     els.scorecardGrid.className = `scorecard mode-${viewMode}`;
     els.scorecardGrid.innerHTML = viewMode === "card"
       ? renderScorecardCardMode(course)
@@ -1103,6 +1108,11 @@
         // Only a genuine user gesture counts — programmatic events (par/club
         // pre-fill) have isTrusted === false.
         if (event && event.isTrusted) roundTouched = true;
+        // Re-derive GIR + auto-add Putter for the hole this input belongs to.
+        const target = event && event.target;
+        if (target && target.dataset && target.dataset.hole) {
+          syncDerivedHoleFlags(target.dataset.hole);
+        }
         updateRoundPreview();
         scheduleInProgressSave();
         if (viewMode === "card") syncAllPillActiveStates();
@@ -1122,6 +1132,8 @@
     updateRoundPreview();
     if (viewMode === "card") syncAllPillActiveStates();
     if (viewMode === "card") prefillActiveCardPar();
+    // Initial GIR auto-derive + Putter auto-add for whatever values just landed.
+    syncAllDerivedFlags();
     refreshReviewVisibility();
   }
 
@@ -1210,9 +1222,9 @@
   }
 
   function girInputCell(hole) {
-    // Default checked: the "regulation par" default hole is GIR + 2 putts +
-    // par. Edit mode and snapshot restore both override this explicitly.
-    return `<label class="gir-toggle compact-toggle"><input class="gir-input" data-hole="${hole.number}" type="checkbox" checked aria-label="${escapeHtml(hole.label || `Hole ${hole.number}`)} GIR"><span></span></label>`;
+    // GIR is auto-derived from score + putts (see syncDerivedHoleFlags), so
+    // the checkbox is rendered disabled — it's a readout, not an input.
+    return `<label class="gir-toggle compact-toggle"><input class="gir-input" data-hole="${hole.number}" type="checkbox" disabled aria-label="${escapeHtml(hole.label || `Hole ${hole.number}`)} GIR (auto)"><span></span></label>`;
   }
 
   function penaltyInputCell(hole) {
@@ -1325,7 +1337,10 @@
   function renderClubsHitPills(hole) {
     const selected = getHoleClubs(hole.number); // ordered array — index 0 is tee club
     const selectedSet = new Set(selected);
-    const teeClub = selected[0] || null;
+    // Putter is never a tee shot. If it's the only club selected (e.g. a
+    // freshly-seeded par 3) suppress the TEE badge until a real tee club
+    // joins the list.
+    const teeClub = (selected[0] && !(selected[0] === "Putter" && selected.length === 1)) ? selected[0] : null;
     const pills = CLUB_OPTIONS.map((club) => {
       const isActive = selectedSet.has(club);
       const isTee = club === teeClub;
@@ -1517,15 +1532,12 @@
             ${firstPuttInputCell(hole)}
             ${fairwayInputCell(hole)}
             ${penaltyInputCell(hole)}
+            ${girInputCell(hole)}
           </div>
           ${renderScorePills(hole)}
           ${renderPuttsPills(hole)}
           ${renderFirstPuttPills(hole)}
           ${renderFairwayPills(hole)}
-          <div class="card-field card-field-toggle card-field-gir">
-            <span>GIR (green in regulation)</span>
-            ${girInputCell(hole)}
-          </div>
           ${renderPenPills(hole)}
           ${renderPenaltyClubRow(hole)}
           ${renderClubsHitPills(hole)}
@@ -1758,6 +1770,37 @@
           setHolePenaltyClub(hole, teeClub);
         }
       }
+    });
+  }
+
+  // GIR is purely a function of score + putts + par, so the user never needs
+  // to tick it. Recompute on every score/putts change and update the hidden
+  // checkbox so save/readScorecard see the right value. Also auto-add Putter
+  // to clubsHit whenever putts > 0 (the user's "if I putted, putter was used"
+  // rule).
+  function syncDerivedHoleFlags(holeNumber) {
+    const hole = Number(holeNumber);
+    if (!Number.isFinite(hole)) return;
+    const scoreInput = els.scorecardGrid.querySelector(`.score-input[data-hole="${hole}"]`);
+    if (!scoreInput) return;
+    const puttsInput = els.scorecardGrid.querySelector(`.putts-input[data-hole="${hole}"]`);
+    const girInput = els.scorecardGrid.querySelector(`.gir-input[data-hole="${hole}"]`);
+    const par = Number(scoreInput.dataset.par);
+    const score = scoreInput.value === "" ? NaN : Number(scoreInput.value);
+    const putts = puttsInput && puttsInput.value !== "" ? Number(puttsInput.value) : NaN;
+    if (girInput) {
+      girInput.checked = derivedGir(score, putts, par);
+    }
+    if (Number.isFinite(putts) && putts > 0 && !getHoleClubs(hole).includes("Putter")) {
+      setHoleClubs(hole, [...getHoleClubs(hole), "Putter"]);
+      const row = els.scorecardGrid.querySelector(`.card-clubs-row[data-hole="${hole}"]`);
+      if (row) row.outerHTML = renderClubsHitPills({ number: hole });
+    }
+  }
+
+  function syncAllDerivedFlags() {
+    els.scorecardGrid.querySelectorAll(".score-input[data-hole]").forEach((input) => {
+      syncDerivedHoleFlags(input.dataset.hole);
     });
   }
 
@@ -2207,23 +2250,39 @@
     const girMade = totals.reduce((sum, item) => sum + item.girMade, 0);
     const girTotal = totals.reduce((sum, item) => sum + item.girTotal, 0);
     const handicap = calculateHandicapEstimate(state.rounds);
-    const best = [...rounds].sort((a, b) => {
+    // Average score / to-par / best round are only meaningful when the
+    // rounds are the same shape — averaging a 9-hole 38 with an 18-hole 78
+    // produces nonsense. Restrict the headline numbers to 18-hole rounds.
+    // The 9-hole story shows up in the per-nine Deerwood panel below.
+    const eighteenHoleRounds = rounds.filter((r) => Array.isArray(r.holes) && r.holes.length === 18);
+    const fullTotals = eighteenHoleRounds.map(roundTotals);
+    const best = [...eighteenHoleRounds].sort((a, b) => {
       const aTotals = roundTotals(a);
       const bTotals = roundTotals(b);
       return aTotals.toPar - bTotals.toPar || aTotals.gross - bTotals.gross;
     })[0];
     const sgRounds = rounds.map(roundStrokesGained).filter(Boolean);
     const avgSg = sgRounds.length ? average(sgRounds.map((item) => item.total)) : NaN;
+    const excludedNineCount = rounds.length - eighteenHoleRounds.length;
+    const fullAvg = average(fullTotals.map((item) => item.gross));
+    const fullToPar = average(fullTotals.map((item) => item.toPar));
 
     els.metricRounds.textContent = String(rounds.length);
-    els.metricAverageScore.textContent = Number.isFinite(average(totals.map((item) => item.gross)))
-      ? average(totals.map((item) => item.gross)).toFixed(1)
-      : "--";
-    els.metricAveragePar.textContent = formatSigned(average(totals.map((item) => item.toPar)));
+    els.metricAverageScore.textContent = Number.isFinite(fullAvg) ? fullAvg.toFixed(1) : "--";
+    els.metricAveragePar.textContent = formatSigned(fullToPar);
     els.metricBestRound.textContent = best ? `${roundTotals(best).gross} (${formatSigned(roundTotals(best).toPar, 0)})` : "--";
     els.metricGir.textContent = percentage(girMade, girTotal);
     els.metricSg.textContent = Number.isFinite(avgSg) ? formatSigned(avgSg) : "--";
     els.metricHandicap.textContent = handicap.index === null ? "--" : handicap.index.toFixed(1);
+    // Tell the user when 9-hole rounds are excluded from the headline so the
+    // numbers don't quietly under- or over-state things.
+    if (els.metricAverageScoreNote) {
+      const note = excludedNineCount > 0
+        ? `${eighteenHoleRounds.length} of ${rounds.length} rounds (9-hole excluded)`
+        : "";
+      els.metricAverageScoreNote.textContent = note;
+      els.metricAverageScoreNote.hidden = !note;
+    }
   }
 
   function renderHomeInsights(rounds) {
@@ -2848,6 +2907,79 @@
         <p class="penalty-club-title">Penalty strokes by club · ${data.totalStrokes} total</p>
         <ul class="penalty-club-list">${rows}</ul>
       </div>`;
+  }
+
+  // For each Deerwood nine (Buck / Doe / Fawn) pool every appearance — front
+  // of an 18-hole round, back of an 18-hole round, or a standalone 9-hole
+  // round — so the per-nine average is built on the maximum sample.
+  function computeDeerwoodByNine(rounds) {
+    const ninesOrder = ["buck", "doe", "fawn"];
+    const labels = { buck: "Buck", doe: "Doe", fawn: "Fawn" };
+    const map = {};
+    ninesOrder.forEach((n) => { map[n] = { nine: n, label: labels[n], grosses: [], pars: [] }; });
+    rounds.forEach((round) => {
+      if (!isDeerwoodCourseId(round.courseId) || !Array.isArray(round.holes)) return;
+      const byNine = { buck: [], doe: [], fawn: [] };
+      round.holes.forEach((hole) => {
+        const m = String(hole.label || "").trim().match(/^(buck|doe|fawn)\s+(\d+)$/i);
+        if (!m) return;
+        const nine = m[1].toLowerCase();
+        if (byNine[nine]) byNine[nine].push(hole);
+      });
+      ninesOrder.forEach((nine) => {
+        const holes = byNine[nine];
+        if (holes.length !== 9) return; // require a complete nine to count it
+        const scored = holes.filter((h) => Number.isFinite(h.score) && h.score > 0);
+        if (scored.length !== 9) return;
+        const gross = scored.reduce((s, h) => s + h.score, 0);
+        const par = scored.reduce((s, h) => s + Number(h.par || 0), 0);
+        map[nine].grosses.push(gross);
+        map[nine].pars.push(par);
+      });
+    });
+    return ninesOrder.map((n) => {
+      const e = map[n];
+      const count = e.grosses.length;
+      return {
+        nine: n,
+        label: e.label,
+        rounds: count,
+        avgGross: count ? average(e.grosses) : NaN,
+        avgToPar: count ? average(e.grosses.map((g, i) => g - e.pars[i])) : NaN,
+        bestGross: count ? Math.min(...e.grosses) : NaN
+      };
+    });
+  }
+
+  function renderDeerwoodByNine(rounds) {
+    if (!els.deerwoodByNinePanel || !els.deerwoodByNineCard) return;
+    const data = computeDeerwoodByNine(rounds);
+    const hasAny = data.some((d) => d.rounds > 0);
+    els.deerwoodByNineCard.hidden = !hasAny;
+    if (!hasAny) return;
+    const rows = data.map((d) => {
+      if (!d.rounds) {
+        return `
+          <li class="dwbn-row dwbn-row-empty">
+            <div class="dwbn-row-main">
+              <strong>${escapeHtml(d.label)} nine</strong>
+              <span class="subtext">no rounds yet</span>
+            </div>
+          </li>`;
+      }
+      return `
+        <li class="dwbn-row">
+          <div class="dwbn-row-main">
+            <strong>${escapeHtml(d.label)} nine</strong>
+            <span class="subtext">${d.rounds} nine${d.rounds === 1 ? "" : "s"} played · best ${d.bestGross}</span>
+          </div>
+          <div class="dwbn-row-stats">
+            <span class="dwbn-stat"><small>Avg</small><strong>${d.avgGross.toFixed(1)}</strong></span>
+            <span class="dwbn-stat"><small>To par</small><strong>${formatSigned(d.avgToPar)}</strong></span>
+          </div>
+        </li>`;
+    }).join("");
+    els.deerwoodByNinePanel.innerHTML = `<ul class="dwbn-list">${rows}</ul>`;
   }
 
   function renderTeeClubPerformance(rounds) {
@@ -3780,6 +3912,7 @@
     renderHandicapPanel();
     renderTrend(rounds);
     renderCourseStats(rounds);
+    renderDeerwoodByNine(rounds);
     renderParStats(rounds);
     renderHoleLists(rounds);
     renderStrokesGained(rounds);
@@ -4090,6 +4223,9 @@
     // Loaded values were written straight to the hidden inputs; re-sync the
     // card-view pills, score marks, and penalty-club rows to match them.
     if (viewMode === "card") syncAllPillActiveStates();
+    // Re-derive GIR from the loaded score+putts (a manual gir from old data
+    // gets corrected to whatever the formula actually says).
+    syncAllDerivedFlags();
     setActiveTab("rounds");
   }
 
@@ -4323,6 +4459,7 @@
       renderHomeInsights(rounds);
       renderTrend(rounds);
       renderCourseStats(rounds);
+      renderDeerwoodByNine(rounds);
       renderParStats(rounds);
       renderHoleLists(rounds);
       renderHandicapPanel();

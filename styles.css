@@ -1799,6 +1799,87 @@ select:focus {
   font-weight: 900;
 }
 
+/* Deerwood "scoring by nine" panel — one row per physical nine, pooled
+   across every routing that nine appears in. */
+.deerwood-by-nine-panel .dwbn-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dwbn-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfdfa;
+}
+
+.dwbn-row-empty {
+  opacity: 0.6;
+}
+
+.dwbn-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dwbn-row-main strong {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.dwbn-row-main .subtext {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.dwbn-row-stats {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.dwbn-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.dwbn-stat small {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dwbn-stat strong {
+  color: var(--green-dark, #15573c);
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
+/* Subtext under a metric KPI, e.g. "9 of 12 rounds (9-hole excluded)". */
+.metric-card-note {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
 .round-summary-field {
   margin-top: 18px;
   padding: 16px 18px;
