@@ -618,6 +618,66 @@ select:focus {
   grid-template-columns: 140px minmax(190px, 1.1fr) 120px minmax(160px, 1fr) 110px minmax(220px, 1.2fr);
 }
 
+/* When the round-setup form uses chip rows, every field becomes its own
+   full-width row — the dropdown grid layout doesn't fit chip rows well. */
+.form-grid:has(.has-chips) {
+  grid-template-columns: 1fr;
+}
+
+.has-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Hide native selects on chip-enabled fields. The selects stay in the DOM
+   as the source of truth — every existing reader of .value still works,
+   and dispatching a synthetic 'change' from chip clicks fires every
+   existing listener. */
+select[data-use-chips] {
+  display: none !important;
+}
+
+.select-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.select-chip {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--ink);
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  min-height: 38px;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
+}
+
+.select-chip:hover {
+  border-color: #b8c4b9;
+}
+
+.select-chip:active {
+  transform: scale(0.97);
+}
+
+.select-chip.active {
+  background: var(--green);
+  color: #ffffff;
+  border-color: var(--green-dark);
+  box-shadow: 0 2px 6px rgba(31, 122, 89, 0.25);
+}
+
+.select-chip.active:hover {
+  background: var(--green-dark);
+}
+
 .compact-controls {
   grid-template-columns: 1fr 92px;
   margin-bottom: 14px;

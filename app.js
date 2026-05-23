@@ -1097,6 +1097,56 @@
     return rounds;
   }
 
+  // ---- Chip-style form selectors ----------------------------------------
+  //
+  // Selects marked with [data-use-chips="true"] are hidden in CSS and mirrored
+  // as a row of tap-friendly chip buttons. The native <select> remains the
+  // source of truth — chips set its value + dispatch a synthetic 'change',
+  // so every existing reader/listener keeps working. After any code that
+  // rebuilds a select's options, call syncAllChipsToSelects() (already
+  // wired into renderAll + the setup change handlers).
+
+  function initSelectChips() {
+    document.querySelectorAll('select[data-use-chips="true"]').forEach((select) => {
+      if (select.dataset.chipsInit === "true") return;
+      const row = document.createElement("div");
+      row.className = "select-chips";
+      row.dataset.chipsFor = select.id;
+      select.parentNode.insertBefore(row, select.nextSibling);
+      select.dataset.chipsInit = "true";
+      row.addEventListener("click", (event) => {
+        const chip = event.target.closest("[data-chip-value]");
+        if (!chip) return;
+        const value = chip.dataset.chipValue;
+        if (select.value === value) return;
+        select.value = value;
+        // Bubbles so any listener on form / parent picks it up.
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    });
+    syncAllChipsToSelects();
+  }
+
+  function syncAllChipsToSelects() {
+    document.querySelectorAll('select[data-use-chips="true"]').forEach(syncChipsForSelect);
+  }
+
+  function syncChipsForSelect(select) {
+    const row = document.querySelector(`[data-chips-for="${select.id}"]`);
+    if (!row) return;
+    const currentValue = select.value;
+    // Skip placeholder options whose value is "" (e.g. the leading "Wind…").
+    // The unselected state is communicated by no chip being active.
+    const opts = [...select.options].filter((opt) => opt.value !== "");
+    row.innerHTML = opts.map((opt) => `
+      <button type="button"
+              class="select-chip${opt.value === currentValue ? " active" : ""}"
+              data-chip-value="${escapeHtml(opt.value)}">
+        ${escapeHtml(opt.text || opt.value)}
+      </button>
+    `).join("");
+  }
+
   function renderSelectOptions() {
     const nonDeerwoodCourses = state.courses.filter((course) => !isDeerwoodCourseId(course.id));
     const deerwoodRoundCourses = [...new Set(state.rounds
@@ -1176,6 +1226,9 @@
       if (!DEERWOOD_NINE_IDS.includes(els.roundFrontNine.value)) els.roundFrontNine.value = "buck";
       if (!DEERWOOD_NINE_IDS.includes(els.roundBackNine.value)) els.roundBackNine.value = "doe";
     }
+    // Refresh chip rows after any setup-option rebuild — courses changed,
+    // hole count flipped, layout options swapped, etc.
+    syncAllChipsToSelects();
   }
 
   function renderScorecard(courseOrId) {
@@ -4769,6 +4822,10 @@
     if (els.welcomeCallout) {
       els.welcomeCallout.hidden = state.rounds.length > 0;
     }
+    // Re-sync chip mirrors against any selects whose options or values
+    // changed during this render pass (course list rebuild, layout swap,
+    // tee re-pin, etc.).
+    syncAllChipsToSelects();
     // If the drill-down sheet is open, refresh its contents against the
     // freshly-rendered data (e.g. after saving a new round).
     if (activeDrilldownPhysicalId && els.heatmapDrilldownOverlay && !els.heatmapDrilldownOverlay.hidden) {
@@ -5548,6 +5605,10 @@
     sampleCourses = await loadCourseCatalog();
     sampleRounds = buildSampleRounds();
     state = loadState();
+    // Set up chip mirrors over the round-setup selects before renderAll
+    // runs so the very first paint shows chips, not (now-hidden) selects
+    // with a layout gap.
+    initSelectChips();
     renderAll();
     setActiveTab(localStorage.getItem(ACTIVE_TAB_KEY) || "home");
     // Offer to restore any in-progress round entry that was interrupted

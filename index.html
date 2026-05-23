@@ -15,9 +15,9 @@
     <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
          icon, theme color in the browser chrome, and a standalone display
          mode instead of a tab. -->
-    <link rel="manifest" href="./manifest.json?v=2026-05-23h">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-05-23h">
-    <link rel="apple-touch-icon" href="./icon.svg?v=2026-05-23h">
+    <link rel="manifest" href="./manifest.json?v=2026-05-23i">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-05-23i">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-05-23i">
     <meta name="theme-color" content="#1f7a59">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -32,11 +32,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
 
-    <link rel="stylesheet" href="./styles.css?v=2026-05-23h">
-    <script src="./data/courses.js?v=2026-05-23h" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-23h" defer></script>
-    <script src="./lib/shapes.js?v=2026-05-23h" defer></script>
-    <script src="./app.js?v=2026-05-23h" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-23i">
+    <script src="./data/courses.js?v=2026-05-23i" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-23i" defer></script>
+    <script src="./lib/shapes.js?v=2026-05-23i" defer></script>
+    <script src="./app.js?v=2026-05-23i" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -311,47 +311,47 @@
                   Date
                   <input id="roundDate" type="date" required>
                 </label>
-                <label>
+                <label class="has-chips">
                   Course
-                  <select id="roundCourse" required></select>
+                  <select id="roundCourse" data-use-chips="true" required></select>
                 </label>
-                <label id="roundHoleCountField">
+                <label id="roundHoleCountField" class="has-chips">
                   Playing
-                  <select id="roundHoleCount">
+                  <select id="roundHoleCount" data-use-chips="true">
                     <option value="18">18 holes</option>
                     <option value="9">9 holes</option>
                   </select>
                 </label>
-                <label id="roundLayoutField">
+                <label id="roundLayoutField" class="has-chips">
                   Nine
-                  <select id="roundLayout"></select>
+                  <select id="roundLayout" data-use-chips="true"></select>
                 </label>
-                <label id="roundFrontNineField">
+                <label id="roundFrontNineField" class="has-chips">
                   Front 9
-                  <select id="roundFrontNine">
+                  <select id="roundFrontNine" data-use-chips="true">
                     <option value="buck">Buck</option>
                     <option value="doe">Doe</option>
                     <option value="fawn">Fawn</option>
                   </select>
                 </label>
-                <label id="roundBackNineField">
+                <label id="roundBackNineField" class="has-chips">
                   Back 9
-                  <select id="roundBackNine">
+                  <select id="roundBackNine" data-use-chips="true">
                     <option value="buck">Buck</option>
                     <option value="doe" selected>Doe</option>
                     <option value="fawn">Fawn</option>
                   </select>
                 </label>
-                <label id="roundTeeField">
+                <label id="roundTeeField" class="has-chips">
                   Tee
-                  <select id="roundTee">
+                  <select id="roundTee" data-use-chips="true">
                     <option value="White">White</option>
                     <option value="Blue">Blue</option>
                   </select>
                 </label>
-                <label id="roundWindField">
+                <label id="roundWindField" class="has-chips">
                   Wind
-                  <select id="roundWind">
+                  <select id="roundWind" data-use-chips="true">
                     <option value="">Wind…</option>
                     <option value="calm">Calm</option>
                     <option value="5">5 mph</option>
