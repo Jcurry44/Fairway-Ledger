@@ -24,6 +24,17 @@
     calculateHandicapEstimate: calculateHandicapEstimatePure
   } = window.GolfMath;
 
+  // Canonical Round + Hole shapes live in lib/shapes.js. Use makeHole/makeRound
+  // when constructing new objects so every site gets the same field set, and
+  // normalizeRound when ingesting saved/imported data so old shapes pick up
+  // any new fields with their defaults. Adding a new per-hole or per-round
+  // field is a one-line change in lib/shapes.js.
+  const {
+    makeHole,
+    makeRound,
+    normalizeRound
+  } = window.GolfShapes;
+
   const STORAGE_KEY = "fairwayLedger.v1";
   const ACTIVE_TAB_KEY = "fairwayLedger.activeTab";
   const BACKUP_META_KEY = "fairwayLedger.backupMeta.v1";
@@ -533,18 +544,23 @@
   function buildSampleRounds() {
     if (!sampleCourses.length) return [];
     return [
-      makeRound("2026-04-18", "ridgeview-blue", [5, 5, 4, 6, 5, 4, 3, 7, 5, 5, 4, 5, 6, 6, 4, 4, 6, 6], "First round tracked"),
-      makeRound("2026-04-25", "lake-county-white", [6, 5, 4, 4, 6, 6, 5, 4, 5, 5, 6, 3, 5, 5, 4, 6, 5, 5], "Better putting day"),
-      makeRound("2026-05-02", "ridgeview-blue", [4, 5, 3, 6, 5, 5, 4, 6, 4, 5, 5, 4, 7, 5, 4, 5, 6, 5], "Driver missed right"),
-      makeRound("2026-05-09", "ridgeview-blue", [5, 4, 4, 5, 4, 5, 3, 6, 5, 4, 4, 4, 6, 5, 5, 4, 5, 5], "Clean back nine"),
-      makeRound("2026-05-12", "lake-county-white", [5, 5, 5, 3, 5, 7, 4, 4, 5, 4, 6, 4, 6, 4, 5, 6, 5, 4], "Penalty on 6"),
-      makeRound("2026-05-15", "ridgeview-blue", [4, 4, 4, 5, 5, 4, 3, 6, 4, 5, 4, 3, 6, 5, 4, 4, 5, 5], "Best tee day")
+      makeSampleRound("2026-04-18", "ridgeview-blue", [5, 5, 4, 6, 5, 4, 3, 7, 5, 5, 4, 5, 6, 6, 4, 4, 6, 6], "First round tracked"),
+      makeSampleRound("2026-04-25", "lake-county-white", [6, 5, 4, 4, 6, 6, 5, 4, 5, 5, 6, 3, 5, 5, 4, 6, 5, 5], "Better putting day"),
+      makeSampleRound("2026-05-02", "ridgeview-blue", [4, 5, 3, 6, 5, 5, 4, 6, 4, 5, 5, 4, 7, 5, 4, 5, 6, 5], "Driver missed right"),
+      makeSampleRound("2026-05-09", "ridgeview-blue", [5, 4, 4, 5, 4, 5, 3, 6, 5, 4, 4, 4, 6, 5, 5, 4, 5, 5], "Clean back nine"),
+      makeSampleRound("2026-05-12", "lake-county-white", [5, 5, 5, 3, 5, 7, 4, 4, 5, 4, 6, 4, 6, 4, 5, 6, 5, 4], "Penalty on 6"),
+      makeSampleRound("2026-05-15", "ridgeview-blue", [4, 4, 4, 5, 5, 4, 3, 6, 4, 5, 4, 3, 6, 5, 4, 4, 5, 5], "Best tee day")
     ];
   }
 
-  function makeRound(date, courseId, scores, note) {
+  // Sample-data fixture builder. Distinct from the lib's makeRound (which is
+  // the generic Round constructor) — this one fabricates plausible fairway/
+  // gir/putts/penalty values from a score-only input so the demo data feels
+  // real without making us hand-roll every field. Routes through the lib
+  // builders so sample rounds carry the full canonical shape.
+  function makeSampleRound(date, courseId, scores, note) {
     const course = sampleCourses.find((candidate) => candidate.id === courseId);
-    return {
+    return makeRound({
       id: makeId("round"),
       date,
       courseId,
@@ -553,7 +569,7 @@
       holes: course.holes.map((hole, index) => {
         const score = scores[index];
         const over = score - hole.par;
-        return {
+        return makeHole({
           number: hole.number,
           label: hole.label || String(hole.number),
           par: hole.par,
@@ -564,9 +580,9 @@
           fairway: hole.par === 3 ? "na" : index % 5 === 0 ? "right" : index % 4 === 0 ? "left" : "hit",
           gir: score <= hole.par + 1 && index % 4 !== 1,
           penalties: over >= 2 && index % 3 === 0 ? 1 : 0
-        };
+        });
       })
-    };
+    });
   }
 
   function makeId(prefix) {
@@ -577,6 +593,10 @@
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
       if (saved && Array.isArray(saved.courses) && Array.isArray(saved.rounds)) {
+        // Pass every saved round through the canonical Round shape so older
+        // saves (missing wind, narrative, firstPuttDistance, etc.) pick up
+        // the new fields with their defaults. Unknown fields are preserved.
+        saved.rounds = saved.rounds.map(normalizeRound);
         return ensureProfileShape(ensureCourseDataShape(mergeNewDefaultCourses(saved)));
       }
     } catch (error) {
@@ -2410,7 +2430,7 @@
           throw new Error("Putts and penalties must be 0 or higher.");
         }
       }
-      return {
+      return makeHole({
         number: Number(holeNumber),
         label: scoreInput.dataset.label || holeNumber,
         par: Number(scoreInput.dataset.par),
@@ -2426,7 +2446,7 @@
         note: getHoleNote(holeNumber),
         shots: getHoleShots(holeNumber),
         clubsHit: getHoleClubs(holeNumber)
-      };
+      });
     });
   }
 
@@ -4844,7 +4864,7 @@
           editingRoundId = null;
           throw new Error("Original round could not be found. Save again to create a new round.");
         }
-        const updatedRound = {
+        const updatedRound = makeRound({
           ...state.rounds[existingIndex],
           date,
           courseId: course.id,
@@ -4852,7 +4872,7 @@
           wind: els.roundWind ? els.roundWind.value || "" : "",
           note,
           holes
-        };
+        });
         updatedRound.narrative = generateRoundNarrative(updatedRound, state.rounds);
         state.rounds[existingIndex] = updatedRound;
         editingRoundId = null;
@@ -4867,7 +4887,7 @@
         setActiveTab("home");
         showToast("Round updated.");
       } else {
-        const newRound = {
+        const newRound = makeRound({
           id: makeId("round"),
           date,
           courseId: course.id,
@@ -4875,7 +4895,7 @@
           wind: els.roundWind ? els.roundWind.value || "" : "",
           note,
           holes
-        };
+        });
         newRound.narrative = generateRoundNarrative(newRound, state.rounds);
         state.rounds.push(newRound);
         clearInProgressRound();
@@ -4958,9 +4978,10 @@
         }
         // Run imports through the same migration pipeline as loadState
         // so older exports pick up new Deerwood layouts, hazards arrays,
-        // and any future normalization. Otherwise stale exports silently
-        // miss fields the rest of the app assumes exist.
-        state = ensureCourseDataShape(mergeNewDefaultCourses(imported));
+        // round-shape normalization (wind, narrative, firstPuttDistance,
+        // etc.) — anything the rest of the app assumes exists.
+        imported.rounds = imported.rounds.map(normalizeRound);
+        state = ensureProfileShape(ensureCourseDataShape(mergeNewDefaultCourses(imported)));
         clearEditState({ rerender: false });
         const previousMeta = readBackupMeta();
         writeBackupMeta({
