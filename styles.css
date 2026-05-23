@@ -583,7 +583,6 @@ select:focus {
 
 .form-grid,
 .compact-controls,
-.course-form,
 .lookup-form {
   display: grid;
   gap: 10px;
@@ -666,17 +665,9 @@ select[data-use-chips] {
   margin-bottom: 14px;
 }
 
-.course-form {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
 .lookup-form {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
-}
-
-.full-field {
-  grid-column: 1 / -1;
 }
 
 /* Start Round container — visible when the user is on Add Round but
@@ -4845,7 +4836,6 @@ td {
 
   .analytics-grid,
   .form-grid,
-  .course-form,
   .lookup-form,
   .compact-controls {
     grid-template-columns: 1fr;
