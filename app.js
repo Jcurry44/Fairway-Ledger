@@ -1247,6 +1247,9 @@
         }
         if (select.value === value) return;
         select.value = value;
+        // Re-render this chip row immediately so the new active chip shows
+        // even when no downstream change listener re-syncs (e.g. wind).
+        syncChipsForSelect(select);
         // Bubbles so any listener on form / parent picks it up.
         select.dispatchEvent(new Event("change", { bubbles: true }));
       });

@@ -630,6 +630,14 @@ select:focus {
   gap: 6px;
 }
 
+/* Same hidden-attribute defense as .start-round-container — without this,
+   the class's display: flex would override [hidden]'s display: none and
+   the Deerwood-only Layout / Front 9 / Back 9 / Tee fields would leak
+   into view on non-Deerwood courses. */
+.has-chips[hidden] {
+  display: none;
+}
+
 /* Hide native selects on chip-enabled fields. The selects stay in the DOM
    as the source of truth — every existing reader of .value still works,
    and dispatching a synthetic 'change' from chip clicks fires every
@@ -709,6 +717,14 @@ select[data-use-chips] {
   flex-direction: column;
   align-items: stretch;
   gap: 12px;
+}
+
+/* Class declaration sits at the same specificity as the user-agent
+   [hidden] rule and comes later in cascade, which would otherwise let
+   display: flex win against display: none — defeating the hidden
+   attribute. Pin the hidden state explicitly. */
+.start-round-container[hidden] {
+  display: none;
 }
 
 .start-round-hint {
