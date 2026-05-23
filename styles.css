@@ -1980,6 +1980,51 @@ select:focus {
 [data-tab-panel="home"][data-active-section="holes"] [data-home-section]:not([data-home-section="holes"]) { display: none; }
 [data-tab-panel="home"][data-active-section="clubs"] [data-home-section]:not([data-home-section="clubs"]) { display: none; }
 
+/* Second-row sub-chips, contextual to the active section. Each section's
+   sub-chip nav narrows the view further to a single panel — no scrolling
+   between panels inside a section either. */
+.home-subchips {
+  display: flex;
+  gap: 4px;
+  margin: -10px 0 18px;
+  padding: 2px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.home-subchips::-webkit-scrollbar { display: none; }
+
+.home-subchip {
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  border: 1px solid var(--line, #d8dfd7);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--ink, #1c2a22);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+}
+
+.home-subchip:hover {
+  background: #eef4ec;
+  border-color: #b8c8bd;
+}
+
+.home-subchip.active {
+  background: var(--green, #1f7a59);
+  color: #ffffff;
+  border-color: var(--green, #1f7a59);
+}
+
+/* Subsection filtering — applied by JS based on the active sub-chip. */
+.subsection-hidden { display: none; }
+
 /* Home tab — collapsible stat panels. Each panel's heading becomes a click
    target; clicking toggles "is-collapsed", which hides everything in the
    panel except the heading itself. Per-panel state persists. */

@@ -3710,6 +3710,15 @@
   };
   const HOME_SECTIONS = ["overview", "trends", "holes", "clubs"];
   const HOME_SECTION_KEY = "fairwayLedger.homeSection.v1";
+  const HOME_SUBSECTIONS_KEY = "fairwayLedger.homeSubsections.v1";
+  // First sub-chip the user lands on when entering a section with no prior
+  // preference. Overview deliberately has no subsections (KPIs + Recent
+  // Scorecards form a single combined view).
+  const SUBSECTION_DEFAULTS = {
+    trends: "recent-rounds",
+    holes: "spotlight",
+    clubs: "tee-club-performance"
+  };
 
   let activeHomeSection = (() => {
     try {
@@ -3718,21 +3727,64 @@
     } catch { return "overview"; }
   })();
 
+  let activeHomeSubsections = (() => {
+    try {
+      const raw = localStorage.getItem(HOME_SUBSECTIONS_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return (parsed && typeof parsed === "object") ? parsed : {};
+    } catch { return {}; }
+  })();
+
+  function getActiveSubsection(section) {
+    if (!SUBSECTION_DEFAULTS[section]) return null;
+    return activeHomeSubsections[section] || SUBSECTION_DEFAULTS[section];
+  }
+
+  function setActiveSubsection(section, subsection) {
+    activeHomeSubsections[section] = subsection;
+    try { localStorage.setItem(HOME_SUBSECTIONS_KEY, JSON.stringify(activeHomeSubsections)); } catch {}
+    applyHomeSectionUi();
+  }
+
   function tagHomePanelsWithSections() {
     document.querySelectorAll('.tab-panel[data-tab-panel="home"] .panel').forEach((panel) => {
       const id = getPanelId(panel);
+      if (!id) return;
       const section = HOME_SECTION_BY_PANEL_ID[id];
       if (section) panel.dataset.homeSection = section;
+      // Within Trends/Holes/Clubs, each panel's panel-id is its subsection
+      // identifier. Sub-chip targets match these.
+      panel.dataset.homeSubsection = id;
     });
   }
 
   function applyHomeSectionUi() {
     const homeTab = document.querySelector('[data-tab-panel="home"]');
-    if (homeTab) homeTab.dataset.activeSection = activeHomeSection;
+    const activeSub = getActiveSubsection(activeHomeSection);
+    if (homeTab) {
+      homeTab.dataset.activeSection = activeHomeSection;
+      if (activeSub) homeTab.dataset.activeSubsection = activeSub;
+      else delete homeTab.dataset.activeSubsection;
+    }
+    // Top chips
     document.querySelectorAll(".home-chip").forEach((chip) => {
       const active = chip.dataset.homeSectionTarget === activeHomeSection;
       chip.classList.toggle("active", active);
       chip.setAttribute("aria-selected", String(active));
+    });
+    // Sub-chips: mark the active one (only visible when its parent nav's
+    // data-home-section matches activeHomeSection — handled by the same
+    // CSS rule that hides non-matching data-home-section elements).
+    document.querySelectorAll(".home-subchip").forEach((chip) => {
+      const isActive = !!activeSub && chip.dataset.homeSubsectionTarget === activeSub;
+      chip.classList.toggle("active", isActive);
+      chip.setAttribute("aria-selected", String(isActive));
+    });
+    // Hide every subsection-tagged element that doesn't match the active
+    // sub-chip. Elements without data-home-subsection (like the toolbar)
+    // stay visible.
+    document.querySelectorAll("[data-home-subsection]").forEach((el) => {
+      el.classList.toggle("subsection-hidden", !!activeSub && el.dataset.homeSubsection !== activeSub);
     });
   }
 
@@ -4699,6 +4751,11 @@
   document.querySelectorAll(".home-chip").forEach((chip) => {
     chip.addEventListener("click", () => {
       setActiveHomeSection(chip.dataset.homeSectionTarget);
+    });
+  });
+  document.querySelectorAll(".home-subchip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      setActiveSubsection(activeHomeSection, chip.dataset.homeSubsectionTarget);
     });
   });
 

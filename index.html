@@ -11,10 +11,10 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Fairway Ledger</title>
-    <link rel="stylesheet" href="./styles.css?v=2026-05-19p">
-    <script src="./data/courses.js?v=2026-05-19p" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-19p" defer></script>
-    <script src="./app.js?v=2026-05-19p" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-19q">
+    <script src="./data/courses.js?v=2026-05-19q" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-19q" defer></script>
+    <script src="./app.js?v=2026-05-19q" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -56,6 +56,27 @@
             <button class="home-chip" type="button" data-home-section-target="trends">Trends</button>
             <button class="home-chip" type="button" data-home-section-target="holes">Holes</button>
             <button class="home-chip" type="button" data-home-section-target="clubs">Clubs</button>
+          </nav>
+
+          <nav class="home-subchips" data-home-section="trends" aria-label="Trends">
+            <button class="home-subchip" type="button" data-home-subsection-target="recent-rounds">Trend</button>
+            <button class="home-subchip" type="button" data-home-subsection-target="handicap-calculator">Handicap</button>
+            <button class="home-subchip" type="button" data-home-subsection-target="strokes-gained">SG</button>
+            <button class="home-subchip" type="button" data-home-subsection-target="scoring-distribution">Distribution</button>
+          </nav>
+
+          <nav class="home-subchips" data-home-section="holes" aria-label="Holes">
+            <button class="home-subchip" type="button" data-home-subsection-target="spotlight">Spotlight</button>
+            <button class="home-subchip" type="button" data-home-subsection-target="best-holes">Best</button>
+            <button class="home-subchip" type="button" data-home-subsection-target="worst-holes">Worst</button>
+            <button class="home-subchip" type="button" data-home-subsection-target="par-3-4-5">Par 3/4/5</button>
+            <button class="home-subchip" type="button" data-home-subsection-target="scoring-by-course">By Course</button>
+            <button class="home-subchip" type="button" data-home-subsection-target="scoring-by-nine">By Nine</button>
+          </nav>
+
+          <nav class="home-subchips" data-home-section="clubs" aria-label="Clubs">
+            <button class="home-subchip" type="button" data-home-subsection-target="tee-club-performance">Tee shots</button>
+            <button class="home-subchip" type="button" data-home-subsection-target="putting-by-distance">Putting</button>
           </nav>
 
           <section class="metrics-grid" data-home-section="overview" aria-label="Score summary">
