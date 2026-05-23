@@ -392,6 +392,11 @@
     strokesGainedPanel: document.getElementById("strokesGainedPanel"),
     puttingPanel: document.getElementById("puttingPanel"),
     scoringDistribution: document.getElementById("scoringDistribution"),
+    heatmapCourseChips: document.getElementById("heatmapCourseChips"),
+    heatmapNineChips: document.getElementById("heatmapNineChips"),
+    heatmapGrid: document.getElementById("heatmapGrid"),
+    heatmapLegend: document.getElementById("heatmapLegend"),
+    heatmapNote: document.getElementById("heatmapNote"),
     teeClubPanel: document.getElementById("teeClubPanel"),
     deerwoodByNinePanel: document.getElementById("deerwoodByNinePanel"),
     deerwoodByNineCard: document.getElementById("deerwoodByNineCard"),
@@ -2715,6 +2720,298 @@
     });
   }
 
+  // ---- Heatmap -----------------------------------------------------------
+  //
+  // Replaces the static Spotlight + Best Holes + Worst Holes lists with a
+  // visual scorecard: each physical hole is a color-coded cell whose color
+  // encodes how the user performs there vs par on average. Green = under,
+  // red = over. Future commits add tap-to-drill-down and a metric toggle.
+  //
+  // Heatmap "scope" = which slice of holes to show. For non-Deerwood courses,
+  // scope is just the courseId (typically 18 holes). For Deerwood, scope is
+  // courseId + a specific nine (Buck / Doe / Fawn), because Deerwood holes
+  // are pooled by physical identity but the three nines are physically
+  // distinct layouts that shouldn't be jammed onto one grid.
+
+  const HEATMAP_SCOPE_KEY = "fairwayLedger.heatmapScope.v1";
+  const HEATMAP_NINES = ["buck", "doe", "fawn"];
+
+  // The user's last-viewed scope, restored from localStorage on init.
+  // Shape: { courseId: string, nine?: "buck"|"doe"|"fawn" }.
+  let heatmapScope = (() => {
+    try {
+      const raw = localStorage.getItem(HEATMAP_SCOPE_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return (parsed && typeof parsed === "object") ? parsed : null;
+    } catch { return null; }
+  })();
+
+  // Find the scope the user should land on by default — whichever physical
+  // course (and for Deerwood, whichever nine) they've played the most.
+  function defaultHeatmapScope(rounds) {
+    if (!rounds || !rounds.length) return null;
+    const counts = new Map();
+    rounds.forEach((round) => {
+      if (!round || !Array.isArray(round.holes)) return;
+      if (isDeerwoodCourseId(round.courseId)) {
+        // Bucket by nine — one round can contribute to up to 2 nines for an
+        // 18-hole Deerwood routing. We count per-nine appearances.
+        const ninesInRound = new Set();
+        round.holes.forEach((hole) => {
+          const id = physicalHoleId(round.courseId, hole);
+          const m = id.match(/^deerwood:(buck|doe|fawn):/);
+          if (m) ninesInRound.add(m[1]);
+        });
+        ninesInRound.forEach((nine) => {
+          const key = `deerwood:${nine}`;
+          counts.set(key, (counts.get(key) || 0) + 1);
+        });
+      } else {
+        const key = `course:${round.courseId}`;
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+    });
+    if (!counts.size) return null;
+    // Pick the most-played, with deterministic tie-break by key for stability.
+    const top = [...counts.entries()].sort((a, b) =>
+      b[1] - a[1] || a[0].localeCompare(b[0])
+    )[0][0];
+    if (top.startsWith("deerwood:")) {
+      const nine = top.split(":")[1];
+      // Synthesize a representative Deerwood courseId for that nine — any
+      // course id whose physical-hole ids start with "deerwood:<nine>:" works.
+      const repCourseId = findDeerwoodCourseIdForNine(nine, rounds) || DEERWOOD_COURSE_ID;
+      return { courseId: repCourseId, nine };
+    }
+    return { courseId: top.split(":").slice(1).join(":") };
+  }
+
+  // Find a Deerwood course id whose holes are tagged with the requested nine.
+  // For an 18-hole Deerwood routing the same round produces hole labels like
+  // "Buck 1...Buck 9, Doe 1...Doe 9", and either parent courseId is fine for
+  // display purposes; we just want one that actually exists in state.courses.
+  function findDeerwoodCourseIdForNine(nine, rounds) {
+    for (const round of rounds) {
+      if (!isDeerwoodCourseId(round.courseId)) continue;
+      const matches = round.holes.some((hole) => {
+        const id = physicalHoleId(round.courseId, hole);
+        return id === `deerwood:${nine}:1` || id.startsWith(`deerwood:${nine}:`);
+      });
+      if (matches) return round.courseId;
+    }
+    return null;
+  }
+
+  // Build the per-cell data for a given scope. Pools across every routing
+  // that touched the relevant physical holes — for Deerwood that means
+  // 9-hole rounds and 18-hole rounds both contribute to each Buck/Doe/Fawn
+  // hole's history.
+  function getHeatmapData(scope, rounds) {
+    if (!scope) return { cells: [], roundsCount: 0 };
+    const groups = getHoleGroups(rounds);
+    const deerwood = isDeerwoodCourseId(scope.courseId);
+
+    let cells;
+    if (deerwood && scope.nine) {
+      // Filter to physical holes on the requested nine, then sort 1..9.
+      cells = groups
+        .filter((g) => g.physicalId.startsWith(`deerwood:${scope.nine}:`))
+        .sort((a, b) => {
+          const an = Number(a.physicalId.split(":")[2]);
+          const bn = Number(b.physicalId.split(":")[2]);
+          return an - bn;
+        });
+    } else {
+      // Non-Deerwood: filter to physical holes belonging to this course,
+      // ordered by hole number. Use the rep number from getHoleGroups.
+      cells = groups
+        .filter((g) => g.physicalId.startsWith(`course:${scope.courseId}:`))
+        .sort((a, b) => a.number - b.number);
+    }
+    return { cells, roundsCount: cells.reduce((s, g) => s + g.rounds, 0) };
+  }
+
+  // Map avg-vs-par to a CSS tier class. Thresholds chosen so a hole you
+  // typically birdie reads green, a typical par reads neutral, and the deep
+  // red is reserved for holes that consistently destroy you (avg double+).
+  function heatmapTier(avgToPar) {
+    if (!Number.isFinite(avgToPar)) return "tier-empty";
+    if (avgToPar <= -0.8) return "tier-eagle";
+    if (avgToPar <= -0.25) return "tier-birdie";
+    if (avgToPar < -0.05) return "tier-under";
+    if (avgToPar < 0.25) return "tier-par";
+    if (avgToPar < 0.8) return "tier-bogey";
+    if (avgToPar < 1.5) return "tier-double";
+    return "tier-triple";
+  }
+
+  function formatDelta(v) {
+    if (!Number.isFinite(v)) return "—";
+    if (Math.abs(v) < 0.05) return "E";
+    const sign = v > 0 ? "+" : "";
+    return `${sign}${v.toFixed(1)}`;
+  }
+
+  function renderHeatmap(rounds) {
+    if (!els.heatmapGrid) return;
+
+    // Validate the saved scope against the current rounds — if the user
+    // cleared data or imported a different set, fall back to the default.
+    let scope = heatmapScope;
+    const tentative = scope ? getHeatmapData(scope, rounds) : null;
+    if (!tentative || !tentative.cells.length) {
+      scope = defaultHeatmapScope(rounds);
+      heatmapScope = scope;
+      persistHeatmapScope();
+    }
+
+    renderHeatmapCourseChips(rounds, scope);
+    renderHeatmapNineChips(scope);
+
+    if (!scope) {
+      els.heatmapGrid.innerHTML = `<div class="heatmap-empty-message">Add a round to see your heatmap.</div>`;
+      if (els.heatmapLegend) els.heatmapLegend.innerHTML = "";
+      if (els.heatmapNote) els.heatmapNote.textContent = "average vs par per hole";
+      return;
+    }
+
+    const { cells } = getHeatmapData(scope, rounds);
+    if (!cells.length) {
+      els.heatmapGrid.innerHTML = `<div class="heatmap-empty-message">No rounds for this view yet.</div>`;
+      if (els.heatmapLegend) els.heatmapLegend.innerHTML = "";
+      return;
+    }
+
+    els.heatmapGrid.innerHTML = cells.map((cell) => {
+      const tier = heatmapTier(cell.avgToPar);
+      const delta = formatDelta(cell.avgToPar);
+      const labelText = (() => {
+        if (isDeerwoodCourseId(scope.courseId) && scope.nine) {
+          const n = cell.physicalId.split(":")[2];
+          return `${scope.nine.charAt(0).toUpperCase() + scope.nine.slice(1)} ${n}`;
+        }
+        return cell.label || `#${cell.number}`;
+      })();
+      return `
+        <button type="button"
+                class="heatmap-cell ${tier}"
+                data-physical-id="${escapeHtml(cell.physicalId)}"
+                aria-label="${escapeHtml(labelText)}, par ${cell.par}, average ${cell.avgScore.toFixed(2)}, ${cell.rounds} round${cell.rounds === 1 ? "" : "s"}">
+          <span class="heatmap-cell-num">${escapeHtml(labelText)}</span>
+          <span class="heatmap-cell-delta">${delta}</span>
+          <span class="heatmap-cell-par">par ${cell.par}</span>
+          <span class="heatmap-cell-rounds">${cell.rounds} rd${cell.rounds === 1 ? "" : "s"}</span>
+        </button>
+      `;
+    }).join("");
+
+    // Legend (small, one row). Communicates the color scale without taking
+    // a whole row per tier.
+    if (els.heatmapLegend) {
+      els.heatmapLegend.innerHTML = `
+        <span class="heatmap-legend-item"><span class="heatmap-legend-swatch" style="background:#1f7a59"></span>Under par</span>
+        <span class="heatmap-legend-item"><span class="heatmap-legend-swatch" style="background:#f1f2ec"></span>Around par</span>
+        <span class="heatmap-legend-item"><span class="heatmap-legend-swatch" style="background:#f1d39b"></span>Bogey avg</span>
+        <span class="heatmap-legend-item"><span class="heatmap-legend-swatch" style="background:#d97a6a"></span>Double avg+</span>
+      `;
+    }
+
+    if (els.heatmapNote) {
+      const total = cells.reduce((s, c) => s + c.rounds, 0);
+      els.heatmapNote.textContent = `${cells.length} hole${cells.length === 1 ? "" : "s"} | ${total} round${total === 1 ? "" : "s"} pooled`;
+    }
+  }
+
+  function renderHeatmapCourseChips(rounds, scope) {
+    if (!els.heatmapCourseChips) return;
+    // One chip per *physical* course the user has played. Deerwood collapses
+    // to a single "Deerwood" chip regardless of which child course id their
+    // rounds are tagged with.
+    const seen = new Set();
+    const chips = [];
+    rounds.forEach((round) => {
+      if (isDeerwoodCourseId(round.courseId)) {
+        if (seen.has("deerwood")) return;
+        seen.add("deerwood");
+        chips.push({ key: "deerwood", label: "Deerwood", representativeId: round.courseId });
+      } else {
+        if (seen.has(round.courseId)) return;
+        seen.add(round.courseId);
+        const course = getCourse(round.courseId);
+        chips.push({ key: round.courseId, label: course ? course.name : round.courseId, representativeId: round.courseId });
+      }
+    });
+
+    if (!chips.length) {
+      els.heatmapCourseChips.innerHTML = "";
+      return;
+    }
+
+    const activeKey = scope
+      ? (isDeerwoodCourseId(scope.courseId) ? "deerwood" : scope.courseId)
+      : null;
+
+    els.heatmapCourseChips.innerHTML = chips.map((chip) => `
+      <button type="button"
+              class="heatmap-chip${chip.key === activeKey ? " active" : ""}"
+              data-course-key="${escapeHtml(chip.key)}"
+              data-rep-id="${escapeHtml(chip.representativeId)}">
+        ${escapeHtml(chip.label)}
+      </button>
+    `).join("");
+  }
+
+  function renderHeatmapNineChips(scope) {
+    if (!els.heatmapNineChips) return;
+    const isDeerwood = !!(scope && isDeerwoodCourseId(scope.courseId));
+    els.heatmapNineChips.hidden = !isDeerwood;
+    if (!isDeerwood) {
+      els.heatmapNineChips.innerHTML = "";
+      return;
+    }
+    els.heatmapNineChips.innerHTML = HEATMAP_NINES.map((nine) => `
+      <button type="button"
+              class="heatmap-chip${scope.nine === nine ? " active" : ""}"
+              data-nine="${nine}">
+        ${nine.charAt(0).toUpperCase() + nine.slice(1)}
+      </button>
+    `).join("");
+  }
+
+  function persistHeatmapScope() {
+    try {
+      if (heatmapScope) localStorage.setItem(HEATMAP_SCOPE_KEY, JSON.stringify(heatmapScope));
+      else localStorage.removeItem(HEATMAP_SCOPE_KEY);
+    } catch {}
+  }
+
+  function setHeatmapCourse(courseKey, representativeId, rounds) {
+    if (courseKey === "deerwood") {
+      // Preserve the user's nine selection if they had one; otherwise pick the
+      // most-played nine.
+      let nine = heatmapScope && isDeerwoodCourseId(heatmapScope.courseId)
+        ? heatmapScope.nine
+        : null;
+      if (!nine) {
+        const dflt = defaultHeatmapScope(rounds);
+        if (dflt && isDeerwoodCourseId(dflt.courseId)) nine = dflt.nine;
+      }
+      if (!nine) nine = "buck";
+      heatmapScope = { courseId: representativeId, nine };
+    } else {
+      heatmapScope = { courseId: courseKey };
+    }
+    persistHeatmapScope();
+    renderHeatmap(rounds);
+  }
+
+  function setHeatmapNine(nine, rounds) {
+    if (!heatmapScope || !isDeerwoodCourseId(heatmapScope.courseId)) return;
+    heatmapScope = { ...heatmapScope, nine };
+    persistHeatmapScope();
+    renderHeatmap(rounds);
+  }
+
   function renderHoleLists(rounds) {
     const groups = getHoleGroups(rounds).filter((group) => group.rounds >= 1);
     const best = [...groups].sort((a, b) => a.avgToPar - b.avgToPar).slice(0, 5);
@@ -3695,6 +3992,7 @@
     "recent-rounds": "trends",
     "handicap-calculator": "trends",
     "strokes-gained": "trends",
+    "heatmap": "holes",
     "scoring-distribution": "holes",
     "spotlight": "holes",
     "best-holes": "holes",
@@ -3713,7 +4011,7 @@
   // Scorecards form a single combined view).
   const SUBSECTION_DEFAULTS = {
     trends: "recent-rounds",
-    holes: "scoring-distribution",
+    holes: "heatmap",
     clubs: "tee-club-performance"
   };
 
@@ -4252,6 +4550,7 @@
     renderDeerwoodByNine(rounds);
     renderParStats(rounds);
     renderHoleLists(rounds);
+    renderHeatmap(rounds);
     renderStrokesGained(rounds);
     renderPuttingPanel(rounds);
     renderScoringDistribution(rounds);
@@ -4754,6 +5053,23 @@
       const button = event.target.closest("[data-scoring-bucket]");
       if (!button || button.disabled) return;
       openScoringBucketSheet(button.dataset.scoringBucket);
+    });
+  }
+  // Heatmap chip handlers — course toggle + nine toggle.
+  // Cell taps (drill-down) come in a follow-up commit; the cell is a button
+  // for now so screen readers announce it correctly.
+  if (els.heatmapCourseChips) {
+    els.heatmapCourseChips.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-course-key]");
+      if (!button) return;
+      setHeatmapCourse(button.dataset.courseKey, button.dataset.repId, getFilteredRounds());
+    });
+  }
+  if (els.heatmapNineChips) {
+    els.heatmapNineChips.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-nine]");
+      if (!button) return;
+      setHeatmapNine(button.dataset.nine, getFilteredRounds());
     });
   }
   if (els.holePickerList) {

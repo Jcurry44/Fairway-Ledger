@@ -2445,6 +2445,200 @@ body.floating-card-nav-visible .floating-card-nav {
   transform: scale(0.99);
 }
 
+/* ============================================================
+   Course Heatmap
+   ============================================================
+   Visual scorecard: each physical hole is a color-coded cell
+   showing average score and delta-vs-par. Color encodes how the
+   user is performing on that hole — green = under, red = over.
+   Replaces the Spotlight + Best Holes + Worst Holes panels.
+   Future commits: tap-to-drill-down sheet, metric toggle. */
+
+/* Heatmap palette — derived from the app's existing light theme variables
+   (--green, --gold, --red) so it sits naturally next to the other panels.
+   Each tier has a darker text color so the delta number stays readable. */
+
+.heatmap-course-chips,
+.heatmap-nine-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 14px;
+}
+
+.heatmap-chip {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--panel-soft);
+  color: var(--muted);
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  font-family: inherit;
+}
+
+.heatmap-chip:hover {
+  color: var(--ink);
+  border-color: #b8c4b9;
+}
+
+.heatmap-chip.active {
+  background: var(--green);
+  color: #ffffff;
+  border-color: var(--green-dark);
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 6px;
+  margin: 0;
+}
+
+/* On phones, 9-across gets tight. Wrap to two rows of ~5. */
+@media (max-width: 540px) {
+  .heatmap-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+.heatmap-cell {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 10px 4px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.12s ease;
+  font-family: inherit;
+  color: inherit;
+  min-height: 72px;
+  text-align: center;
+}
+
+.heatmap-cell:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(20, 32, 28, 0.12);
+}
+
+.heatmap-cell:active {
+  transform: scale(0.97);
+}
+
+.heatmap-cell-num {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.78;
+}
+
+.heatmap-cell-delta {
+  font-size: 1.05rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.heatmap-cell-par {
+  font-size: 0.66rem;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
+.heatmap-cell-rounds {
+  font-size: 0.6rem;
+  opacity: 0.5;
+  margin-top: 2px;
+}
+
+/* Color scale — tuned for the light theme. Better-than-par leans green,
+   bogey leans gold, double+ leans red. Saturation increases as you drift
+   further from par so extremes pop visually. */
+.heatmap-cell.tier-eagle {
+  background: #14633f;
+  color: #f3fff5;
+  border-color: #0c4a2f;
+}
+.heatmap-cell.tier-birdie {
+  background: #1f7a59;
+  color: #ffffff;
+  border-color: #155c41;
+}
+.heatmap-cell.tier-under {
+  background: #c5e3d1;
+  color: #123f32;
+  border-color: #9ec8ae;
+}
+.heatmap-cell.tier-par {
+  background: #f1f2ec;
+  color: var(--ink);
+  border-color: var(--line);
+}
+.heatmap-cell.tier-bogey {
+  background: #f1d39b;
+  color: #6b4513;
+  border-color: #d8b271;
+}
+.heatmap-cell.tier-double {
+  background: #d97a6a;
+  color: #ffffff;
+  border-color: #b54a3b;
+}
+.heatmap-cell.tier-triple {
+  background: #8e2419;
+  color: #fff0ec;
+  border-color: #631710;
+}
+.heatmap-cell.tier-empty {
+  background: var(--panel-soft);
+  border: 1px dashed #c8d0c8;
+  color: var(--muted);
+  cursor: default;
+}
+.heatmap-cell.tier-empty:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.heatmap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 14px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  align-items: center;
+}
+
+.heatmap-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.heatmap-legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  display: inline-block;
+  border: 1px solid rgba(0,0,0,0.06);
+}
+
+.heatmap-empty-message {
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding: 24px 0;
+  text-align: center;
+}
+
 /* Scoring distribution panel — birdies/pars/bogeys/etc with drill-down. */
 
 .scoring-distribution {

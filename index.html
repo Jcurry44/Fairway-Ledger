@@ -11,11 +11,11 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Fairway Ledger</title>
-    <link rel="stylesheet" href="./styles.css?v=2026-05-23b">
-    <script src="./data/courses.js?v=2026-05-23b" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-23b" defer></script>
-    <script src="./lib/shapes.js?v=2026-05-23b" defer></script>
-    <script src="./app.js?v=2026-05-23b" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-23c">
+    <script src="./data/courses.js?v=2026-05-23c" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-23c" defer></script>
+    <script src="./lib/shapes.js?v=2026-05-23c" defer></script>
+    <script src="./app.js?v=2026-05-23c" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -85,6 +85,7 @@
           </nav>
 
           <nav class="home-subchips" data-home-section="holes" aria-label="Holes">
+            <button class="home-subchip" type="button" data-home-subsection-target="heatmap">Map</button>
             <button class="home-subchip" type="button" data-home-subsection-target="scoring-distribution">Distribution</button>
             <button class="home-subchip" type="button" data-home-subsection-target="par-3-4-5">Par 3/4/5</button>
             <button class="home-subchip" type="button" data-home-subsection-target="spotlight">Spotlight</button>
@@ -174,6 +175,20 @@
                 <span class="panel-note">make % by first-putt length</span>
               </div>
               <div id="puttingPanel" class="putting-panel"></div>
+            </article>
+
+            <article class="panel wide-panel" data-panel-id="heatmap">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Course view</p>
+                  <h2>Heatmap</h2>
+                </div>
+                <span class="panel-note" id="heatmapNote">average vs par per hole</span>
+              </div>
+              <div id="heatmapCourseChips" class="heatmap-course-chips" role="tablist" aria-label="Course"></div>
+              <div id="heatmapNineChips" class="heatmap-nine-chips" role="tablist" aria-label="Nine" hidden></div>
+              <div id="heatmapGrid" class="heatmap-grid" aria-live="polite"></div>
+              <div id="heatmapLegend" class="heatmap-legend"></div>
             </article>
 
             <article class="panel wide-panel">
