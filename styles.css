@@ -3545,56 +3545,6 @@ body.floating-card-nav-visible .floating-card-nav {
   font-style: italic;
 }
 
-.latest-narrative {
-  margin: 12px 0 16px;
-  padding: 18px 20px;
-  border-radius: 14px;
-  background:
-    linear-gradient(135deg, #102f26 0%, #1c4c3d 60%, #1d3f57 100%);
-  color: #f5f9f6;
-  box-shadow: 0 16px 36px rgba(8, 26, 21, 0.22);
-}
-
-.latest-narrative[hidden] {
-  display: none;
-}
-
-.latest-narrative-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.latest-narrative-header .eyebrow {
-  color: #c9ded3;
-  margin: 0;
-}
-
-.latest-narrative-meta {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  color: rgba(245, 249, 246, 0.72);
-  font-size: 0.86rem;
-  font-weight: 700;
-}
-
-.latest-narrative-meta strong {
-  color: #ffffff;
-  font-size: 1.15rem;
-  font-weight: 900;
-}
-
-.latest-narrative-text {
-  margin: 0;
-  font-size: 1rem;
-  line-height: 1.55;
-  color: #f5f9f6;
-}
-
 .round-row-main {
   display: flex;
   flex-direction: column;

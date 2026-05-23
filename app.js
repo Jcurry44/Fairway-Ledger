@@ -416,7 +416,6 @@
     bucketSheetClose: document.getElementById("bucketSheetClose"),
     bucketSheetTitle: document.getElementById("bucketSheetTitle"),
     bucketSheetList: document.getElementById("bucketSheetList"),
-    latestNarrative: document.getElementById("latestNarrative"),
     courseLookupForm: document.getElementById("courseLookupForm"),
     courseLookupQuery: document.getElementById("courseLookupQuery"),
     courseLookupResults: document.getElementById("courseLookupResults"),
@@ -697,6 +696,9 @@
   }
 
   function mergeNewDefaultCourses(saved) {
+    // For Deerwood courses, refresh from the latest sample data so layout/
+    // par/yardage updates land on returning users — but preserve any user-
+    // entered hazards on those holes.
     const defaultDeerwoodCourses = sampleCourses.filter((course) => isDeerwoodCourseId(course.id));
     const defaultDeerwoodById = new Map(defaultDeerwoodCourses.map((course) => [course.id, course]));
     const updatedCourses = saved.courses.map((course) => {
@@ -713,10 +715,16 @@
       });
       return fresh;
     });
+    // Add ANY default catalog course the user doesn't have yet — Deerwood
+    // and every other shipped course (Ridgeview, Lake County, the WNY
+    // additions and their tee variants). Previously this was restricted to
+    // Deerwood-prefixed ids, which meant new courses added in later deploys
+    // silently never appeared for returning users (they only showed up on a
+    // fresh install). That was a real bug — fixed by widening the filter.
     const existingCourseIds = new Set(updatedCourses.map((course) => course.id));
-    const missingDefaultCourses = defaultDeerwoodCourses.filter((course) => {
-      return course.id.startsWith("deerwood-") && !existingCourseIds.has(course.id);
-    });
+    const missingDefaultCourses = sampleCourses.filter(
+      (course) => !existingCourseIds.has(course.id)
+    );
 
     const migrated = {
       ...saved,
@@ -3840,42 +3848,6 @@
       ${penaltyHtml}`;
   }
 
-  function renderLatestNarrative() {
-    if (!els.latestNarrative) return;
-    if (!state.rounds.length) {
-      els.latestNarrative.hidden = true;
-      els.latestNarrative.innerHTML = "";
-      return;
-    }
-    const latest = [...state.rounds].sort((a, b) => b.date.localeCompare(a.date))[0];
-    // Always regenerate the headline narrative so any improvements to the
-    // generator (labeling fixes, new themes, etc.) propagate to the visible
-    // panel. Older rounds in Recent Scorecards keep their stored narrative.
-    const freshNarrative = generateRoundNarrative(latest, state.rounds);
-    if (freshNarrative && freshNarrative !== latest.narrative) {
-      latest.narrative = freshNarrative;
-      saveState();
-    }
-    if (!freshNarrative) {
-      els.latestNarrative.hidden = true;
-      els.latestNarrative.innerHTML = "";
-      return;
-    }
-    const course = getCourse(latest.courseId);
-    const courseLabel = course ? course.name : "Unknown course";
-    const totals = roundTotals(latest);
-    els.latestNarrative.hidden = false;
-    els.latestNarrative.innerHTML = `
-      <div class="latest-narrative-header">
-        <p class="eyebrow">Latest round</p>
-        <div class="latest-narrative-meta">
-          <strong>${totals.gross} (${formatSigned(totals.toPar, 0)})</strong>
-          <span>${escapeHtml(latest.date)} · ${escapeHtml(courseLabel)}</span>
-        </div>
-      </div>
-      <p class="latest-narrative-text">${escapeHtml(freshNarrative)}</p>`;
-  }
-
   function renderStrokesGained(rounds) {
     const sgRounds = rounds
       .map((round) => {
@@ -4796,7 +4768,6 @@
     if (!els.roundCourse.value) els.roundCourse.value = DEERWOOD_COURSE_ID;
     renderScorecard(getSelectedRoundCourse());
     renderCourseBrief();
-    renderLatestNarrative();
     const rounds = getFilteredRounds();
     renderMetrics(rounds);
     renderHomeInsights(rounds);
