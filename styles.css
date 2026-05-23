@@ -2712,6 +2712,209 @@ body.floating-card-nav-visible .floating-card-nav {
   text-align: center;
 }
 
+/* ============================================================
+   Heatmap drill-down sheet
+   ============================================================
+   Slides up from the bottom when a heatmap cell is tapped. Shows
+   the full picture for one physical hole: headline stats, scoring
+   distribution, per-round history, and any notes written on that
+   hole. Replaces the Spotlight panel's job. */
+
+.heatmap-drilldown-sheet {
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.heatmap-drilldown-body {
+  padding: 0 18px 28px;
+}
+
+.hd-meta {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0 0 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hd-meta strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.hd-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.hd-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  gap: 2px;
+}
+
+.hd-stat-num {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.hd-stat-num.under  { color: var(--green); }
+.hd-stat-num.over   { color: var(--gold); }
+.hd-stat-num.way-over { color: var(--red); }
+
+.hd-stat-label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.hd-section-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 18px 0 10px;
+}
+
+.hd-distribution {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hd-dist-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.hd-dist-chip .hd-dist-count {
+  font-size: 0.95rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.hd-dist-chip.zero {
+  opacity: 0.4;
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+}
+
+.hd-dist-chip.eagle  { background: #14633f; color: #f3fff5; }
+.hd-dist-chip.birdie { background: #1f7a59; color: #ffffff; }
+.hd-dist-chip.par    { background: #f1f2ec; color: var(--ink); border-color: var(--line); }
+.hd-dist-chip.bogey  { background: #f1d39b; color: #6b4513; }
+.hd-dist-chip.double { background: #d97a6a; color: #ffffff; }
+.hd-dist-chip.triple { background: #8e2419; color: #fff0ec; }
+
+.hd-rounds-list,
+.hd-notes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hd-round-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.hd-round-date {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.hd-round-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.hd-round-score-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  border: 1px solid transparent;
+}
+
+.hd-round-score-num.eagle  { background: #14633f; color: #f3fff5; }
+.hd-round-score-num.birdie { background: #1f7a59; color: #ffffff; }
+.hd-round-score-num.par    { background: #f1f2ec; color: var(--ink); border-color: var(--line); }
+.hd-round-score-num.bogey  { background: #f1d39b; color: #6b4513; }
+.hd-round-score-num.double { background: #d97a6a; color: #ffffff; }
+.hd-round-score-num.triple { background: #8e2419; color: #fff0ec; }
+
+.hd-round-meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+  display: flex;
+  gap: 8px;
+}
+
+.hd-note-row {
+  padding: 10px 12px;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.hd-note-row .hd-note-date {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.hd-note-row .hd-note-text {
+  font-size: 0.9rem;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.hd-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 6px 0;
+}
+
 /* Scoring distribution panel — birdies/pars/bogeys/etc with drill-down. */
 
 .scoring-distribution {

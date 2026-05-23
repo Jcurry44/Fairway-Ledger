@@ -377,17 +377,10 @@
     roundSubmitButton: document.getElementById("roundSubmitButton"),
     scorecardGrid: document.getElementById("scorecardGrid"),
     roundPreview: document.getElementById("roundPreview"),
-    spotlightCourse: document.getElementById("spotlightCourse"),
-    spotlightHole: document.getElementById("spotlightHole"),
-    spotlightStats: document.getElementById("spotlightStats"),
-    spotlightHistory: document.getElementById("spotlightHistory"),
-    spotlightNotes: document.getElementById("spotlightNotes"),
     trendChart: document.getElementById("trendChart"),
     handicapPanel: document.getElementById("handicapPanel"),
     courseStats: document.getElementById("courseStats"),
     parStats: document.getElementById("parStats"),
-    bestHoles: document.getElementById("bestHoles"),
-    worstHoles: document.getElementById("worstHoles"),
     recentRounds: document.getElementById("recentRounds"),
     strokesGainedPanel: document.getElementById("strokesGainedPanel"),
     puttingPanel: document.getElementById("puttingPanel"),
@@ -398,6 +391,11 @@
     heatmapGrid: document.getElementById("heatmapGrid"),
     heatmapLegend: document.getElementById("heatmapLegend"),
     heatmapNote: document.getElementById("heatmapNote"),
+    heatmapDrilldownOverlay: document.getElementById("heatmapDrilldownOverlay"),
+    heatmapDrilldownBackdrop: document.getElementById("heatmapDrilldownBackdrop"),
+    heatmapDrilldownClose: document.getElementById("heatmapDrilldownClose"),
+    heatmapDrilldownTitle: document.getElementById("heatmapDrilldownTitle"),
+    heatmapDrilldownBody: document.getElementById("heatmapDrilldownBody"),
     teeClubPanel: document.getElementById("teeClubPanel"),
     deerwoodByNinePanel: document.getElementById("deerwoodByNinePanel"),
     deerwoodByNineCard: document.getElementById("deerwoodByNineCard"),
@@ -1113,13 +1111,9 @@
 
     const currentRoundCourse = els.roundCourse.value;
     const currentFilterCourse = els.filterCourse.value;
-    const currentSpotlightCourse = els.spotlightCourse.value;
 
     els.filterCourse.innerHTML = courseOptions;
     els.roundCourse.innerHTML = roundOptions;
-    els.spotlightCourse.innerHTML = [...nonDeerwoodCourses, ...deerwoodRoundCourses]
-      .map((course) => `<option value="${course.id}">${escapeHtml(course.name)} (${escapeHtml(course.tee)})</option>`)
-      .join("");
 
     if (currentFilterCourse === DEERWOOD_COURSE_ID || nonDeerwoodCourses.some((course) => course.id === currentFilterCourse)) {
       els.filterCourse.value = currentFilterCourse;
@@ -1133,11 +1127,6 @@
       els.roundCourse.value = DEERWOOD_COURSE_ID;
     }
 
-    const spotlightCourseIds = [...nonDeerwoodCourses, ...deerwoodRoundCourses].map((course) => course.id);
-    if (spotlightCourseIds.includes(currentSpotlightCourse)) {
-      els.spotlightCourse.value = currentSpotlightCourse;
-    }
-
     const tees = [...new Set(state.rounds.map((round) => round.tee).filter(Boolean))].sort();
     const currentTee = els.filterTee.value;
     els.filterTee.innerHTML = [
@@ -1147,7 +1136,6 @@
     if (tees.includes(currentTee)) els.filterTee.value = currentTee;
 
     renderRoundSetupOptions();
-    renderSpotlightHoleOptions();
   }
 
   function renderRoundSetupOptions() {
@@ -3112,35 +3100,207 @@
     renderHeatmap(rounds);
   }
 
-  function renderHoleLists(rounds) {
-    const groups = getHoleGroups(rounds).filter((group) => group.rounds >= 1);
-    const best = [...groups].sort((a, b) => a.avgToPar - b.avgToPar).slice(0, 5);
-    const worst = [...groups].sort((a, b) => b.avgToPar - a.avgToPar).slice(0, 5);
-    els.bestHoles.innerHTML = best.length ? best.map((group) => holeCard(group, false)).join("") : emptyState("No hole data yet.");
-    els.worstHoles.innerHTML = worst.length ? worst.map((group) => holeCard(group, true)).join("") : emptyState("No hole data yet.");
-    [els.bestHoles, els.worstHoles].forEach((container) => {
-      container.querySelectorAll("[data-spotlight-course]").forEach((card) => {
-        card.addEventListener("click", () => {
-          jumpToSpotlight(card.dataset.spotlightCourse, Number(card.dataset.spotlightHole));
-        });
-      });
-    });
+  // ---- Drill-down sheet --------------------------------------------------
+  //
+  // When the user taps a heatmap cell, a bottom sheet slides up showing the
+  // full history for that one physical hole: summary numbers, scoring
+  // distribution, per-round history, and any per-hole notes ever written.
+  // Replaces the Spotlight panel's job — without dropdowns, without forms,
+  // and accessible from anywhere the same physical hole is referenced.
+
+  // Tracks which physical hole the sheet is currently showing, so a re-render
+  // (e.g. after a round was just saved) can rebuild the sheet in place.
+  let activeDrilldownPhysicalId = null;
+
+  // Classify score - par into a tier label used by the distribution chips
+  // and the score-num color swatch in the rounds list.
+  function scoreTier(score, par) {
+    if (!Number.isFinite(score) || !Number.isFinite(par)) return null;
+    const d = score - par;
+    if (d <= -2) return "eagle";
+    if (d === -1) return "birdie";
+    if (d === 0) return "par";
+    if (d === 1) return "bogey";
+    if (d === 2) return "double";
+    return "triple";
   }
 
-  function jumpToSpotlight(courseId, holeNumber) {
-    if (!els.spotlightCourse || !els.spotlightHole) return;
-    // Make sure the course is selectable in the spotlight dropdown first.
-    if (![...els.spotlightCourse.options].some((opt) => opt.value === courseId)) return;
-    els.spotlightCourse.value = courseId;
-    renderSpotlightHoleOptions();
-    if ([...els.spotlightHole.options].some((opt) => Number(opt.value) === holeNumber)) {
-      els.spotlightHole.value = String(holeNumber);
+  // Pure-ish: walk every round once and pull everything that touches this
+  // physical hole. Returns null if the hole has no history at all.
+  function getHoleDetailData(physicalId, rounds) {
+    if (!physicalId) return null;
+    const entries = [];
+    let par = null, label = null, yards = null, hcp = null;
+    rounds.forEach((round) => {
+      if (!Array.isArray(round.holes)) return;
+      round.holes.forEach((hole) => {
+        if (physicalHoleId(round.courseId, hole) !== physicalId) return;
+        if (!Number.isFinite(hole.score) || hole.score <= 0) return;
+        entries.push({
+          date: round.date,
+          score: hole.score,
+          par: hole.par,
+          putts: Number.isFinite(hole.putts) ? hole.putts : null,
+          gir: !!hole.gir,
+          fairway: hole.fairway || "",
+          penalties: Number.isFinite(hole.penalties) ? hole.penalties : 0,
+          note: hole.note ? String(hole.note).trim() : "",
+          courseId: round.courseId,
+        });
+        // Track the most recent par/label/yards as the canonical display
+        // (par is a physical-hole property and shouldn't change, but yards
+        // legitimately vary by tee).
+        if (!label || round.date >= entries[entries.length - 1].date) {
+          par = hole.par;
+          label = hole.label || `#${hole.number}`;
+          if (Number.isFinite(hole.yards) && hole.yards > 0) yards = hole.yards;
+          if (Number.isFinite(hole.hcp) && hole.hcp > 0) hcp = hole.hcp;
+        }
+      });
+    });
+    if (!entries.length) return null;
+    // Sort newest-first for the rounds list.
+    entries.sort((a, b) => b.date.localeCompare(a.date));
+
+    const scores = entries.map((e) => e.score);
+    const putts = entries.map((e) => e.putts).filter((p) => Number.isFinite(p));
+    const buckets = { eagle: 0, birdie: 0, par: 0, bogey: 0, double: 0, triple: 0 };
+    entries.forEach((e) => {
+      const t = scoreTier(e.score, e.par);
+      if (t && buckets[t] !== undefined) buckets[t]++;
+    });
+    const girCount = entries.filter((e) => e.gir).length;
+    const notes = entries.filter((e) => e.note).map((e) => ({ date: e.date, note: e.note }));
+
+    return {
+      physicalId,
+      label,
+      par,
+      yards,
+      hcp,
+      count: entries.length,
+      avgScore: average(scores),
+      avgVsPar: average(scores) - par,
+      best: Math.min(...scores),
+      worst: Math.max(...scores),
+      avgPutts: putts.length ? average(putts) : NaN,
+      girCount,
+      girPct: entries.length ? girCount / entries.length : 0,
+      buckets,
+      notes,
+      entries,
+    };
+  }
+
+  function openHeatmapDrilldown(physicalId) {
+    if (!els.heatmapDrilldownOverlay) return;
+    activeDrilldownPhysicalId = physicalId;
+    renderHeatmapDrilldown();
+    els.heatmapDrilldownOverlay.hidden = false;
+    document.body.classList.add("hole-picker-open");
+  }
+
+  function closeHeatmapDrilldown() {
+    if (!els.heatmapDrilldownOverlay) return;
+    els.heatmapDrilldownOverlay.hidden = true;
+    activeDrilldownPhysicalId = null;
+    document.body.classList.remove("hole-picker-open");
+  }
+
+  function renderHeatmapDrilldown() {
+    if (!els.heatmapDrilldownBody || !activeDrilldownPhysicalId) return;
+    const rounds = getFilteredRounds();
+    const data = getHoleDetailData(activeDrilldownPhysicalId, rounds);
+    if (!data) {
+      els.heatmapDrilldownBody.innerHTML = `<div class="hd-empty">No history for this hole yet.</div>`;
+      if (els.heatmapDrilldownTitle) els.heatmapDrilldownTitle.textContent = "Hole detail";
+      return;
     }
-    renderSpotlight();
-    const spotlightPanel = document.querySelector(".spotlight-panel");
-    if (spotlightPanel && typeof spotlightPanel.scrollIntoView === "function") {
-      spotlightPanel.scrollIntoView({ block: "start", behavior: "smooth" });
-    }
+
+    if (els.heatmapDrilldownTitle) els.heatmapDrilldownTitle.textContent = data.label;
+
+    const vsClass = heatmapVsParClass(data.avgVsPar);
+    const distOrder = ["eagle", "birdie", "par", "bogey", "double", "triple"];
+    const distLabel = { eagle: "Eagle+", birdie: "Birdie", par: "Par", bogey: "Bogey", double: "Double", triple: "Triple+" };
+
+    const distChips = distOrder.map((tier) => {
+      const count = data.buckets[tier] || 0;
+      const cls = count === 0 ? "zero" : tier;
+      return `<span class="hd-dist-chip ${cls}"><span class="hd-dist-count">${count}</span><span class="hd-dist-label">${distLabel[tier]}</span></span>`;
+    }).join("");
+
+    const roundsList = data.entries.slice(0, 12).map((e) => {
+      const tier = scoreTier(e.score, e.par) || "par";
+      const metaParts = [];
+      if (Number.isFinite(e.putts)) metaParts.push(`${e.putts} putt${e.putts === 1 ? "" : "s"}`);
+      if (e.gir) metaParts.push("GIR");
+      if (e.fairway === "hit") metaParts.push("FW");
+      else if (e.fairway === "left") metaParts.push("L");
+      else if (e.fairway === "right") metaParts.push("R");
+      if (e.penalties > 0) metaParts.push(`${e.penalties} pen`);
+      return `
+        <li class="hd-round-row">
+          <span class="hd-round-date">${escapeHtml(e.date)}</span>
+          <span class="hd-round-score">
+            <span class="hd-round-score-num ${tier}">${e.score}</span>
+            <span class="hd-round-meta">${metaParts.map((p) => `<span>${escapeHtml(p)}</span>`).join("")}</span>
+          </span>
+        </li>
+      `;
+    }).join("");
+
+    const notesList = data.notes.length
+      ? data.notes.slice(0, 8).map((n) => `
+          <li class="hd-note-row">
+            <div class="hd-note-date">${escapeHtml(n.date)}</div>
+            <div class="hd-note-text">${escapeHtml(n.note)}</div>
+          </li>
+        `).join("")
+      : `<li class="hd-empty">No notes written on this hole yet.</li>`;
+
+    const yardsText = Number.isFinite(data.yards) && data.yards > 0 ? `${data.yards} yds` : "";
+    const hcpText = Number.isFinite(data.hcp) && data.hcp > 0 ? `hcp ${data.hcp}` : "";
+    const metaBits = [`par <strong>${data.par}</strong>`, yardsText, hcpText, `<strong>${data.count}</strong> round${data.count === 1 ? "" : "s"}`].filter(Boolean).join(" &middot; ");
+
+    els.heatmapDrilldownBody.innerHTML = `
+      <p class="hd-meta">${metaBits}</p>
+
+      <div class="hd-stat-grid">
+        <div class="hd-stat">
+          <span class="hd-stat-num">${data.avgScore.toFixed(2)}</span>
+          <span class="hd-stat-label">Avg</span>
+        </div>
+        <div class="hd-stat">
+          <span class="hd-stat-num ${vsClass}">${formatDelta(data.avgVsPar)}</span>
+          <span class="hd-stat-label">vs par</span>
+        </div>
+        <div class="hd-stat">
+          <span class="hd-stat-num">${data.best}</span>
+          <span class="hd-stat-label">Best</span>
+        </div>
+        <div class="hd-stat">
+          <span class="hd-stat-num">${data.worst}</span>
+          <span class="hd-stat-label">Worst</span>
+        </div>
+        <div class="hd-stat">
+          <span class="hd-stat-num">${(data.girPct * 100).toFixed(0)}%</span>
+          <span class="hd-stat-label">GIR</span>
+        </div>
+        <div class="hd-stat">
+          <span class="hd-stat-num">${Number.isFinite(data.avgPutts) ? data.avgPutts.toFixed(2) : "—"}</span>
+          <span class="hd-stat-label">Avg putts</span>
+        </div>
+      </div>
+
+      <h4 class="hd-section-title">Scoring distribution</h4>
+      <div class="hd-distribution">${distChips}</div>
+
+      <h4 class="hd-section-title">Recent rounds</h4>
+      <ul class="hd-rounds-list">${roundsList}</ul>
+
+      <h4 class="hd-section-title">Notes</h4>
+      <ul class="hd-notes-list">${notesList}</ul>
+    `;
   }
 
   const PUTT_DISTANCE_BUCKETS = [
@@ -3700,17 +3860,6 @@
       </svg>`;
   }
 
-  function holeCard(group, bad) {
-    return `
-      <button type="button" class="hole-card" data-spotlight-course="${escapeHtml(group.courseId)}" data-spotlight-hole="${group.number}" aria-label="View hole spotlight">
-        <div>
-          <strong>${escapeHtml(group.courseName)} ${escapeHtml(group.label)}</strong>
-          <span class="subtext">Par ${group.par} | ${group.rounds} rounds | best ${group.best}</span>
-        </div>
-        <span class="score-chip ${bad ? "bad" : ""}">${formatSigned(group.avgToPar)}</span>
-      </button>`;
-  }
-
   function generateRoundNarrative(round, allRounds) {
     if (!round || !Array.isArray(round.holes) || !round.holes.length) return "";
     const valid = round.holes.filter((hole) => Number.isFinite(hole.score) && hole.score > 0);
@@ -4094,9 +4243,6 @@
     "strokes-gained": "trends",
     "heatmap": "holes",
     "scoring-distribution": "holes",
-    "spotlight": "holes",
-    "best-holes": "holes",
-    "worst-holes": "holes",
     "par-3-4-5": "holes",
     "scoring-by-course": "holes",
     "scoring-by-nine": "holes",
@@ -4504,136 +4650,6 @@
     els.trendChart.innerHTML = `<div class="trend-bars" aria-label="Recent scoring trend">${bars}</div>`;
   }
 
-  function renderSpotlightHoleOptions() {
-    const course = getCourse(els.spotlightCourse.value) || state.courses[0];
-    if (!course) {
-      els.spotlightHole.innerHTML = "";
-      return;
-    }
-    const currentHole = Number(els.spotlightHole.value) || 1;
-    els.spotlightCourse.value = course.id;
-    els.spotlightHole.innerHTML = course.holes
-      .map((hole) => `<option value="${hole.number}">${escapeHtml(hole.label || `#${hole.number}`)}</option>`)
-      .join("");
-    if (course.holes.some((hole) => hole.number === currentHole)) {
-      els.spotlightHole.value = String(currentHole);
-    }
-  }
-
-  function renderSpotlight() {
-    const courseId = els.spotlightCourse.value;
-    const holeNumber = Number(els.spotlightHole.value);
-    const course = getCourse(courseId);
-    if (!course || !holeNumber) {
-      els.spotlightStats.innerHTML = emptyState("No hole selected.");
-      els.spotlightHistory.innerHTML = "";
-      if (els.spotlightNotes) els.spotlightNotes.innerHTML = "";
-      return;
-    }
-
-    const courseHole = course.holes.find((hole) => hole.number === holeNumber);
-    if (!courseHole) {
-      els.spotlightStats.innerHTML = emptyState("No hole selected.");
-      els.spotlightHistory.innerHTML = "";
-      if (els.spotlightNotes) els.spotlightNotes.innerHTML = "";
-      return;
-    }
-    // Pool every round where this physical hole was played — across routings
-    // and tees — so "Buck 3" keeps one combined history.
-    const physId = physicalHoleId(courseId, courseHole);
-    const holeRounds = [];
-    state.rounds
-      .slice()
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .forEach((round) => {
-        round.holes.forEach((hole) => {
-          if (physicalHoleId(round.courseId, hole) !== physId) return;
-          if (!Number.isFinite(hole.score) || hole.score <= 0) return;
-          holeRounds.push({ round, hole });
-        });
-      });
-
-    if (!holeRounds.length) {
-      els.spotlightStats.innerHTML = emptyState("No saved rounds for this hole.");
-      els.spotlightHistory.innerHTML = "";
-      if (els.spotlightNotes) els.spotlightNotes.innerHTML = "";
-      return;
-    }
-
-    const scores = holeRounds.map((item) => item.hole.score);
-    const avgScore = average(scores);
-    const avgToPar = avgScore - courseHole.par;
-    const parOrBetter = holeRounds.filter((item) => item.hole.score <= item.hole.par).length;
-    const sgValues = holeRounds.map((item) => holeStrokesGained(item.hole)).filter((value) => value !== null);
-    const avgSg = sgValues.length ? average(sgValues) : NaN;
-
-    els.spotlightStats.innerHTML = `
-      <div class="spotlight-kpis">
-        <div><span>Average</span><strong>${avgScore.toFixed(2)}</strong></div>
-        <div><span>To par</span><strong>${formatSigned(avgToPar)}</strong></div>
-        <div><span>SG / hole</span><strong>${Number.isFinite(avgSg) ? formatSigned(avgSg, 2) : "--"}</strong></div>
-        <div><span>Best / worst</span><strong>${Math.min(...scores)} / ${Math.max(...scores)}</strong></div>
-        <div><span>Par or better</span><strong>${percentage(parOrBetter, holeRounds.length)}</strong></div>
-        <div><span>Yardage</span><strong>${courseHole.yards || "--"}</strong></div>
-      </div>`;
-
-    els.spotlightHistory.innerHTML = miniChart(holeRounds, courseHole.par);
-
-    if (els.spotlightNotes) {
-      const notedRounds = [...holeRounds]
-        .filter((item) => item.hole.note && String(item.hole.note).trim())
-        .sort((a, b) => b.round.date.localeCompare(a.round.date))
-        .slice(0, 5);
-      if (notedRounds.length) {
-        const rows = notedRounds.map((item) => {
-          const sg = holeStrokesGained(item.hole);
-          const sgChip = sg !== null ? ` <span class="spotlight-note-sg ${sg >= 0 ? "good" : "bad"}">SG ${formatSigned(sg, 2)}</span>` : "";
-          return `
-            <li class="spotlight-note">
-              <div class="spotlight-note-meta">
-                <strong>${escapeHtml(item.round.date)}</strong>
-                <span>Score ${item.hole.score} (${formatSigned(item.hole.score - item.hole.par, 0)})</span>${sgChip}
-              </div>
-              <p class="spotlight-note-text">${escapeHtml(item.hole.note)}</p>
-            </li>`;
-        }).join("");
-        els.spotlightNotes.innerHTML = `
-          <p class="spotlight-section-title">Recent notes</p>
-          <ul class="spotlight-note-list">${rows}</ul>`;
-      } else {
-        els.spotlightNotes.innerHTML = `
-          <p class="spotlight-section-title">Recent notes</p>
-          <p class="spotlight-note-empty">No narrative notes captured for this hole yet. Add one in the card view next time you play.</p>`;
-      }
-    }
-  }
-
-  function miniChart(items, par) {
-    const width = 360;
-    const height = 130;
-    const maxScore = Math.max(...items.map((item) => item.hole.score), par + 2);
-    const minScore = Math.min(...items.map((item) => item.hole.score), par - 1);
-    const range = Math.max(1, maxScore - minScore);
-    const points = items.map((item, index) => {
-      const x = items.length === 1 ? width / 2 : 20 + index * ((width - 40) / (items.length - 1));
-      const y = 20 + ((maxScore - item.hole.score) / range) * 75;
-      return { x, y, score: item.hole.score, date: item.round.date };
-    });
-    const path = points.map((point) => `${point.x},${point.y}`).join(" ");
-    const circles = points.map((point) => `
-      <circle cx="${point.x}" cy="${point.y}" r="5" fill="#217a57"></circle>
-      <text x="${point.x}" y="${point.y - 10}" text-anchor="middle" font-size="11" font-weight="800" fill="#19231f">${point.score}</text>
-    `).join("");
-
-    return `
-      <svg class="mini-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Hole score history">
-        <rect x="0" y="0" width="${width}" height="${height}" rx="8" fill="#fbfcfa"></rect>
-        <text x="14" y="24" font-size="12" font-weight="800" fill="#66746c">Score history</text>
-        <polyline points="${path}" fill="none" stroke="#2f6f9f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>
-        ${circles}
-      </svg>`;
-  }
-
   function renderAll() {
     renderSelectOptions();
     if (!els.roundDate.value) els.roundDate.value = today;
@@ -4649,7 +4665,6 @@
     renderCourseStats(rounds);
     renderDeerwoodByNine(rounds);
     renderParStats(rounds);
-    renderHoleLists(rounds);
     renderHeatmap(rounds);
     renderStrokesGained(rounds);
     renderPuttingPanel(rounds);
@@ -4662,7 +4677,11 @@
     tagHomePanelsWithSections();
     applyHomeSectionUi();
     updateFiltersButtonState();
-    renderSpotlight();
+    // If the drill-down sheet is open, refresh its contents against the
+    // freshly-rendered data (e.g. after saving a new round).
+    if (activeDrilldownPhysicalId && els.heatmapDrilldownOverlay && !els.heatmapDrilldownOverlay.hidden) {
+      renderHeatmapDrilldown();
+    }
   }
 
   function escapeHtml(value) {
@@ -5156,8 +5175,6 @@
     });
   }
   // Heatmap chip handlers — course toggle + nine toggle.
-  // Cell taps (drill-down) come in a follow-up commit; the cell is a button
-  // for now so screen readers announce it correctly.
   if (els.heatmapCourseChips) {
     els.heatmapCourseChips.addEventListener("click", (event) => {
       const button = event.target.closest("[data-course-key]");
@@ -5172,6 +5189,17 @@
       setHeatmapNine(button.dataset.nine, getFilteredRounds());
     });
   }
+  // Heatmap cell tap → drill-down sheet (delegated so we don't have to re-wire
+  // every render).
+  if (els.heatmapGrid) {
+    els.heatmapGrid.addEventListener("click", (event) => {
+      const cell = event.target.closest("[data-physical-id]");
+      if (!cell || cell.classList.contains("tier-empty")) return;
+      openHeatmapDrilldown(cell.dataset.physicalId);
+    });
+  }
+  if (els.heatmapDrilldownBackdrop) els.heatmapDrilldownBackdrop.addEventListener("click", closeHeatmapDrilldown);
+  if (els.heatmapDrilldownClose) els.heatmapDrilldownClose.addEventListener("click", closeHeatmapDrilldown);
   if (els.holePickerList) {
     els.holePickerList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-jump-hole]");
@@ -5201,6 +5229,7 @@
       if (els.holePickerOverlay && !els.holePickerOverlay.hidden) closeHolePicker();
       if (els.bucketSheetOverlay && !els.bucketSheetOverlay.hidden) closeScoringBucketSheet();
       if (els.filtersSheetOverlay && !els.filtersSheetOverlay.hidden) closeFiltersSheet();
+      if (els.heatmapDrilldownOverlay && !els.heatmapDrilldownOverlay.hidden) closeHeatmapDrilldown();
     }
   });
 
@@ -5249,17 +5278,11 @@
       renderCourseStats(rounds);
       renderDeerwoodByNine(rounds);
       renderParStats(rounds);
-      renderHoleLists(rounds);
+      renderHeatmap(rounds);
       renderHandicapPanel();
       updateFiltersButtonState();
     });
   });
-
-  els.spotlightCourse.addEventListener("change", () => {
-    renderSpotlightHoleOptions();
-    renderSpotlight();
-  });
-  els.spotlightHole.addEventListener("change", renderSpotlight);
 
   document.querySelectorAll("[data-tab-target]").forEach((button) => {
     button.addEventListener("click", () => setActiveTab(button.dataset.tabTarget));
