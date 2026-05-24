@@ -3242,17 +3242,29 @@
     return course ? course.name : scope.courseId;
   }
 
-  // Map avg-vs-par to a CSS tier class. Thresholds chosen so a hole you
-  // typically birdie reads green, a typical par reads neutral, and the deep
-  // red is reserved for holes that consistently destroy you (avg double+).
-  function heatmapTier(avgToPar) {
+  // Map a hole's avg-vs-par to a CSS tier class, RELATIVE to the user's
+  // own baseline for the current scope. Amateurs rarely average under par
+  // on any hole, so coloring by absolute vs-par leaves the heatmap looking
+  // all-red — useless. Coloring by (this hole's avg-vs-par) minus (your
+  // average vs-par across all holes in this scope) puts the meaning back:
+  // your easiest holes go green, your toughest red, regardless of where
+  // your absolute average sits.
+  //
+  // The displayed delta number on each cell still shows vs-par (so the
+  // absolute info is preserved); only the color encoding is relative.
+  function heatmapTier(avgToPar, baselineVsPar) {
     if (!Number.isFinite(avgToPar)) return "tier-empty";
-    if (avgToPar <= -0.8) return "tier-eagle";
-    if (avgToPar <= -0.25) return "tier-birdie";
-    if (avgToPar < -0.05) return "tier-under";
-    if (avgToPar < 0.25) return "tier-par";
-    if (avgToPar < 0.8) return "tier-bogey";
-    if (avgToPar < 1.5) return "tier-double";
+    // No baseline available (e.g. only one hole has data): fall back to a
+    // neutral color rather than guessing.
+    if (!Number.isFinite(baselineVsPar)) return "tier-par";
+    // delta < 0 means this hole plays easier than your average for this view.
+    const delta = avgToPar - baselineVsPar;
+    if (delta <= -0.7) return "tier-eagle";
+    if (delta <= -0.35) return "tier-birdie";
+    if (delta < -0.1) return "tier-under";
+    if (delta < 0.1) return "tier-par";
+    if (delta < 0.4) return "tier-bogey";
+    if (delta < 0.8) return "tier-double";
     return "tier-triple";
   }
 
@@ -3297,8 +3309,18 @@
 
     renderHeatmapSummary(scope, rounds);
 
+    // Compute the user's own per-hole baseline across this scope. The cell
+    // colors are RELATIVE to this baseline — your easiest holes pop green
+    // and your hardest go red regardless of where your absolute average is.
+    // Cells with no rounds are skipped so they don't drag the baseline.
+    const baselineVsPar = average(
+      cells
+        .filter((c) => Number.isFinite(c.avgToPar) && c.rounds > 0)
+        .map((c) => c.avgToPar)
+    );
+
     els.heatmapGrid.innerHTML = cells.map((cell) => {
-      const tier = heatmapTier(cell.avgToPar);
+      const tier = heatmapTier(cell.avgToPar, baselineVsPar);
       const delta = formatDelta(cell.avgToPar);
       const labelText = (() => {
         if (isDeerwoodCourseId(scope.courseId) && scope.nine) {
@@ -3324,10 +3346,10 @@
     // a whole row per tier.
     if (els.heatmapLegend) {
       els.heatmapLegend.innerHTML = `
-        <span class="heatmap-legend-item"><span class="heatmap-legend-swatch" style="background:#1f7a59"></span>Under par</span>
-        <span class="heatmap-legend-item"><span class="heatmap-legend-swatch" style="background:#f1f2ec"></span>Around par</span>
-        <span class="heatmap-legend-item"><span class="heatmap-legend-swatch" style="background:#f1d39b"></span>Bogey avg</span>
-        <span class="heatmap-legend-item"><span class="heatmap-legend-swatch" style="background:#d97a6a"></span>Double avg+</span>
+        <span class="heatmap-legend-item"><span class="heatmap-legend-swatch" style="background:#1f7a59"></span>Your strongest</span>
+        <span class="heatmap-legend-item"><span class="heatmap-legend-swatch" style="background:#f1f2ec"></span>Around your avg</span>
+        <span class="heatmap-legend-item"><span class="heatmap-legend-swatch" style="background:#f1d39b"></span>Tougher than usual</span>
+        <span class="heatmap-legend-item"><span class="heatmap-legend-swatch" style="background:#d97a6a"></span>Your toughest</span>
       `;
     }
 
