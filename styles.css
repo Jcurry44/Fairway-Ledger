@@ -1798,6 +1798,52 @@ body.floating-card-nav-visible .floating-card-nav {
   gap: 8px;
 }
 
+/* One section per par tier (Par 3s / Par 4s / Par 5s). Splitting like this
+   makes the panel about 3× taller, but the comparisons inside each tier
+   are the actually-useful question — "is my 3-wood better than my driver
+   on par 4s?" — not "how does my driver do across everything." */
+.tee-club-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.tee-club-section:first-of-type {
+  margin-top: 6px;
+}
+
+.tee-club-section-title {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.tee-club-section-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--muted);
+  opacity: 0.85;
+}
+
+.tee-club-section-empty .tee-club-section-msg {
+  margin: 0;
+  padding: 8px 10px;
+  background: #f4f6f3;
+  border: 1px dashed var(--line, #d8dfd7);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .penalty-club-section {
   margin-top: 14px;
   padding-top: 12px;

@@ -3847,11 +3847,16 @@
     if (els.bucketSheetClose) els.bucketSheetClose.focus();
   }
 
-  function computeTeeClubPerformance(rounds) {
+  // parFilter: pass 3 / 4 / 5 to restrict the aggregation to a single par
+  // tier. null (default) aggregates across all par types. Splitting by par
+  // is the real signal — a driver on par 5s is a totally different question
+  // than a driver on par 4s, and lumping them together hides that.
+  function computeTeeClubPerformance(rounds, parFilter = null) {
     const grouped = new Map();
     rounds.forEach((round) => {
       round.holes.forEach((hole) => {
         if (!Number.isFinite(hole.score) || hole.score <= 0) return;
+        if (parFilter !== null && hole.par !== parFilter) return;
         const teeClub = Array.isArray(hole.clubsHit) && hole.clubsHit.length ? hole.clubsHit[0] : null;
         if (!teeClub) return;
         if (!grouped.has(teeClub)) {
@@ -3998,45 +4003,65 @@
 
   function renderTeeClubPerformance(rounds) {
     if (!els.teeClubPanel) return;
-    const data = computeTeeClubPerformance(rounds);
+    const allData = computeTeeClubPerformance(rounds);
     const penaltyHtml = renderPenaltyClubsSection(computePenaltyClubs(rounds));
-    if (!data.length) {
+    if (!allData.length) {
       els.teeClubPanel.innerHTML = emptyState("Tag your tee shots in Clubs Hit (first club tapped = tee shot) to unlock tee-club performance.") + penaltyHtml;
       return;
     }
-    const total = data.reduce((sum, entry) => sum + entry.count, 0);
-    // Highlight the lowest-avg club, but only when there's a real comparison
-    // (at least 2 clubs with 5+ tee shots each). Tightened threshold vs the
-    // per-hole version because this aggregates across many different holes.
-    const eligibleForBest = data.filter((d) => d.count >= 5);
-    const bestClub = eligibleForBest.length >= 2
-      ? eligibleForBest.reduce((best, d) => (d.avgToPar < best.avgToPar ? d : best))
-      : null;
-    const rows = data.map((entry) => {
-      const parParts = [];
-      if (entry.par3) parParts.push(`${entry.par3}× par 3`);
-      if (entry.par4) parParts.push(`${entry.par4}× par 4`);
-      if (entry.par5) parParts.push(`${entry.par5}× par 5`);
-      if (entry.par6) parParts.push(`${entry.par6}× par 6`);
-      const parBreakdown = parParts.length ? parParts.join(" · ") : "";
-      const tier = heatmapTier(entry.avgToPar);
-      const isBest = bestClub && entry.club === bestClub.club && data.length > 1;
-      const sgText = Number.isFinite(entry.avgSg) ? formatSigned(entry.avgSg, 2) : "—";
+    const total = allData.reduce((sum, entry) => sum + entry.count, 0);
+
+    // Build one section per par tier. Splitting like this is the whole
+    // reason for this panel's existence — a 7-iron on a 175-yard par 3
+    // and a 7-iron lay-up on a par 5 are completely different shots, and
+    // averaging them together hides the signal.
+    function sectionHtml(label, data) {
+      if (!data.length) {
+        return `
+          <section class="tee-club-section tee-club-section-empty">
+            <h3 class="tee-club-section-title">${escapeHtml(label)}</h3>
+            <p class="tee-club-section-msg">No tagged tee shots yet for ${escapeHtml(label.toLowerCase())}.</p>
+          </section>`;
+      }
+      // Smaller "best club" threshold (3+ shots) than the all-pars version,
+      // since each par tier has fewer samples.
+      const eligibleForBest = data.filter((d) => d.count >= 3);
+      const bestClub = eligibleForBest.length >= 2
+        ? eligibleForBest.reduce((best, d) => (d.avgToPar < best.avgToPar ? d : best))
+        : null;
+      const rows = data.map((entry) => {
+        const tier = heatmapTier(entry.avgToPar);
+        const isBest = bestClub && entry.club === bestClub.club && data.length > 1;
+        const sgText = Number.isFinite(entry.avgSg) ? formatSigned(entry.avgSg, 2) : "—";
+        return `
+          <li class="tee-club-row${isBest ? " is-best" : ""}">
+            <div class="tee-club-row-main">
+              <strong>${escapeHtml(entry.club)}${isBest ? `<span class="hd-tc-best-flag">best avg</span>` : ""}</strong>
+              <span class="subtext">${entry.count} tee shot${entry.count === 1 ? "" : "s"}</span>
+            </div>
+            <div class="tee-club-row-stats">
+              <span class="hd-tc-avg ${tier}" title="Avg score-to-par">${formatSigned(entry.avgToPar, 2)}</span>
+              <span class="tee-club-sg" title="Strokes gained per tee shot">SG ${sgText}</span>
+            </div>
+          </li>`;
+      }).join("");
+      const sectionTotal = data.reduce((s, e) => s + e.count, 0);
       return `
-        <li class="tee-club-row${isBest ? " is-best" : ""}">
-          <div class="tee-club-row-main">
-            <strong>${escapeHtml(entry.club)}${isBest ? `<span class="hd-tc-best-flag">best avg</span>` : ""}</strong>
-            <span class="subtext">${entry.count} tee shot${entry.count === 1 ? "" : "s"}${parBreakdown ? ` · ${escapeHtml(parBreakdown)}` : ""}</span>
-          </div>
-          <div class="tee-club-row-stats">
-            <span class="hd-tc-avg ${tier}" title="Avg score-to-par">${formatSigned(entry.avgToPar, 2)}</span>
-            <span class="tee-club-sg" title="Strokes gained per tee shot">SG ${sgText}</span>
-          </div>
-        </li>`;
-    }).join("");
+        <section class="tee-club-section">
+          <h3 class="tee-club-section-title">${escapeHtml(label)} <span class="tee-club-section-count">${sectionTotal} tee shot${sectionTotal === 1 ? "" : "s"}</span></h3>
+          <ul class="tee-club-list">${rows}</ul>
+        </section>`;
+    }
+
+    const par3Data = computeTeeClubPerformance(rounds, 3);
+    const par4Data = computeTeeClubPerformance(rounds, 4);
+    const par5Data = computeTeeClubPerformance(rounds, 5);
+
     els.teeClubPanel.innerHTML = `
-      <p class="tee-club-total">${total} tee shot${total === 1 ? "" : "s"} tagged across ${data.length} club${data.length === 1 ? "" : "s"}.</p>
-      <ul class="tee-club-list">${rows}</ul>
+      <p class="tee-club-total">${total} tee shot${total === 1 ? "" : "s"} tagged across ${allData.length} club${allData.length === 1 ? "" : "s"}.</p>
+      ${sectionHtml("Par 3s", par3Data)}
+      ${sectionHtml("Par 4s", par4Data)}
+      ${sectionHtml("Par 5s", par5Data)}
       ${penaltyHtml}`;
   }
 
