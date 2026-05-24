@@ -16,8 +16,6 @@
     derivedGir,
     isDeerwoodCourseId,
     physicalHoleId,
-    haversineMeters,
-    metersToYards,
     expectedNineHoleDifferential,
     handicapRuleForCount,
     estimateRoundDifferential: estimateRoundDifferentialPure,
@@ -52,15 +50,15 @@
 
   // ---- Per-hole pending state (in-progress round data) -------------------
   //
-  // One map of hole-number -> { note, shots, clubs, penaltyClub } holds every
-  // per-hole input that isn't a DOM field. Adding a new per-hole field means
+  // One map of hole-number -> { note, clubs, penaltyClub } holds every per-
+  // hole input that isn't a DOM field. Adding a new per-hole field means
   // extending this shape + one getter/setter pair — NOT a new top-level map
   // and a new entry in every reset call site.
   //
   // The serialized in-progress draft still uses the older flat layout
-  // (holeNotes, holeShots, holeClubs, holePenaltyClubs) so existing saved
-  // drafts continue to restore unchanged. captureInProgressRound translates
-  // on write; restoreInProgressRound uses the same setters that pre-existed.
+  // (holeNotes, holeClubs, holePenaltyClubs) so existing saved drafts
+  // continue to restore unchanged. captureInProgressRound translates on
+  // write; restoreInProgressRound uses the same setters that pre-existed.
 
   let pendingHoles = {};
 
@@ -82,7 +80,6 @@
     const entry = pendingHoles[key];
     if (!entry) return;
     const empty = !entry.note
-      && !(entry.shots && entry.shots.length)
       && !(entry.clubs && entry.clubs.length)
       && !entry.penaltyClub;
     if (empty) delete pendingHoles[key];
@@ -169,141 +166,6 @@
     if (club) entry.penaltyClub = club;
     else delete entry.penaltyClub;
     compactPendingHole(holeNumber);
-  }
-
-  // ---- GPS shots ---------------------------------------------------------
-
-  function getHoleShots(holeNumber) {
-    const entry = pendingHoles[String(holeNumber)];
-    return (entry && entry.shots) || [];
-  }
-
-  function setHoleShots(holeNumber, shots) {
-    const entry = getOrCreatePendingHole(holeNumber);
-    if (Array.isArray(shots) && shots.length) {
-      entry.shots = shots;
-    } else {
-      delete entry.shots;
-    }
-    compactPendingHole(holeNumber);
-  }
-
-  function appendHoleShot(holeNumber, shot) {
-    const entry = getOrCreatePendingHole(holeNumber);
-    entry.shots = [...(entry.shots || []), shot];
-    return entry.shots;
-  }
-
-  function updateHoleShotAtIndex(holeNumber, index, partial) {
-    const entry = pendingHoles[String(holeNumber)];
-    const existing = (entry && entry.shots) || [];
-    if (!existing[index]) return existing;
-    const next = existing.map((shot, i) => (i === index ? { ...shot, ...partial } : shot));
-    if (entry) entry.shots = next;
-    return next;
-  }
-
-  function deleteHoleShotAtIndex(holeNumber, index) {
-    const entry = pendingHoles[String(holeNumber)];
-    const existing = (entry && entry.shots) || [];
-    const next = existing.filter((_shot, i) => i !== index);
-    // Recompute distances since shot positions are relative to predecessors.
-    const rebuilt = next.map((shot, i) => {
-      if (i === 0) return { ...shot, distanceYards: null };
-      const prev = next[i - 1];
-      const meters = haversineMeters(prev.lat, prev.lon, shot.lat, shot.lon);
-      return { ...shot, distanceYards: Math.round(metersToYards(meters)) };
-    });
-    if (entry) {
-      if (rebuilt.length) {
-        entry.shots = rebuilt;
-      } else {
-        delete entry.shots;
-        compactPendingHole(holeNumber);
-      }
-    }
-    return rebuilt;
-  }
-
-  // Subscribes to GPS updates via watchPosition, collects samples, returns
-  // the MEDIAN position (robust to outliers) once we have enough confident
-  // samples or the timer expires. Median is much more reliable than "best
-  // accuracy" alone because a single fix can be a flier even with optimistic
-  // accuracy metadata.
-  function getFreshPositionAsync(timeoutMs = 10000, onProgress) {
-    return new Promise((resolve, reject) => {
-      if (!navigator || !navigator.geolocation) {
-        reject(new Error("Your device does not support location."));
-        return;
-      }
-      if (typeof window !== "undefined" && window.isSecureContext === false) {
-        reject(new Error("INSECURE_CONTEXT"));
-        return;
-      }
-      const samples = [];
-      let resolved = false;
-      let watchId = null;
-      const startTime = Date.now();
-      const finish = (result, error) => {
-        if (resolved) return;
-        resolved = true;
-        clearTimeout(timer);
-        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-        if (error) reject(error);
-        else resolve(result);
-      };
-      const median = (arr) => {
-        const sorted = [...arr].sort((a, b) => a - b);
-        const mid = Math.floor(sorted.length / 2);
-        return sorted.length % 2 === 0
-          ? (sorted[mid - 1] + sorted[mid]) / 2
-          : sorted[mid];
-      };
-      const finalize = () => {
-        if (!samples.length) {
-          finish(null, new Error("GPS timeout — try again outdoors with a clear sky view."));
-          return;
-        }
-        // Drop the first sample — it's often the stalest one the OS had cached.
-        const useful = samples.length >= 3 ? samples.slice(1) : samples;
-        const medianPos = {
-          coords: {
-            latitude: median(useful.map((s) => s.coords.latitude)),
-            longitude: median(useful.map((s) => s.coords.longitude)),
-            accuracy: median(useful.map((s) => s.coords.accuracy))
-          },
-          timestamp: Date.now(),
-          sampleCount: useful.length
-        };
-        finish(medianPos);
-      };
-      const timer = setTimeout(finalize, timeoutMs);
-      watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          samples.push(position);
-          const bestAccuracySoFar = Math.min(...samples.map((s) => s.coords.accuracy));
-          if (typeof onProgress === "function") {
-            try { onProgress({
-              accuracy: bestAccuracySoFar,
-              elapsed: Date.now() - startTime,
-              sampleCount: samples.length
-            }); } catch {}
-          }
-          // Early-resolve criteria, all required:
-          //  - at least 3 samples collected (so median has something to chew on)
-          //  - latest sample reports accuracy <= 8 m (~9 yds)
-          //  - we've spent at least 2.5 s collecting (GPS settle time)
-          if (samples.length >= 3 && position.coords.accuracy <= 8 && Date.now() - startTime >= 2500) {
-            finalize();
-          }
-        },
-        (error) => {
-          if (samples.length) finalize();
-          else finish(null, error);
-        },
-        { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 }
-      );
-    });
   }
 
   function readInitialViewMode() {
@@ -799,16 +661,14 @@
       // drafts continue to restore — translate from unified pendingHoles.
       ...(() => {
         const holeNotes = {};
-        const holeShots = {};
         const holeClubs = {};
         const holePenaltyClubs = {};
         Object.entries(pendingHoles).forEach(([key, data]) => {
           if (data.note) holeNotes[key] = data.note;
-          if (data.shots && data.shots.length) holeShots[key] = JSON.parse(JSON.stringify(data.shots));
           if (data.clubs && data.clubs.length) holeClubs[key] = [...data.clubs];
           if (data.penaltyClub) holePenaltyClubs[key] = data.penaltyClub;
         });
-        return { holeNotes, holeShots, holeClubs, holePenaltyClubs };
+        return { holeNotes, holeClubs, holePenaltyClubs };
       })()
     };
   }
@@ -828,11 +688,10 @@
         return Number.isFinite(score) && score > 0;
       });
       const hasNotes = Object.keys(draft.holeNotes || {}).length > 0;
-      const hasShots = Object.keys(draft.holeShots || {}).length > 0;
       // Note: clubs are intentionally NOT a "started a round" signal — they're
       // pre-seeded with Driver/Putter defaults, so counting them would flag a
       // round in progress before the user has actually entered anything.
-      if (!hasScores && !hasNotes && !hasShots) {
+      if (!hasScores && !hasNotes) {
         // Empty draft — don't pollute storage with placeholder rows.
         clearInProgressRound();
         return;
@@ -892,9 +751,6 @@
     }
     resetPendingHoles(); resetReviewState();
     Object.entries(data.holeNotes || {}).forEach(([num, note]) => setHoleNote(num, note));
-    Object.entries(data.holeShots || {}).forEach(([num, shots]) => {
-      if (Array.isArray(shots) && shots.length) setHoleShots(Number(num), shots);
-    });
     Object.entries(data.holeClubs || {}).forEach(([num, clubs]) => {
       if (Array.isArray(clubs) && clubs.length) setHoleClubs(Number(num), clubs);
     });
@@ -922,18 +778,13 @@
       const score = Number(h.score);
       return Number.isFinite(score) && score > 0;
     }).length;
-    const shotCount = Object.values(data.holeShots || {}).reduce(
-      (sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0),
-      0
-    );
     const noteCount = Object.keys(data.holeNotes || {}).length;
-    if (!scoreCount && !shotCount && !noteCount) {
+    if (!scoreCount && !noteCount) {
       clearInProgressRound();
       return;
     }
     const parts = [];
     if (scoreCount) parts.push(`${scoreCount} hole${scoreCount === 1 ? "" : "s"} scored`);
-    if (shotCount) parts.push(`${shotCount} GPS shot${shotCount === 1 ? "" : "s"}`);
     if (noteCount) parts.push(`${noteCount} note${noteCount === 1 ? "" : "s"}`);
     let ageLabel = "";
     if (data.savedAt) {
@@ -1891,127 +1742,6 @@
       </div>`;
   }
 
-  function renderShotsBlock(holeNumber) {
-    const shots = getHoleShots(holeNumber);
-    const header = `
-      <div class="card-shots-header">
-        <p class="card-shots-title">Shot tracker</p>
-        <button type="button" class="card-shot-button" data-mark-shot="${holeNumber}">
-          ${shots.length === 0 ? "📍 Mark starting position" : "📍 Mark next shot end"}
-        </button>
-      </div>`;
-    if (shots.length === 0) {
-      return header + `<p class="card-shots-empty">Tap before your first swing to capture your tee position, then tap again at your ball after each shot. Distances populate automatically.</p>`;
-    }
-    const rows = shots.map((shot, index) => {
-      const isStart = index === 0;
-      const distanceLabel = isStart
-        ? `<span class="card-shot-distance start">Start</span>`
-        : `<span class="card-shot-distance">${shot.distanceYards} yds</span>`;
-      // Show bag clubs + the club that was already chosen for this shot (if
-      // it's no longer in the bag) so existing data stays editable.
-      const bag = getBag();
-      const shotClubs = CLUB_OPTIONS.filter((c) => bag.includes(c) || c === shot.club);
-      const clubOptions = shotClubs.map((club) => `<option value="${escapeHtml(club)}"${club === shot.club ? " selected" : ""}>${escapeHtml(club)}</option>`).join("");
-      const clubPicker = isStart
-        ? `<span class="card-shot-club-static">Tee position</span>`
-        : `<select class="card-shot-club" data-shot-club="${holeNumber}" data-shot-index="${index}" aria-label="Club for shot ${index}"><option value="">Club…</option>${clubOptions}</select>`;
-      const accuracyMeta = Number.isFinite(shot.accuracy)
-        ? `<small class="card-shot-accuracy">±${Math.round(metersToYards(shot.accuracy))} yds</small>`
-        : "";
-      return `
-        <li class="card-shot-row" data-shot-row="${index}">
-          <div class="card-shot-row-top">
-            <span class="card-shot-index">${isStart ? "Start" : `Shot ${index}`}</span>
-            ${distanceLabel}
-            <button type="button" class="card-shot-delete" data-delete-shot="${holeNumber}" data-shot-index="${index}" aria-label="Delete shot ${index}">×</button>
-          </div>
-          <div class="card-shot-row-bottom">
-            ${clubPicker}
-            ${accuracyMeta}
-          </div>
-        </li>`;
-    }).join("");
-    return header + `<ul class="card-shot-list">${rows}</ul>`;
-  }
-
-  async function handleMarkShot(holeNumber, buttonElement) {
-    if (buttonElement.dataset.busy === "true") return;
-    buttonElement.dataset.busy = "true";
-    const originalText = buttonElement.textContent;
-    buttonElement.textContent = "📡 Getting GPS…";
-    buttonElement.disabled = true;
-    try {
-      const position = await getFreshPositionAsync(10000, ({ accuracy, sampleCount }) => {
-        const yds = Math.round(metersToYards(accuracy));
-        buttonElement.textContent = `📡 ±${yds} yds · ${sampleCount} fix${sampleCount === 1 ? "" : "es"}`;
-      });
-      const existing = getHoleShots(holeNumber);
-      const next = {
-        lat: position.coords.latitude,
-        lon: position.coords.longitude,
-        accuracy: position.coords.accuracy,
-        timestamp: Date.now(),
-        club: "",
-        distanceYards: null
-      };
-      if (existing.length > 0) {
-        const prev = existing[existing.length - 1];
-        const meters = haversineMeters(prev.lat, prev.lon, next.lat, next.lon);
-        next.distanceYards = Math.round(metersToYards(meters));
-      }
-      appendHoleShot(holeNumber, next);
-      refreshShotsBlock(holeNumber);
-      scheduleInProgressSave();
-      const accuracyYds = Number.isFinite(position.coords.accuracy)
-        ? Math.round(metersToYards(position.coords.accuracy))
-        : null;
-      const sampleNote = position.sampleCount ? `, ${position.sampleCount} fixes` : "";
-      const accuracyNote = accuracyYds !== null ? ` (±${accuracyYds} yds${sampleNote})` : "";
-      if (existing.length === 0) {
-        showToast(`Start position captured${accuracyNote}.`);
-      } else {
-        // If the computed distance is inside the combined GPS error window,
-        // the result is statistically meaningless — warn the user honestly.
-        // Also warn if the accuracy itself is poor (>25 yds error) regardless
-        // of distance, since that means GPS is unreliable here at all.
-        const prev = existing[existing.length - 1];
-        const combinedErrorYds = Math.round(metersToYards((prev.accuracy || 0) + (position.coords.accuracy || 0)));
-        if (accuracyYds !== null && accuracyYds > 25) {
-          showToast(`Recorded ${next.distanceYards} yds but GPS accuracy here is poor (±${accuracyYds} yds). Move to clearer sky and consider re-marking.`);
-        } else if (next.distanceYards < combinedErrorYds || next.distanceYards < 5) {
-          showToast(`Recorded ${next.distanceYards} yds — but GPS noise here is ±${combinedErrorYds} yds. Short shots (<30 yds) aren't reliable; use the × to delete if it's wrong.`);
-        } else {
-          showToast(`Shot recorded: ${next.distanceYards} yds${accuracyNote}.`);
-        }
-      }
-    } catch (error) {
-      const message = describeGeolocationError(error);
-      showToast(message);
-      buttonElement.textContent = originalText;
-      buttonElement.disabled = false;
-    } finally {
-      buttonElement.dataset.busy = "false";
-    }
-  }
-
-  function describeGeolocationError(error) {
-    if (error && error.message === "INSECURE_CONTEXT") {
-      return "Shot tracking needs a secure (https://) page. The deployed app on GitHub Pages works; opening index.html directly from disk does not.";
-    }
-    if (!error || typeof error.code !== "number") return "Could not get location. Try again outdoors with a clear sky view.";
-    if (error.code === 1) return "Location permission denied. Enable it in your browser settings (or your phone's Settings → Safari/Chrome → Location) to track shots.";
-    if (error.code === 2) return "GPS unavailable right now. Try again in a moment — sometimes a cloudy sky or being indoors blocks the signal.";
-    if (error.code === 3) return "GPS read timed out. Try again — sometimes the first read is slow, especially indoors.";
-    return error.message || "Could not get location.";
-  }
-
-  function refreshShotsBlock(holeNumber) {
-    const container = els.scorecardGrid.querySelector(`.card-shots[data-hole="${holeNumber}"]`);
-    if (!container) return;
-    container.innerHTML = renderShotsBlock(holeNumber);
-  }
-
   function renderScorecardCardMode(course) {
     const sections = getScorecardSections(course.holes);
     const sectionByHoleNumber = new Map();
@@ -2062,7 +1792,6 @@
               <span>What happened on this hole?</span>
               <textarea class="card-note-input" data-hole="${hole.number}" rows="2" placeholder="Drove left, chipped twice, 2-putt from 12ft… (tap the mic on your keyboard for voice)">${escapeHtml(getHoleNote(hole.number))}</textarea>
             </label>
-            <div class="card-shots" data-hole="${hole.number}">${renderShotsBlock(hole.number)}</div>
           </div>
         </article>`;
     }).join("");
@@ -2217,22 +1946,6 @@
         scheduleInProgressSave();
         return;
       }
-      const markShotButton = event.target.closest("[data-mark-shot]");
-      if (markShotButton) {
-        event.preventDefault();
-        handleMarkShot(markShotButton.dataset.markShot, markShotButton);
-        return;
-      }
-      const deleteShotButton = event.target.closest("[data-delete-shot]");
-      if (deleteShotButton) {
-        event.preventDefault();
-        const holeNumber = deleteShotButton.dataset.deleteShot;
-        const index = Number(deleteShotButton.dataset.shotIndex);
-        deleteHoleShotAtIndex(holeNumber, index);
-        refreshShotsBlock(holeNumber);
-        scheduleInProgressSave();
-        return;
-      }
       const shortcut = event.target.closest(".card-score-shortcut");
       if (!shortcut) return;
       const card = shortcut.closest(".scorecard-card");
@@ -2249,14 +1962,6 @@
     });
 
     stack.addEventListener("change", (event) => {
-      const clubSelect = event.target.closest("[data-shot-club]");
-      if (clubSelect) {
-        const holeNumber = clubSelect.dataset.shotClub;
-        const index = Number(clubSelect.dataset.shotIndex);
-        updateHoleShotAtIndex(holeNumber, index, { club: clubSelect.value });
-        scheduleInProgressSave();
-        return;
-      }
       const penClubSelect = event.target.closest(".penalty-club-input");
       if (penClubSelect) {
         setHolePenaltyClub(penClubSelect.dataset.hole, penClubSelect.value);
@@ -2797,7 +2502,6 @@
         penaltyClub: (Number.isFinite(penaltyValue) && penaltyValue > 0) ? getHolePenaltyClub(holeNumber) : "",
         firstPuttDistance: Number.isFinite(firstPuttValue) && firstPuttValue >= 0 ? firstPuttValue : null,
         note: getHoleNote(holeNumber),
-        shots: getHoleShots(holeNumber),
         clubsHit: getHoleClubs(holeNumber)
       });
     });
@@ -5417,9 +5121,6 @@
     resetPendingHoles(); resetReviewState();
     round.holes.forEach((hole) => {
       if (hole && hole.note) setHoleNote(hole.number, hole.note);
-      if (hole && Array.isArray(hole.shots) && hole.shots.length) {
-        setHoleShots(hole.number, hole.shots);
-      }
       if (hole && Array.isArray(hole.clubsHit) && hole.clubsHit.length) {
         setHoleClubs(hole.number, hole.clubsHit);
       }

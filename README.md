@@ -45,7 +45,7 @@ Setup form opens fully blank — no chip pre-selected anywhere. User taps Course
 
 Two scorecard views, persisted per user:
 
-- **Card view** (default on phones ≤640px wide) — one hole per screen. Big tap targets, pill-based input (par-anchored Score row, Putts 0-5, Pen 0-3, fairway result, 1st-putt distance, clubs hit, per-hole note, GPS shot tracker). Prev/Next arrows + floating mid-screen arrows + bottom-sheet hole picker. Auto-collapses round setup once you're scoring.
+- **Card view** (default on phones ≤640px wide) — one hole per screen. Big tap targets, pill-based input (par-anchored Score row, Putts 0-5, Pen 0-3, fairway result, 1st-putt distance, clubs hit, per-hole note). Prev/Next arrows + floating mid-screen arrows + bottom-sheet hole picker. Auto-collapses round setup once you're scoring.
 - **Grid view** — all 18 holes at once, typed inputs. Desktop-friendly.
 
 Switching views mid-round preserves all entered scores.
@@ -64,7 +64,6 @@ Every input is captured per-hole for richest analytics later:
 - **1st putt distance** (pill row: 3 / 6 / 10 / 15 / 20 / 30 / 50 ft + custom)
 - **Clubs hit** — multi-select pill grid. First club tapped is the tee shot (gold "TEE" badge). Putter auto-added when putts ≥ 1. Default seeds for par 3/4/5 use the player's bag.
 - **Per-hole note** — narrative text, iOS voice dictation works via the keyboard mic.
-- **GPS shots** — tap to mark starting position, tap again to mark each shot's end; Haversine distance per shot, per-club tagging.
 
 All fields visible inline on every card (no hide-behind-toggle gimmicks — the point of the app is data completeness).
 
