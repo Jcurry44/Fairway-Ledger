@@ -15,9 +15,9 @@
     <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
          icon, theme color in the browser chrome, and a standalone display
          mode instead of a tab. -->
-    <link rel="manifest" href="./manifest.json?v=2026-05-24h">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-05-24h">
-    <link rel="apple-touch-icon" href="./icon.svg?v=2026-05-24h">
+    <link rel="manifest" href="./manifest.json?v=2026-05-24i">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-05-24i">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-05-24i">
     <meta name="theme-color" content="#1f7a59">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -32,11 +32,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
 
-    <link rel="stylesheet" href="./styles.css?v=2026-05-24h">
-    <script src="./data/courses.js?v=2026-05-24h" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-24h" defer></script>
-    <script src="./lib/shapes.js?v=2026-05-24h" defer></script>
-    <script src="./app.js?v=2026-05-24h" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-24i">
+    <script src="./data/courses.js?v=2026-05-24i" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-24i" defer></script>
+    <script src="./lib/shapes.js?v=2026-05-24i" defer></script>
+    <script src="./app.js?v=2026-05-24i" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -397,10 +397,105 @@
 
                 <div id="completionCheck" class="completion-check"></div>
 
+                <!-- Optional reflection survey. Everything in here is opt-in —
+                     skip it and the rest of the app still works. Filled-in
+                     fields get woven into the round summary narrative as a
+                     "self-rated" paragraph. -->
+                <details id="surveyDetails" class="round-survey">
+                  <summary class="round-survey-summary">
+                    <span class="round-survey-summary-title">Round reflection</span>
+                    <span class="round-survey-summary-hint">optional · 30 sec</span>
+                  </summary>
+                  <div class="round-survey-body">
+
+                    <div class="survey-field">
+                      <label class="survey-label">How did it feel?</label>
+                      <div class="survey-chip-row" data-survey-chip-row="feel">
+                        <button type="button" class="survey-chip" data-survey-value="great">Great</button>
+                        <button type="button" class="survey-chip" data-survey-value="good">Good</button>
+                        <button type="button" class="survey-chip" data-survey-value="okay">Okay</button>
+                        <button type="button" class="survey-chip" data-survey-value="tough">Tough</button>
+                      </div>
+                    </div>
+
+                    <div class="survey-field">
+                      <label class="survey-label">Confidence today</label>
+                      <div class="survey-chip-row" data-survey-chip-row="confidence">
+                        <button type="button" class="survey-chip" data-survey-value="shaky">Shaky</button>
+                        <button type="button" class="survey-chip" data-survey-value="building">Building</button>
+                        <button type="button" class="survey-chip" data-survey-value="solid">Solid</button>
+                        <button type="button" class="survey-chip" data-survey-value="locked">Locked in</button>
+                      </div>
+                    </div>
+
+                    <div class="survey-field">
+                      <label class="survey-label">Rate yourself today <span class="survey-label-hint">(1 = bad, 5 = great)</span></label>
+                      <div class="survey-rating-grid">
+                        <div class="survey-rating-row">
+                          <span class="survey-rating-label">Driver</span>
+                          <div class="survey-chip-row survey-rating-chips" data-survey-chip-row="rating-driver">
+                            <button type="button" class="survey-rating-chip" data-survey-value="1">1</button>
+                            <button type="button" class="survey-rating-chip" data-survey-value="2">2</button>
+                            <button type="button" class="survey-rating-chip" data-survey-value="3">3</button>
+                            <button type="button" class="survey-rating-chip" data-survey-value="4">4</button>
+                            <button type="button" class="survey-rating-chip" data-survey-value="5">5</button>
+                          </div>
+                        </div>
+                        <div class="survey-rating-row">
+                          <span class="survey-rating-label">Irons</span>
+                          <div class="survey-chip-row survey-rating-chips" data-survey-chip-row="rating-irons">
+                            <button type="button" class="survey-rating-chip" data-survey-value="1">1</button>
+                            <button type="button" class="survey-rating-chip" data-survey-value="2">2</button>
+                            <button type="button" class="survey-rating-chip" data-survey-value="3">3</button>
+                            <button type="button" class="survey-rating-chip" data-survey-value="4">4</button>
+                            <button type="button" class="survey-rating-chip" data-survey-value="5">5</button>
+                          </div>
+                        </div>
+                        <div class="survey-rating-row">
+                          <span class="survey-rating-label">Wedges</span>
+                          <div class="survey-chip-row survey-rating-chips" data-survey-chip-row="rating-wedges">
+                            <button type="button" class="survey-rating-chip" data-survey-value="1">1</button>
+                            <button type="button" class="survey-rating-chip" data-survey-value="2">2</button>
+                            <button type="button" class="survey-rating-chip" data-survey-value="3">3</button>
+                            <button type="button" class="survey-rating-chip" data-survey-value="4">4</button>
+                            <button type="button" class="survey-rating-chip" data-survey-value="5">5</button>
+                          </div>
+                        </div>
+                        <div class="survey-rating-row">
+                          <span class="survey-rating-label">Putter</span>
+                          <div class="survey-chip-row survey-rating-chips" data-survey-chip-row="rating-putter">
+                            <button type="button" class="survey-rating-chip" data-survey-value="1">1</button>
+                            <button type="button" class="survey-rating-chip" data-survey-value="2">2</button>
+                            <button type="button" class="survey-rating-chip" data-survey-value="3">3</button>
+                            <button type="button" class="survey-rating-chip" data-survey-value="4">4</button>
+                            <button type="button" class="survey-rating-chip" data-survey-value="5">5</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="survey-field">
+                      <label for="surveySwingThoughts" class="survey-label">Swing thoughts</label>
+                      <textarea id="surveySwingThoughts" class="survey-textarea" maxlength="300" rows="2" placeholder="What were you working on? — slow takeaway, weight forward, head still…"></textarea>
+                    </div>
+
+                    <div class="survey-field">
+                      <label for="surveyWentWell" class="survey-label">What went well?</label>
+                      <textarea id="surveyWentWell" class="survey-textarea" maxlength="300" rows="2" placeholder="The thing you want to keep doing."></textarea>
+                    </div>
+
+                    <div class="survey-field">
+                      <label for="surveyWorkOn" class="survey-label">What to work on?</label>
+                      <textarea id="surveyWorkOn" class="survey-textarea" maxlength="300" rows="2" placeholder="The one thing to clean up before next round."></textarea>
+                    </div>
+
+                  </div>
+                </details>
+
                 <div class="round-summary-field">
                   <label for="roundNote" class="round-summary-label">Round summary</label>
                   <textarea id="roundNote" maxlength="500" rows="3" placeholder="How did the round feel overall? Couldn't control driver, hit a few bad chips, putted decent on the back, weather went sideways at the turn…"></textarea>
-                  <p class="round-summary-hint">Stored with the round and shown in your history. Anything you want to remember about today.</p>
+                  <p class="round-summary-hint">Free-form. Stored with the round and shown in your history.</p>
                 </div>
 
                 <div class="form-actions">

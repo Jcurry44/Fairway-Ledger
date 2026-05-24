@@ -33,7 +33,7 @@ test("HOLE_FIELDS lists all canonical hole fields", () => {
 });
 
 test("ROUND_FIELDS lists all canonical round fields", () => {
-  const expected = ["id", "date", "courseId", "tee", "wind", "note", "narrative", "holes"];
+  const expected = ["id", "date", "courseId", "tee", "wind", "note", "narrative", "survey", "holes"];
   assert.deepEqual([...S.ROUND_FIELDS], expected);
 });
 

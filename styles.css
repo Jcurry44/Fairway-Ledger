@@ -2273,6 +2273,215 @@ body.floating-card-nav-visible .floating-card-nav {
   font-size: 0.78rem;
 }
 
+/* ---------- Optional post-round reflection survey ----------
+   Sits above the free-form Round Summary textarea. Collapsed by default so
+   users who don't want it never see more than a one-line header. Each
+   chip-row mirrors the chip pattern used elsewhere in the app. */
+.round-survey {
+  margin-top: 18px;
+  border: 1px solid #d6e2d9;
+  border-radius: 12px;
+  background: #fbfdf9;
+  overflow: hidden;
+}
+
+.round-survey-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  transition: background 0.12s ease;
+}
+
+.round-survey-summary:hover {
+  background: #f4f8f1;
+}
+
+.round-survey-summary::-webkit-details-marker {
+  display: none;
+}
+
+.round-survey-summary::after {
+  content: "›";
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+  display: inline-block;
+}
+
+.round-survey[open] .round-survey-summary::after {
+  transform: rotate(90deg);
+}
+
+.round-survey-summary-title {
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--green-dark, #15573c);
+}
+
+.round-survey-summary-hint {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  margin-left: auto;
+  margin-right: 6px;
+}
+
+.round-survey-body {
+  padding: 6px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-top: 1px solid #e5ede3;
+}
+
+.survey-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.survey-label {
+  font-size: 0.74rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.survey-label-hint {
+  font-weight: 600;
+  font-size: 0.66rem;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 6px;
+  opacity: 0.85;
+}
+
+.survey-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.survey-chip {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line, #d6e2d9);
+  background: #ffffff;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease, color 0.1s ease;
+}
+
+.survey-chip:hover {
+  background: #eef4eb;
+  border-color: #b6d1a5;
+}
+
+.survey-chip.is-active {
+  background: var(--green, #217a57);
+  border-color: var(--green-dark, #15573c);
+  color: #ffffff;
+}
+
+/* The 1-5 rating chips are smaller and laid out in a grid so they line up
+   across the four club rows (Driver/Irons/Wedges/Putter). */
+.survey-rating-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.survey-rating-row {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.survey-rating-label {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.survey-rating-chips {
+  gap: 4px;
+}
+
+.survey-rating-chip {
+  flex: 1;
+  min-width: 36px;
+  padding: 6px 0;
+  border-radius: 8px;
+  border: 1px solid var(--line, #d6e2d9);
+  background: #ffffff;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.1s ease, border-color 0.1s ease, color 0.1s ease;
+}
+
+.survey-rating-chip:hover {
+  background: #eef4eb;
+  border-color: #b6d1a5;
+}
+
+.survey-rating-chip.is-active {
+  background: var(--green, #217a57);
+  border-color: var(--green-dark, #15573c);
+  color: #ffffff;
+}
+
+.survey-textarea {
+  width: 100%;
+  min-height: 50px;
+  padding: 10px 12px;
+  border: 1px solid var(--line, #d6e2d9);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-family: inherit;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.survey-textarea:focus {
+  outline: none;
+  border-color: var(--green, #217a57);
+  box-shadow: 0 0 0 3px rgba(31, 122, 89, 0.15);
+}
+
+.survey-textarea::placeholder {
+  color: #9aab9d;
+  font-style: italic;
+}
+
+@media (max-width: 480px) {
+  .survey-rating-row {
+    grid-template-columns: 60px 1fr;
+    gap: 8px;
+  }
+}
+
 /* Review section — wraps completion check, round summary, and Save into
    a dedicated post-entry phase. Hidden in card view until the user taps
    "Review & save round" on a card; always visible in grid view. */

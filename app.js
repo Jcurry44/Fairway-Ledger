@@ -85,6 +85,107 @@
     if (empty) delete pendingHoles[key];
   }
 
+  // ---- Optional post-round survey ---------------------------------------
+  //
+  // pendingSurvey holds the draft answers to the round-reflection survey.
+  // Round-level (not per-hole) so a single object is enough. The shape
+  // mirrors the canonical survey shape in lib/shapes.js; on save we hand
+  // this straight to makeRound which clones it through makeSurvey.
+
+  function makeEmptyPendingSurvey() {
+    return {
+      feel: "",
+      confidence: "",
+      ratings: { driver: null, irons: null, wedges: null, putter: null },
+      swingThoughts: "",
+      wentWell: "",
+      workOn: ""
+    };
+  }
+
+  let pendingSurvey = makeEmptyPendingSurvey();
+
+  function resetPendingSurvey() {
+    pendingSurvey = makeEmptyPendingSurvey();
+  }
+
+  function getPendingSurvey() {
+    // Return a defensive clone so callers can't accidentally mutate state.
+    return {
+      feel: pendingSurvey.feel,
+      confidence: pendingSurvey.confidence,
+      ratings: { ...pendingSurvey.ratings },
+      swingThoughts: pendingSurvey.swingThoughts,
+      wentWell: pendingSurvey.wentWell,
+      workOn: pendingSurvey.workOn
+    };
+  }
+
+  function setSurveyField(field, value) {
+    if (!(field in pendingSurvey) || field === "ratings") return;
+    pendingSurvey[field] = value || "";
+  }
+
+  function setSurveyRating(club, value) {
+    if (!(club in pendingSurvey.ratings)) return;
+    const num = Number(value);
+    pendingSurvey.ratings[club] = Number.isFinite(num) && num >= 1 && num <= 5 ? num : null;
+  }
+
+  // True if the user touched ANY survey field. Used to decide whether to
+  // bother storing the survey or include it in the narrative.
+  function surveyHasContent(s) {
+    if (!s) return false;
+    if (s.feel || s.confidence) return true;
+    if (s.swingThoughts && s.swingThoughts.trim()) return true;
+    if (s.wentWell && s.wentWell.trim()) return true;
+    if (s.workOn && s.workOn.trim()) return true;
+    if (s.ratings && Object.values(s.ratings).some((v) => Number.isFinite(v))) return true;
+    return false;
+  }
+
+  // Paint the chip "active" state from pendingSurvey, and refresh the three
+  // textareas. Called on render, on resume, on edit-load, and on reset.
+  function syncSurveyUiFromState() {
+    document.querySelectorAll("[data-survey-chip-row]").forEach((row) => {
+      const key = row.dataset.surveyChipRow;
+      let activeValue = "";
+      if (key === "feel") activeValue = pendingSurvey.feel || "";
+      else if (key === "confidence") activeValue = pendingSurvey.confidence || "";
+      else if (key.startsWith("rating-")) {
+        const club = key.slice("rating-".length);
+        const v = pendingSurvey.ratings[club];
+        activeValue = Number.isFinite(v) ? String(v) : "";
+      }
+      row.querySelectorAll("[data-survey-value]").forEach((chip) => {
+        chip.classList.toggle("is-active", chip.dataset.surveyValue === activeValue);
+      });
+    });
+    if (els.surveySwingThoughts) els.surveySwingThoughts.value = pendingSurvey.swingThoughts || "";
+    if (els.surveyWentWell) els.surveyWentWell.value = pendingSurvey.wentWell || "";
+    if (els.surveyWorkOn) els.surveyWorkOn.value = pendingSurvey.workOn || "";
+  }
+
+  // Tapping any survey chip updates state, repaints, and triggers an
+  // in-progress save so a refresh mid-fillout doesn't lose work.
+  function handleSurveyChipClick(button) {
+    const row = button.closest("[data-survey-chip-row]");
+    if (!row) return;
+    const key = row.dataset.surveyChipRow;
+    const value = button.dataset.surveyValue || "";
+    // Re-clicking the active chip clears it (acts as a toggle).
+    let nextValue = value;
+    if (button.classList.contains("is-active")) nextValue = "";
+    if (key === "feel") setSurveyField("feel", nextValue);
+    else if (key === "confidence") setSurveyField("confidence", nextValue);
+    else if (key.startsWith("rating-")) {
+      const club = key.slice("rating-".length);
+      setSurveyRating(club, nextValue || null);
+    }
+    syncSurveyUiFromState();
+    scheduleInProgressSave();
+  }
+
   // ---- Notes -------------------------------------------------------------
 
   function getHoleNote(holeNumber) {
@@ -227,6 +328,10 @@
     roundSetup: document.getElementById("roundSetup"),
     roundSetupBanner: document.getElementById("roundSetupBanner"),
     roundNote: document.getElementById("roundNote"),
+    surveyDetails: document.getElementById("surveyDetails"),
+    surveySwingThoughts: document.getElementById("surveySwingThoughts"),
+    surveyWentWell: document.getElementById("surveyWentWell"),
+    surveyWorkOn: document.getElementById("surveyWorkOn"),
     roundCourseMeta: document.getElementById("roundCourseMeta"),
     roundBrief: document.getElementById("roundBrief"),
     roundLiveSummary: document.getElementById("roundLiveSummary"),
@@ -662,6 +767,9 @@
       tee: els.roundTee ? els.roundTee.value || "" : "",
       wind: els.roundWind ? els.roundWind.value || "" : "",
       note: els.roundNote ? els.roundNote.value || "" : "",
+      // Stash the optional reflection survey — captures only if the user
+      // touched at least one field, so an empty draft stays lean.
+      survey: surveyHasContent(pendingSurvey) ? getPendingSurvey() : null,
       holes,
       // Wire format mirrors the older flat-map layout so existing in-progress
       // drafts continue to restore — translate from unified pendingHoles.
@@ -756,6 +864,22 @@
       renderRoundSetupOptions();
     }
     resetPendingHoles(); resetReviewState();
+    // Restore the optional survey draft if one was saved. resetPendingSurvey
+    // first so a stale prior session doesn't bleed through.
+    resetPendingSurvey();
+    if (data.survey && typeof data.survey === "object") {
+      if (data.survey.feel) setSurveyField("feel", data.survey.feel);
+      if (data.survey.confidence) setSurveyField("confidence", data.survey.confidence);
+      if (data.survey.swingThoughts) setSurveyField("swingThoughts", data.survey.swingThoughts);
+      if (data.survey.wentWell) setSurveyField("wentWell", data.survey.wentWell);
+      if (data.survey.workOn) setSurveyField("workOn", data.survey.workOn);
+      if (data.survey.ratings && typeof data.survey.ratings === "object") {
+        ["driver", "irons", "wedges", "putter"].forEach((club) => {
+          if (Number.isFinite(data.survey.ratings[club])) setSurveyRating(club, data.survey.ratings[club]);
+        });
+      }
+    }
+    syncSurveyUiFromState();
     Object.entries(data.holeNotes || {}).forEach(([num, note]) => setHoleNote(num, note));
     Object.entries(data.holeClubs || {}).forEach(([num, clubs]) => {
       if (Array.isArray(clubs) && clubs.length) setHoleClubs(Number(num), clubs);
@@ -4598,6 +4722,7 @@
       buildNarrativeCost(round, valid),
       buildNarrativeHighlights(round, valid),
       buildNarrativeNotes(round, valid),
+      buildNarrativeSurvey(round, valid),
       buildNarrativeRoundNote(round)
     ].filter(Boolean);
     return paragraphs.join("\n\n");
@@ -4839,6 +4964,72 @@
     const note = round.note && round.note.trim();
     if (!note) return "";
     return `Your round note: "${note}"`;
+  }
+
+  // --- Optional reflection survey paragraph -------------------------------
+  //
+  // If the user filled in any part of the post-round survey, weave the
+  // answers into a self-rated paragraph. Each piece is independently
+  // optional — empty answers just don't appear.
+  const SURVEY_FEEL_LABELS = { great: "great", good: "good", okay: "okay", tough: "tough" };
+  const SURVEY_CONFIDENCE_LABELS = {
+    shaky: "shaky", building: "building", solid: "solid", locked: "locked in"
+  };
+  const SURVEY_RATING_LABELS = {
+    driver: "driver", irons: "irons", wedges: "wedges", putter: "putter"
+  };
+
+  function buildNarrativeSurvey(round /*, valid */) {
+    const s = round && round.survey;
+    if (!s || !surveyHasContent(s)) return "";
+
+    const bits = [];
+
+    // Feel + confidence merge into one opening line if both present.
+    if (s.feel && s.confidence) {
+      bits.push(`You felt ${SURVEY_FEEL_LABELS[s.feel] || s.feel} about the round with ${SURVEY_CONFIDENCE_LABELS[s.confidence] || s.confidence} confidence`);
+    } else if (s.feel) {
+      bits.push(`You felt ${SURVEY_FEEL_LABELS[s.feel] || s.feel} about the round`);
+    } else if (s.confidence) {
+      bits.push(`Confidence was ${SURVEY_CONFIDENCE_LABELS[s.confidence] || s.confidence}`);
+    }
+
+    // Self-ratings: surface the highest and lowest when ≥2 are filled.
+    const ratings = s.ratings || {};
+    const filledRatings = Object.entries(ratings)
+      .filter(([, v]) => Number.isFinite(v))
+      .map(([club, v]) => ({ club, value: v }));
+    if (filledRatings.length >= 2) {
+      const sorted = [...filledRatings].sort((a, b) => b.value - a.value);
+      const top = sorted[0];
+      const bot = sorted[sorted.length - 1];
+      if (top.value === bot.value) {
+        // All ratings the same — flat day across the bag.
+        bits.push(`You rated yourself ${top.value}/5 across the bag`);
+      } else {
+        bits.push(`Your ${SURVEY_RATING_LABELS[top.club]} felt sharpest (${top.value}/5); your ${SURVEY_RATING_LABELS[bot.club]} let you down (${bot.value}/5)`);
+      }
+    } else if (filledRatings.length === 1) {
+      const r = filledRatings[0];
+      bits.push(`You rated your ${SURVEY_RATING_LABELS[r.club]} at ${r.value}/5`);
+    }
+
+    let paragraph = bits.length ? bits.join(". ") + "." : "";
+
+    // Swing thoughts — quote verbatim.
+    if (s.swingThoughts && s.swingThoughts.trim()) {
+      paragraph += ` Swing thoughts: "${s.swingThoughts.trim()}".`;
+    }
+    // What went well — quote verbatim.
+    if (s.wentWell && s.wentWell.trim()) {
+      paragraph += ` What worked: "${s.wentWell.trim()}".`;
+    }
+    // What to work on — quote verbatim, ends with a coaching framing.
+    if (s.workOn && s.workOn.trim()) {
+      paragraph += ` Next time, focus on: "${s.workOn.trim()}".`;
+    }
+
+    return paragraph.trim();
   }
 
   function escapeForText(value) {
@@ -5822,6 +6013,8 @@
     if (els.roundWind) els.roundWind.value = "";
     clearInProgressRound();
     resetPendingHoles(); resetReviewState();
+    resetPendingSurvey(); syncSurveyUiFromState();
+    if (els.surveyDetails) els.surveyDetails.open = false;
     // Cancelling an edit returns the form to fresh-setup state.
     resetRoundSetupState();
     updateEditModeUi();
@@ -5839,6 +6032,25 @@
     els.roundDate.value = round.date || today;
     els.roundNote.value = round.note || "";
     if (els.roundWind) els.roundWind.value = round.wind || "";
+
+    // Hydrate the optional reflection survey from the saved round (if any).
+    resetPendingSurvey();
+    if (round.survey && typeof round.survey === "object") {
+      if (round.survey.feel) setSurveyField("feel", round.survey.feel);
+      if (round.survey.confidence) setSurveyField("confidence", round.survey.confidence);
+      if (round.survey.swingThoughts) setSurveyField("swingThoughts", round.survey.swingThoughts);
+      if (round.survey.wentWell) setSurveyField("wentWell", round.survey.wentWell);
+      if (round.survey.workOn) setSurveyField("workOn", round.survey.workOn);
+      if (round.survey.ratings && typeof round.survey.ratings === "object") {
+        ["driver", "irons", "wedges", "putter"].forEach((club) => {
+          if (Number.isFinite(round.survey.ratings[club])) setSurveyRating(club, round.survey.ratings[club]);
+        });
+      }
+    }
+    syncSurveyUiFromState();
+    // If the loaded survey had any content, expand the details so the user
+    // sees what's already there instead of having to hunt for it.
+    if (els.surveyDetails) els.surveyDetails.open = surveyHasContent(pendingSurvey);
 
     resetPendingHoles(); resetReviewState();
     round.holes.forEach((hole) => {
@@ -5935,6 +6147,35 @@
   els.roundDate.addEventListener("change", scheduleInProgressSave);
   els.roundNote.addEventListener("input", scheduleInProgressSave);
   if (els.roundWind) els.roundWind.addEventListener("change", scheduleInProgressSave);
+
+  // Survey wiring: chip clicks (event-delegated on the surveyDetails wrapper
+  // so adding chips later doesn't require rewiring) + the three textareas.
+  if (els.surveyDetails) {
+    els.surveyDetails.addEventListener("click", (event) => {
+      const chip = event.target.closest("[data-survey-value]");
+      if (!chip) return;
+      event.preventDefault();
+      handleSurveyChipClick(chip);
+    });
+  }
+  if (els.surveySwingThoughts) {
+    els.surveySwingThoughts.addEventListener("input", () => {
+      setSurveyField("swingThoughts", els.surveySwingThoughts.value);
+      scheduleInProgressSave();
+    });
+  }
+  if (els.surveyWentWell) {
+    els.surveyWentWell.addEventListener("input", () => {
+      setSurveyField("wentWell", els.surveyWentWell.value);
+      scheduleInProgressSave();
+    });
+  }
+  if (els.surveyWorkOn) {
+    els.surveyWorkOn.addEventListener("input", () => {
+      setSurveyField("workOn", els.surveyWorkOn.value);
+      scheduleInProgressSave();
+    });
+  }
   if (els.roundSetupBanner) {
     els.roundSetupBanner.addEventListener("click", () => {
       roundSetupOpen = !roundSetupOpen;
@@ -5949,6 +6190,8 @@
     } else {
       clearInProgressRound();
       resetPendingHoles(); resetReviewState();
+      resetPendingSurvey(); syncSurveyUiFromState();
+      if (els.surveyDetails) els.surveyDetails.open = false;
       resetRoundSetupState();
       resetRoundChrome();
       renderScorecard(getSelectedRoundCourse());
@@ -6238,6 +6481,9 @@
       ensureSavedCourse(course);
       const note = els.roundNote.value.trim();
       const date = els.roundDate.value || today;
+      // Snapshot the survey draft. surveyHasContent guard means an untouched
+      // survey gets stored as a no-op empty shape — fine, just never surfaces.
+      const surveyForSave = getPendingSurvey();
       if (editingRoundId) {
         const existingIndex = state.rounds.findIndex((round) => round.id === editingRoundId);
         if (existingIndex === -1) {
@@ -6251,6 +6497,7 @@
           tee: course.tee,
           wind: els.roundWind ? els.roundWind.value || "" : "",
           note,
+          survey: surveyForSave,
           holes
         });
         updatedRound.narrative = generateRoundNarrative(updatedRound, state.rounds);
@@ -6258,6 +6505,8 @@
         editingRoundId = null;
         clearInProgressRound();
         resetPendingHoles(); resetReviewState();
+        resetPendingSurvey(); syncSurveyUiFromState();
+        if (els.surveyDetails) els.surveyDetails.open = false;
         resetRoundSetupState();
         saveState();
         updateEditModeUi();
@@ -6275,12 +6524,15 @@
           tee: course.tee,
           wind: els.roundWind ? els.roundWind.value || "" : "",
           note,
+          survey: surveyForSave,
           holes
         });
         newRound.narrative = generateRoundNarrative(newRound, state.rounds);
         state.rounds.push(newRound);
         clearInProgressRound();
         resetPendingHoles(); resetReviewState();
+        resetPendingSurvey(); syncSurveyUiFromState();
+        if (els.surveyDetails) els.surveyDetails.open = false;
         resetRoundSetupState();
         saveState();
         els.roundNote.value = "";
