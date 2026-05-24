@@ -1792,13 +1792,15 @@
     // rendering "N/A (par 3)" filler. Keeps the card tighter without
     // hiding any actually-captured data.
     if (hole.par === 3) return "";
+    // Hit / Left / Right / Short / Long cover every direction you can miss
+    // the fairway. A bare "Miss" option was just ambiguity — every miss has
+    // a direction, capture it.
     const options = [
       { value: "hit", label: "Hit" },
       { value: "left", label: "Left" },
       { value: "right", label: "Right" },
       { value: "short", label: "Short" },
-      { value: "long", label: "Long" },
-      { value: "miss", label: "Miss" }
+      { value: "long", label: "Long" }
     ];
     const pills = options.map((opt) => `<button type="button" class="pill" data-pill-value="${opt.value}">${escapeHtml(opt.label)}</button>`).join("");
     return `
@@ -2139,6 +2141,13 @@
     }
     // Refresh the floating-nav arrow disabled-at-ends state.
     updateFloatingNavVisibility();
+    // Live-summary "committed" set depends on which card is active —
+    // advancing past the hole the user just scored commits it into the
+    // totals, so the summary needs a refresh now that the active card
+    // has changed. (prefillActiveCardPar already fires an input event for
+    // a fresh hole; this catches the case where the new card already had
+    // a score from a prior visit.)
+    updateRoundPreview();
   }
 
   function getCardCount() {
@@ -2690,33 +2699,52 @@
     // Always render the live summary skeleton so its height is stable. When
     // empty it shows "--" placeholders; when populated the same cards just
     // fill in. Stable height = no scroll jump above the user's viewport
-    // when they tap their first score pill. (Tapping a pill mid-page when
-    // an element above grows from 0 to 100px otherwise pushes the content
-    // they're looking at down by 100px, which feels like the page scrolled
-    // up.)
-    const complete = entered.length === allHoles.length;
-    const gross = entered.reduce((sum, hole) => sum + hole.score, 0);
-    const par = entered.reduce((sum, hole) => sum + hole.par, 0);
-    const putts = entered.reduce((sum, hole) => sum + hole.putts, 0);
-    const penalties = entered.reduce((sum, hole) => sum + hole.penalties, 0);
-    const girMade = entered.filter((hole) => hole.gir).length;
-    const fairwayHoles = entered.filter((hole) => hole.fairway && hole.fairway !== "na");
-    const fairwaysHit = fairwayHoles.filter((hole) => hole.fairway === "hit").length;
-    const differential = (entered.length && complete) ? estimateRoundDifferential(getSelectedRoundCourse(), entered) : null;
-    const sgTotal = entered.length ? entered.reduce((sum, hole) => sum + (holeStrokesGained(hole) || 0), 0) : null;
-    const throughSuffix = entered.length ? (complete ? "" : ` | thru ${entered.length}/${allHoles.length}`) : "";
+    // when they tap their first score pill.
 
-    els.roundPreview.textContent = entered.length
+    // "committed" = holes the user has effectively finished with. In card
+    // view (and not editing a saved round), exclude the currently-active
+    // card from the live summary totals so gross/putts/etc don't jitter
+    // as the user adjusts scores mid-hole. The numbers commit when they
+    // advance to the next hole. Exception: when every hole already has a
+    // score, include everything — the user has effectively finished the
+    // round and shouldn't be stuck "missing" the last hole in the summary.
+    let committed = entered;
+    if (viewMode === "card"
+        && !editingRoundId
+        && entered.length < allHoles.length) {
+      const activeCard = els.scorecardGrid.querySelector(".scorecard-card.active");
+      const activeHoleNumber = activeCard ? Number(activeCard.dataset.holeNumber) : null;
+      if (Number.isFinite(activeHoleNumber)) {
+        committed = entered.filter((hole) => hole.number !== activeHoleNumber);
+      }
+    }
+
+    const complete = entered.length === allHoles.length;
+    const gross = committed.reduce((sum, hole) => sum + hole.score, 0);
+    const par = committed.reduce((sum, hole) => sum + hole.par, 0);
+    const putts = committed.reduce((sum, hole) => sum + hole.putts, 0);
+    const penalties = committed.reduce((sum, hole) => sum + hole.penalties, 0);
+    const girMade = committed.filter((hole) => hole.gir).length;
+    const fairwayHoles = committed.filter((hole) => hole.fairway && hole.fairway !== "na");
+    const fairwaysHit = fairwayHoles.filter((hole) => hole.fairway === "hit").length;
+    // Differential is a round-level number that only makes sense once every
+    // hole is in — keep gating on `entered` so it appears the moment the
+    // last score lands, even before the user advances away from it.
+    const differential = (entered.length && complete) ? estimateRoundDifferential(getSelectedRoundCourse(), entered) : null;
+    const sgTotal = committed.length ? committed.reduce((sum, hole) => sum + (holeStrokesGained(hole) || 0), 0) : null;
+    const throughSuffix = committed.length ? (complete ? "" : ` | thru ${committed.length}/${allHoles.length}`) : "";
+
+    els.roundPreview.textContent = committed.length
       ? `${gross} (${formatSigned(gross - par, 0)}) | ${putts} putts${throughSuffix}`
       : "--";
 
-    const grossLabel = !entered.length ? "Gross" : complete ? "Gross" : `Gross (thru ${entered.length})`;
-    const grossValue = entered.length ? gross : "--";
-    const toParValue = entered.length ? formatSigned(gross - par, 0) : "--";
-    const puttsValue = entered.length ? putts : "--";
+    const grossLabel = !committed.length ? "Gross" : complete ? "Gross" : `Gross (thru ${committed.length})`;
+    const grossValue = committed.length ? gross : "--";
+    const toParValue = committed.length ? formatSigned(gross - par, 0) : "--";
+    const puttsValue = committed.length ? putts : "--";
     const firValue = fairwayHoles.length ? percentage(fairwaysHit, fairwayHoles.length) : "--";
-    const girValue = girMade ? percentage(girMade, entered.length) : "--";
-    const penValue = entered.length ? penalties : "--";
+    const girValue = girMade ? percentage(girMade, committed.length) : "--";
+    const penValue = committed.length ? penalties : "--";
     const sgValue = sgTotal === null ? "--" : formatSigned(sgTotal);
     const diffValue = differential === null ? "--" : differential.toFixed(1);
 
