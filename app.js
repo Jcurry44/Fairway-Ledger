@@ -2760,6 +2760,17 @@
       : emptyState("Save a round to see scoring broken down by course.", { action: "rounds" });
   }
 
+  // For Deerwood, the same physical hole (e.g. Buck 1) shows up under
+  // different routing numbers — it's #1 if Buck is the front nine, #10 if
+  // Buck is the back nine, and #1 again in a Buck-only 9-hole round. The
+  // hole label ("Buck 1") IS the physical identity, so use it for display
+  // and aggregation so triples / bests / by-course rollups don't fragment
+  // the same hole into 2-3 phantom holes.
+  function holeDisplayId(courseId, holeLabel, holeNumber) {
+    if (isDeerwoodCourseId(courseId) && holeLabel) return holeLabel;
+    return `#${holeNumber}`;
+  }
+
   // Compute every interesting per-hole metric for one par tier (3 / 4 / 5).
   // Returns null if there are no scored holes of that par. The richness lives
   // here so both the inline card and the drill-down sheet can pull from one
@@ -2768,8 +2779,11 @@
     const items = [];
     rounds.forEach((round) => {
       if (!Array.isArray(round.holes)) return;
-      const course = getCourse(round.courseId);
-      const courseName = course ? course.name : "Unknown";
+      // physicalCourseName collapses all Deerwood routings (and the various
+      // courseId-per-tee variants in the catalog) under one display name,
+      // so the by-course rollup doesn't shard the same physical course
+      // into Buck/Doe vs Buck/Fawn vs 9-hole Buck buckets.
+      const courseName = physicalCourseName(round.courseId);
       round.holes.forEach((hole) => {
         if (hole.par !== par) return;
         if (!Number.isFinite(hole.score) || hole.score <= 0) return;
@@ -2786,9 +2800,15 @@
           teeClub: Array.isArray(hole.clubsHit) && hole.clubsHit.length ? hole.clubsHit[0] : null,
           sg: holeStrokesGained(hole),
           holeNumber: hole.number,
-          holeLabel: hole.label || `#${hole.number}`,
+          holeLabel: hole.label || "",
+          // Pre-computed display + grouping keys so renderers stay simple.
+          // physicalHoleId() (from golf-math) already handles the Deerwood
+          // nine-aware identity, so we lean on it instead of re-deriving.
+          holeDisplayId: holeDisplayId(round.courseId, hole.label, hole.number),
+          holePhysicalKey: physicalHoleId(round.courseId, hole),
           courseId: round.courseId,
           courseName,
+          courseKey: courseName, // physical-course rollup key
           date: round.date,
           roundId: round.id
         });
@@ -2904,7 +2924,7 @@
     const tier = parTypeTier(stats.avgToPar);
 
     const bestLine = stats.bestHole
-      ? `Best ${formatSigned(stats.bestToPar)} · ${escapeHtml(stats.bestHole.courseName)} #${stats.bestHole.holeNumber}`
+      ? `Best ${formatSigned(stats.bestToPar)} · ${escapeHtml(stats.bestHole.courseName)} ${escapeHtml(stats.bestHole.holeDisplayId)}`
       : "";
 
     return `
@@ -3027,7 +3047,7 @@
         ${matches.map((h) => `
           <li>
             <span class="par-detail-bucket-when">${escapeHtml(h.date || "")}</span>
-            <span class="par-detail-bucket-where">${escapeHtml(h.courseName)} <small>#${h.holeNumber}</small></span>
+            <span class="par-detail-bucket-where">${escapeHtml(h.courseName)} <small>${escapeHtml(h.holeDisplayId)}</small></span>
             <strong class="par-detail-bucket-score ${parTypeTier(h.toPar)}">${h.score} <small>(${formatSigned(h.toPar)})</small></strong>
           </li>`).join("")}
       </ul>`;
@@ -3074,10 +3094,13 @@
       </section>`;
 
     // --- By course --------------------------------------------------------
+    // Key on the physical course name (already normalized in computeParTypeStats)
+    // so Deerwood Buck/Doe vs Buck/Fawn vs Buck-only-9 all roll up to a
+    // single "Deerwood Golf Course" entry.
     const byCourse = new Map();
     items.forEach((h) => {
-      if (!byCourse.has(h.courseId)) byCourse.set(h.courseId, { name: h.courseName, n: 0, sumToPar: 0 });
-      const e = byCourse.get(h.courseId);
+      if (!byCourse.has(h.courseKey)) byCourse.set(h.courseKey, { name: h.courseName, n: 0, sumToPar: 0 });
+      const e = byCourse.get(h.courseKey);
       e.n += 1;
       e.sumToPar += h.toPar;
     });
@@ -3135,7 +3158,7 @@
           ${recent.map((h) => `
             <li>
               <span class="par-detail-recent-when">${escapeHtml(h.date || "")}</span>
-              <span class="par-detail-recent-where">${escapeHtml(h.courseName)} <small>#${h.holeNumber}</small></span>
+              <span class="par-detail-recent-where">${escapeHtml(h.courseName)} <small>${escapeHtml(h.holeDisplayId)}</small></span>
               <strong class="par-detail-recent-score ${parTypeTier(h.toPar)}">${h.score} <small>(${formatSigned(h.toPar)})</small></strong>
             </li>`).join("")}
         </ul>
