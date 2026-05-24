@@ -3362,18 +3362,119 @@ body.floating-card-nav-visible .floating-card-nav {
   gap: 6px;
 }
 
+/* Each distribution row is a <details>/<summary>. Summary stays the bucket
+   chip; expanding it reveals the matching holes in a sub-list below. */
+.par-detail-dist-row-wrap {
+  list-style: none;
+}
+
+.par-detail-dist-details {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Hide the native triangle (we draw our own caret on the right). */
+.par-detail-dist-details > summary {
+  list-style: none;
+}
+.par-detail-dist-details > summary::-webkit-details-marker {
+  display: none;
+}
+
 .par-detail-dist-row {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
   align-items: baseline;
   padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid transparent;
   font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  user-select: none;
+}
+
+.par-detail-dist-row:hover {
+  filter: brightness(0.98);
 }
 
 .par-detail-dist-row strong {
   font-weight: 850;
+}
+
+.par-detail-dist-caret {
+  font-weight: 700;
+  font-size: 1rem;
+  opacity: 0.6;
+  transition: transform 0.15s ease;
+  display: inline-block;
+}
+
+.par-detail-dist-details[open] > summary .par-detail-dist-caret {
+  transform: rotate(90deg);
+}
+
+.par-detail-h-hint {
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted);
+  margin-left: 6px;
+  opacity: 0.85;
+}
+
+.par-detail-bucket-holes {
+  list-style: none;
+  margin: 6px 0 2px 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-left: 2px solid var(--line, #d8dfd7);
+  padding-left: 10px;
+}
+
+.par-detail-bucket-holes li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 10px;
+  background: #fbfdfa;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.par-detail-bucket-when {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.par-detail-bucket-where {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.par-detail-bucket-where small {
+  color: var(--muted);
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.par-detail-bucket-score {
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  font-weight: 850;
+}
+
+.par-detail-bucket-score small {
+  font-weight: 700;
+  margin-left: 2px;
 }
 
 .par-detail-skill-list li {

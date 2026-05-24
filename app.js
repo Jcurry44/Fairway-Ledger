@@ -3003,22 +3003,50 @@
         <div class="par-detail-tile"><small>Worst</small><strong>+${stats.worstToPar}</strong></div>
       </div>`;
 
-    // --- Distribution table ------------------------------------------------
-    const distRows = [
-      ["scoring-birdie", "Birdie or better", stats.eagleOrBetter + stats.birdies],
-      ["scoring-par", "Par", stats.pars],
-      ["scoring-bogey", "Bogey", stats.bogeys],
-      ["scoring-double", "Double", stats.doubles],
-      ["scoring-worse", "Triple+", stats.worse]
-    ].filter(([, , n]) => n > 0);
+    // --- Distribution table (each bucket expands to show the actual holes) -
+    // The predicate filters stats.items down to the matching holes for the
+    // bucket. Each row is a <details>/<summary> so the toggle behavior is
+    // native — no JS state to manage — and a11y-friendly out of the box.
+    const distBuckets = [
+      { cls: "scoring-birdie", label: "Birdie or better", count: stats.eagleOrBetter + stats.birdies,
+        pred: (h) => h.toPar <= -1 },
+      { cls: "scoring-par", label: "Par", count: stats.pars,
+        pred: (h) => h.toPar === 0 },
+      { cls: "scoring-bogey", label: "Bogey", count: stats.bogeys,
+        pred: (h) => h.toPar === 1 },
+      { cls: "scoring-double", label: "Double", count: stats.doubles,
+        pred: (h) => h.toPar === 2 },
+      { cls: "scoring-worse", label: "Triple+", count: stats.worse,
+        pred: (h) => h.toPar >= 3 }
+    ].filter((b) => b.count > 0);
+
+    function bucketRowsHtml(items, pred) {
+      const matches = items.filter(pred).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+      if (!matches.length) return "";
+      return `<ul class="par-detail-bucket-holes">
+        ${matches.map((h) => `
+          <li>
+            <span class="par-detail-bucket-when">${escapeHtml(h.date || "")}</span>
+            <span class="par-detail-bucket-where">${escapeHtml(h.courseName)} <small>#${h.holeNumber}</small></span>
+            <strong class="par-detail-bucket-score ${parTypeTier(h.toPar)}">${h.score} <small>(${formatSigned(h.toPar)})</small></strong>
+          </li>`).join("")}
+      </ul>`;
+    }
+
     const distHtml = `
       <section class="par-detail-section">
-        <h4 class="par-detail-h">Scoring breakdown</h4>
+        <h4 class="par-detail-h">Scoring breakdown <span class="par-detail-h-hint">(tap a row to see the holes)</span></h4>
         <ul class="par-detail-dist-list">
-          ${distRows.map(([cls, label, n]) => `
-            <li class="par-detail-dist-row ${cls}">
-              <span>${escapeHtml(label)}</span>
-              <span><strong>${n}</strong> <small>(${Math.round((n / count) * 100)}%)</small></span>
+          ${distBuckets.map((b) => `
+            <li class="par-detail-dist-row-wrap">
+              <details class="par-detail-dist-details">
+                <summary class="par-detail-dist-row ${b.cls}">
+                  <span class="par-detail-dist-label">${escapeHtml(b.label)}</span>
+                  <span class="par-detail-dist-val"><strong>${b.count}</strong> <small>(${Math.round((b.count / count) * 100)}%)</small></span>
+                  <span class="par-detail-dist-caret" aria-hidden="true">›</span>
+                </summary>
+                ${bucketRowsHtml(stats.items, b.pred)}
+              </details>
             </li>`).join("")}
         </ul>
       </section>`;
