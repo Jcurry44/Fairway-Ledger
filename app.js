@@ -2919,12 +2919,27 @@
   }
 
   function renderCourseStats(rounds) {
-    // Group by *physical* course name so all of Diamond Hawk's tees pool
-    // into one row, not five. The sub-text shows which tees the user has
-    // actually played at that course.
-    const groups = groupBy(rounds, (round) => physicalCourseName(round.courseId));
-    const rows = Object.entries(groups).map(([courseName, courseRounds]) => {
-      // Tee mix: which tees were actually played at this course, with counts.
+    // Group by (physical course name + hole count). Averaging a 9-hole 38
+    // with an 18-hole 78 at the same course gives a meaningless ~58, so 9-
+    // and 18-hole rounds get their own rows. Tee variants STILL pool within
+    // a row (Diamond Hawk Black + Gold + Green stays one row per hole count).
+    const groups = new Map();
+    rounds.forEach((round) => {
+      const name = physicalCourseName(round.courseId);
+      const holeCount = Array.isArray(round.holes) ? round.holes.length : 0;
+      if (!holeCount) return;
+      const key = `${name}|${holeCount}`;
+      if (!groups.has(key)) groups.set(key, { name, holeCount, rounds: [] });
+      groups.get(key).rounds.push(round);
+    });
+    // Sort: alphabetically by course name, with the larger hole count first
+    // within each course (the "real" round comes before the 9-hole row).
+    const sorted = [...groups.values()].sort((a, b) => {
+      const byName = a.name.localeCompare(b.name);
+      return byName !== 0 ? byName : b.holeCount - a.holeCount;
+    });
+    const rows = sorted.map(({ name, holeCount, rounds: courseRounds }) => {
+      // Tee mix at this (course, hole-count) bucket.
       const teeCounts = new Map();
       courseRounds.forEach((r) => {
         const tee = r.tee || "—";
@@ -2936,10 +2951,11 @@
         .join(" · ");
       const totals = courseRounds.map(roundTotals);
       const best = Math.min(...totals.map((item) => item.gross));
+      const holeBadge = `<span class="course-stat-holes-badge">${holeCount} holes</span>`;
       return `
         <div class="course-stat-row">
           <div>
-            <strong>${escapeHtml(courseName)}</strong>
+            <strong>${escapeHtml(name)} ${holeBadge}</strong>
             <span class="subtext">${escapeHtml(teeSummary)}</span>
           </div>
           <div class="course-stat-metrics">

@@ -4347,6 +4347,24 @@ td {
   align-items: flex-start;
 }
 
+/* "18 holes" / "9 holes" pill sitting next to the course name in
+   the Scoring By Course rows. Keeps 9- and 18-hole averages visually
+   separate at the same physical course (Deerwood especially). */
+.course-stat-holes-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
 .course-stat-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(70px, 1fr));
