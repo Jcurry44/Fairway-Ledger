@@ -3461,6 +3461,72 @@ body.floating-card-nav-visible .floating-card-nav {
   gap: 16px;
 }
 
+/* Scrambling panel — three big rows: Scrambling % / Sand save % /
+   Bunker frequency. Each row is label + headline + meta sub-line. */
+.scrambling-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scrambling-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scrambling-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-soft);
+}
+
+.scrambling-row-label {
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.scrambling-row-value {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.scrambling-row-value strong {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+}
+
+.scrambling-row-value strong.scrambling-muted {
+  color: var(--muted);
+  font-size: 1.2rem;
+}
+
+.scrambling-row-value span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+@media (max-width: 540px) {
+  .scrambling-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
 .putting-headline {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

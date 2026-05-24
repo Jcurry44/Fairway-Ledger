@@ -15,9 +15,9 @@
     <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
          icon, theme color in the browser chrome, and a standalone display
          mode instead of a tab. -->
-    <link rel="manifest" href="./manifest.json?v=2026-05-24b">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-05-24b">
-    <link rel="apple-touch-icon" href="./icon.svg?v=2026-05-24b">
+    <link rel="manifest" href="./manifest.json?v=2026-05-24c">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-05-24c">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-05-24c">
     <meta name="theme-color" content="#1f7a59">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -32,11 +32,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
 
-    <link rel="stylesheet" href="./styles.css?v=2026-05-24b">
-    <script src="./data/courses.js?v=2026-05-24b" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-24b" defer></script>
-    <script src="./lib/shapes.js?v=2026-05-24b" defer></script>
-    <script src="./app.js?v=2026-05-24b" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-24c">
+    <script src="./data/courses.js?v=2026-05-24c" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-24c" defer></script>
+    <script src="./lib/shapes.js?v=2026-05-24c" defer></script>
+    <script src="./app.js?v=2026-05-24c" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -121,6 +121,7 @@
           <nav class="home-subchips" data-home-section="clubs" aria-label="Clubs">
             <button class="home-subchip" type="button" data-home-subsection-target="tee-club-performance">Tee shots</button>
             <button class="home-subchip" type="button" data-home-subsection-target="putting-by-distance">Putting</button>
+            <button class="home-subchip" type="button" data-home-subsection-target="scrambling">Scrambling</button>
           </nav>
 
           <section id="welcomeCallout" class="welcome-callout" data-home-section="overview" hidden>
@@ -244,6 +245,17 @@
                 <span class="panel-note">first club tapped per hole = tee shot</span>
               </div>
               <div id="teeClubPanel" class="tee-club-panel"></div>
+            </article>
+
+            <article class="panel wide-panel" data-panel-id="scrambling">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Short game</p>
+                  <h2>Scrambling</h2>
+                </div>
+                <span class="panel-note">save par after missing the green</span>
+              </div>
+              <div id="scramblingPanel" class="scrambling-panel"></div>
             </article>
 
             <article class="panel wide-panel">

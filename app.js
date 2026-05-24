@@ -264,6 +264,7 @@
     welcomeCallout: document.getElementById("welcomeCallout"),
     welcomeSampleButton: document.getElementById("welcomeSampleButton"),
     teeClubPanel: document.getElementById("teeClubPanel"),
+    scramblingPanel: document.getElementById("scramblingPanel"),
     deerwoodByNinePanel: document.getElementById("deerwoodByNinePanel"),
     deerwoodByNineCard: document.getElementById("deerwoodByNineCard"),
     profileBagGrid: document.getElementById("profileBagGrid"),
@@ -2367,9 +2368,12 @@
   }
 
   function bunkerInputCell(hole) {
+    // Default to "none" — most holes have no bunker, so pre-selecting it
+    // means the user only flips this on the holes where sand was actually
+    // a factor. Mirrors the Penalty input which defaults to 0 for the
+    // same reason.
     const options = [
-      `<option value="" selected>—</option>`,
-      `<option value="none">No</option>`,
+      `<option value="none" selected>No</option>`,
       `<option value="fairway">Fairway</option>`,
       `<option value="greenside">Greenside</option>`,
       `<option value="both">Both</option>`
@@ -3608,6 +3612,97 @@
     els.puttingPanel.innerHTML = headline + `<div class="putting-rows">${rows}</div>`;
   }
 
+  // Scrambling = saves from off the green (missed GIR, but scored par or
+  // better — meaning you got up-and-down). Sand save = scrambling
+  // specifically from a greenside bunker. "Both" (fairway + greenside on
+  // the same hole) counts toward greenside since the save attempt is from
+  // the greenside bunker. Holes with no GIR data (rare — GIR is auto-
+  // derived) are skipped.
+  function computeScramblingStats(rounds) {
+    let totalHoles = 0;
+    let missedGirHoles = 0;
+    let scrambleSaves = 0;
+    let fairwayBunkerHoles = 0;
+    let greensideBunkerHoles = 0;
+    let bothBunkerHoles = 0;
+    let sandSaveAttempts = 0;
+    let sandSaves = 0;
+    rounds.forEach((round) => {
+      if (!Array.isArray(round.holes)) return;
+      round.holes.forEach((hole) => {
+        if (!Number.isFinite(hole.score) || hole.score <= 0) return;
+        totalHoles += 1;
+        const toPar = hole.score - hole.par;
+        const isGreensideBunker = hole.bunker === "greenside" || hole.bunker === "both";
+        if (hole.bunker === "fairway") fairwayBunkerHoles += 1;
+        if (hole.bunker === "greenside") greensideBunkerHoles += 1;
+        if (hole.bunker === "both") bothBunkerHoles += 1;
+        if (!hole.gir) {
+          missedGirHoles += 1;
+          if (toPar <= 0) scrambleSaves += 1;
+          if (isGreensideBunker) {
+            sandSaveAttempts += 1;
+            if (toPar <= 0) sandSaves += 1;
+          }
+        }
+      });
+    });
+    const anyBunkerHoles = fairwayBunkerHoles + greensideBunkerHoles + bothBunkerHoles;
+    return {
+      totalHoles,
+      missedGirHoles,
+      scrambleSaves,
+      scramblingPct: missedGirHoles ? scrambleSaves / missedGirHoles : 0,
+      fairwayBunkerHoles,
+      greensideBunkerHoles,
+      bothBunkerHoles,
+      anyBunkerHoles,
+      bunkerFreqPct: totalHoles ? anyBunkerHoles / totalHoles : 0,
+      sandSaveAttempts,
+      sandSaves,
+      sandSavePct: sandSaveAttempts ? sandSaves / sandSaveAttempts : 0,
+    };
+  }
+
+  function renderScramblingPanel(rounds) {
+    if (!els.scramblingPanel) return;
+    const stats = computeScramblingStats(rounds);
+    if (!stats.totalHoles) {
+      els.scramblingPanel.innerHTML = emptyState(
+        "Save a round to unlock scrambling and sand-save stats.",
+        { action: "rounds" }
+      );
+      return;
+    }
+    const fmtPct = (v) => `${Math.round(v * 100)}%`;
+    // Scrambling row — always available since GIR + score is enough. Sand
+    // save row only meaningful once the user has logged bunker data.
+    const sandSaveLine = stats.sandSaveAttempts > 0
+      ? `<strong>${fmtPct(stats.sandSavePct)}</strong><span>${stats.sandSaves} of ${stats.sandSaveAttempts} greenside-bunker holes saved par or better</span>`
+      : `<strong class="scrambling-muted">—</strong><span>Log Bunker on Add Round to unlock sand-save %.</span>`;
+    const bunkerLine = stats.anyBunkerHoles > 0
+      ? `<strong>${fmtPct(stats.bunkerFreqPct)}</strong><span>${stats.anyBunkerHoles} of ${stats.totalHoles} holes found sand · ${stats.fairwayBunkerHoles} fairway, ${stats.greensideBunkerHoles} greenside${stats.bothBunkerHoles ? `, ${stats.bothBunkerHoles} both` : ""}</span>`
+      : `<strong class="scrambling-muted">—</strong><span>No bunker data logged yet.</span>`;
+    els.scramblingPanel.innerHTML = `
+      <div class="scrambling-rows">
+        <div class="scrambling-row">
+          <div class="scrambling-row-label">Scrambling</div>
+          <div class="scrambling-row-value">
+            <strong>${fmtPct(stats.scramblingPct)}</strong>
+            <span>${stats.scrambleSaves} of ${stats.missedGirHoles} missed-GIR holes saved par or better</span>
+          </div>
+        </div>
+        <div class="scrambling-row">
+          <div class="scrambling-row-label">Sand save</div>
+          <div class="scrambling-row-value">${sandSaveLine}</div>
+        </div>
+        <div class="scrambling-row">
+          <div class="scrambling-row-label">Bunker frequency</div>
+          <div class="scrambling-row-value">${bunkerLine}</div>
+        </div>
+      </div>`;
+  }
+
   const SCORING_BUCKETS = [
     { id: "eagle", label: "Eagle+", chipClass: "scoring-eagle", match: (toPar) => toPar <= -2 },
     { id: "birdie", label: "Birdie", chipClass: "scoring-birdie", match: (toPar) => toPar === -1 },
@@ -4466,7 +4561,8 @@
     "scoring-by-course": "holes",
     "scoring-by-nine": "holes",
     "tee-club-performance": "clubs",
-    "putting-by-distance": "clubs"
+    "putting-by-distance": "clubs",
+    "scrambling": "clubs"
   };
   const HOME_SECTIONS = ["overview", "trends", "holes", "clubs"];
   const HOME_SECTION_KEY = "fairwayLedger.homeSection.v1";
@@ -4892,6 +4988,7 @@
     renderPuttingPanel(rounds);
     renderScoringDistribution(rounds);
     renderTeeClubPerformance(rounds);
+    renderScramblingPanel(rounds);
     renderRecentRounds();
     updateBackupBadge();
     renderCourseList();
