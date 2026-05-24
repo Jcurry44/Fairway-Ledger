@@ -1685,10 +1685,15 @@
       </div>`;
   }
 
+  // Wedges intentionally cover both naming conventions — degree-labeled
+  // (50° / 52° / 54° / 56° / 58° / 60°) AND the older GW / SW / LW labels.
+  // Plenty of players carry GW / SW / LW marked clubs and never think in
+  // degrees; offering both lets bag setup match the labels printed on the
+  // clubheads.
   const CLUB_OPTIONS = [
     "Driver", "3W", "5W", "7W", "Hybrid",
     "3i", "4i", "5i", "6i", "7i", "8i", "9i",
-    "PW", "50°", "52°", "54°", "56°", "58°", "60°",
+    "PW", "GW", "50°", "52°", "54°", "SW", "56°", "58°", "60°", "LW",
     "Putter", "Other"
   ];
 
