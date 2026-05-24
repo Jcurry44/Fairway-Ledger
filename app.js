@@ -4578,108 +4578,267 @@
       </svg>`;
   }
 
+  // The round narrative is intentionally NOT cached on the round itself —
+  // it depends on all your *other* rounds (recent-form comparison), so every
+  // time you add a new round, every old summary's "vs your recent average"
+  // shifts. Always regenerating on render keeps every summary fresh and
+  // means we don't have to invalidate a cache.
+  //
+  // Output is a multi-paragraph string, paragraphs separated by "\n\n".
+  // The renderer splits and wraps each in <p>. Each paragraph is built by
+  // a small helper that can return "" — paragraphs that have nothing
+  // interesting to say (e.g. no per-hole notes were entered) are dropped.
   function generateRoundNarrative(round, allRounds) {
     if (!round || !Array.isArray(round.holes) || !round.holes.length) return "";
-    const valid = round.holes.filter((hole) => Number.isFinite(hole.score) && hole.score > 0);
+    const valid = round.holes.filter((h) => Number.isFinite(h.score) && h.score > 0);
     if (!valid.length) return "";
+    const paragraphs = [
+      buildNarrativeHeadline(round, valid, allRounds),
+      buildNarrativeStory(valid),
+      buildNarrativeCost(round, valid),
+      buildNarrativeHighlights(round, valid),
+      buildNarrativeNotes(round, valid),
+      buildNarrativeRoundNote(round)
+    ].filter(Boolean);
+    return paragraphs.join("\n\n");
+  }
 
-    const course = getCourse(round.courseId);
-    const courseName = course ? course.name : "the course";
+  // Paragraph 1 — Headline. Score + course + how it compares to your recent
+  // form + (for 18-hole rounds) front/back split + scoring shape.
+  function buildNarrativeHeadline(round, valid, allRounds) {
+    const courseName = physicalCourseName(round.courseId);
     const totals = roundTotals(round);
-    const sg = roundStrokesGained(round);
+    const parts = [`Shot ${totals.gross} (${formatSigned(totals.toPar, 0)}) at ${courseName}`];
 
-    const pieces = [];
-
-    // 1. Opening: score + course + how it compares to recent form.
-    const otherRounds = allRounds.filter((other) => other.id !== round.id);
-    const otherTotals = otherRounds
-      .sort((a, b) => b.date.localeCompare(a.date))
+    // Recent form: only compare against same-length rounds (9 vs 18 mixing
+    // is meaningless). And only mention if we have at least 2 prior data points.
+    const others = allRounds
+      .filter((r) => r.id !== round.id && r.holes.length === round.holes.length)
+      .filter((r) => r.holes.some((h) => Number.isFinite(h.score) && h.score > 0))
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
       .slice(0, 5)
       .map(roundTotals);
-    const recentAvgToPar = otherTotals.length ? average(otherTotals.map((entry) => entry.toPar)) : null;
-    let opening = `Shot ${totals.gross} (${formatSigned(totals.toPar, 0)}) at ${courseName}`;
-    if (recentAvgToPar !== null && Number.isFinite(recentAvgToPar)) {
-      const delta = totals.toPar - recentAvgToPar;
-      if (delta <= -3) opening += ` — clearly better than your recent form (avg ${formatSigned(recentAvgToPar)}).`;
-      else if (delta <= -1) opening += ` — a bit better than your recent average (${formatSigned(recentAvgToPar)}).`;
-      else if (delta >= 3) opening += ` — tougher day than your recent form (avg ${formatSigned(recentAvgToPar)}).`;
-      else if (delta >= 1) opening += ` — a bit above your recent average (${formatSigned(recentAvgToPar)}).`;
-      else opening += ` — right around your recent average.`;
-    } else {
-      opening += `.`;
+    if (others.length >= 2) {
+      const recentAvg = average(others.map((t) => t.toPar));
+      const delta = totals.toPar - recentAvg;
+      if (delta <= -4) parts.push(`well below your recent ${others.length}-round average (${formatSigned(recentAvg, 1)})`);
+      else if (delta <= -1.5) parts.push(`better than your recent average (${formatSigned(recentAvg, 1)})`);
+      else if (delta >= 4) parts.push(`a tougher day than usual (recent avg ${formatSigned(recentAvg, 1)})`);
+      else if (delta >= 1.5) parts.push(`a touch above your recent average (${formatSigned(recentAvg, 1)})`);
+      else parts.push(`right around your recent average`);
     }
-    pieces.push(opening);
+    let sentence = parts.join(" — ") + ".";
 
-    // 2. Theme: identify the dominant story (penalties, 3-putts, big leak hole, strength hole).
-    const penalties = valid.reduce((sum, hole) => sum + (Number(hole.penalties) || 0), 0);
-    const penaltyHoles = valid.filter((hole) => Number(hole.penalties) > 0).map((hole) => hole.label || `#${hole.number}`);
-    const threePuttHoles = valid.filter((hole) => Number(hole.putts) >= 3);
-    const fairwayHoles = valid.filter((hole) => hole.fairway && hole.fairway !== "na");
-    const fairwaysHit = fairwayHoles.filter((hole) => hole.fairway === "hit").length;
-    const fairwayRate = fairwayHoles.length ? fairwaysHit / fairwayHoles.length : null;
-    const girMade = valid.filter((hole) => hole.gir).length;
-    const girRate = valid.length ? girMade / valid.length : 0;
-    const totalPutts = valid.reduce((sum, hole) => sum + (Number(hole.putts) || 0), 0);
-    const avgPutts = totalPutts / valid.length;
+    // Front 9 / back 9 split — only for complete 18-hole rounds.
+    const fbBit = formatFrontBackSplit(round, valid);
+    if (fbBit) sentence += " " + fbBit;
 
-    const holesWithLoss = valid.map((hole) => ({ ...hole, loss: hole.score - hole.par }));
-    const worstHole = [...holesWithLoss].sort((a, b) => b.loss - a.loss)[0];
-    const bestHole = [...holesWithLoss].sort((a, b) => a.loss - b.loss)[0];
-
-    const themeBits = [];
-    if (penalties >= 2) {
-      const where = penaltyHoles.length ? ` (${penaltyHoles.slice(0, 3).map(escapeForText).join(", ")})` : "";
-      themeBits.push(`${penalties} penalty stroke${penalties === 1 ? "" : "s"}${where} hurt the round`);
-    }
-    if (threePuttHoles.length >= 2) {
-      themeBits.push(`${threePuttHoles.length} three-putts cost roughly ${threePuttHoles.length} stroke${threePuttHoles.length === 1 ? "" : "s"} on the greens`);
-    }
-    if (worstHole && worstHole.loss >= 3) {
-      themeBits.push(`a ${worstHole.score} on ${escapeForText(worstHole.label || `hole ${worstHole.number}`)} (${formatSigned(worstHole.loss, 0)}) was the standout leak`);
-    }
-    if (fairwayRate !== null && fairwayHoles.length >= 6 && fairwayRate >= 0.75) {
-      themeBits.push(`tee shots were dialed (${fairwaysHit}/${fairwayHoles.length} fairways)`);
-    }
-    if (fairwayRate !== null && fairwayHoles.length >= 6 && fairwayRate <= 0.35) {
-      themeBits.push(`driver missed often (${fairwaysHit}/${fairwayHoles.length} fairways)`);
-    }
-    if (girRate >= 0.45) {
-      themeBits.push(`iron play held up (${girMade}/${valid.length} GIR)`);
-    }
-    if (avgPutts <= 1.7 && valid.length >= 9) {
-      themeBits.push(`putter was hot (${avgPutts.toFixed(2)} putts/hole)`);
-    }
-    if (avgPutts >= 2.2 && valid.length >= 9) {
-      themeBits.push(`putting drifted (${avgPutts.toFixed(2)} putts/hole)`);
-    }
-    if (bestHole && bestHole.loss <= -1) {
-      const tag = bestHole.loss === -1 ? "birdie" : bestHole.loss === -2 ? "eagle" : "big number under";
-      themeBits.push(`a ${tag} on ${escapeForText(bestHole.label || `hole ${bestHole.number}`)} was the highlight`);
+    // Scoring shape: only inline if we have enough holes to make the
+    // distribution meaningful (≥9). Always-shows for full rounds.
+    if (valid.length >= 9) {
+      const shape = formatScoringShape(valid);
+      if (shape) sentence += " " + shape;
     }
 
-    if (themeBits.length) {
-      const sentence = themeBits.slice(0, 2).join(" and ");
-      pieces.push(sentence.charAt(0).toUpperCase() + sentence.slice(1) + ".");
+    // Wind tag if recorded.
+    if (round.wind) sentence += ` Conditions: ${formatWind(round.wind).toLowerCase()}.`;
+
+    return sentence;
+  }
+
+  function formatFrontBackSplit(round, valid) {
+    if (round.holes.length !== 18 || valid.length < 18) return "";
+    const front = round.holes.slice(0, 9);
+    const back = round.holes.slice(9, 18);
+    if (!front.every((h) => Number.isFinite(h.score) && h.score > 0)) return "";
+    if (!back.every((h) => Number.isFinite(h.score) && h.score > 0)) return "";
+    const fG = front.reduce((s, h) => s + h.score, 0);
+    const bG = back.reduce((s, h) => s + h.score, 0);
+    const fP = front.reduce((s, h) => s + h.par, 0);
+    const bP = back.reduce((s, h) => s + h.par, 0);
+    const fT = fG - fP;
+    const bT = bG - bP;
+    const diff = bT - fT;
+    const split = `Front ${fG} (${formatSigned(fT, 0)}) / back ${bG} (${formatSigned(bT, 0)})`;
+    if (diff >= 4) return `${split} — finished rough.`;
+    if (diff <= -4) return `${split} — turned it around on the back.`;
+    if (diff >= 2) return `${split} — slipped a bit coming in.`;
+    if (diff <= -2) return `${split} — tightened up on the back.`;
+    return `${split}.`;
+  }
+
+  function formatScoringShape(valid) {
+    let eagles = 0, birds = 0, parsCount = 0, bogeys = 0, doubles = 0, worse = 0;
+    valid.forEach((h) => {
+      const d = h.score - h.par;
+      if (d <= -2) eagles += 1;
+      else if (d === -1) birds += 1;
+      else if (d === 0) parsCount += 1;
+      else if (d === 1) bogeys += 1;
+      else if (d === 2) doubles += 1;
+      else worse += 1;
+    });
+    const bits = [];
+    if (eagles) bits.push(`${eagles} eagle${eagles === 1 ? "" : "s"}`);
+    if (birds) bits.push(`${birds} birdie${birds === 1 ? "" : "s"}`);
+    if (parsCount) bits.push(`${parsCount} par${parsCount === 1 ? "" : "s"}`);
+    if (bogeys) bits.push(`${bogeys} bogey${bogeys === 1 ? "" : "s"}`);
+    if (doubles) bits.push(`${doubles} double${doubles === 1 ? "" : "s"}`);
+    if (worse) bits.push(`${worse} triple+`);
+    if (!bits.length) return "";
+    return bits.join(", ") + ".";
+  }
+
+  // Paragraph 2 — Story. The "what worked / what didn't" paragraph. We
+  // generate every observation that meets a threshold, then take the top 3
+  // most interesting (extremes first — really good or really bad) so the
+  // paragraph stays a tight 2-3 sentences.
+  function buildNarrativeStory(valid) {
+    const lines = [];
+
+    // Tee game — fairway rate.
+    const fairwayHoles = valid.filter((h) => h.fairway && h.fairway !== "na");
+    if (fairwayHoles.length >= 4) {
+      const hit = fairwayHoles.filter((h) => h.fairway === "hit").length;
+      const rate = hit / fairwayHoles.length;
+      if (rate >= 0.7) lines.push({ priority: rate, text: `Tee ball was on point — ${hit}/${fairwayHoles.length} fairways found` });
+      else if (rate <= 0.35) lines.push({ priority: 1 - rate, text: `Driver wandered — only ${hit}/${fairwayHoles.length} fairways hit` });
     }
 
-    // 3. Counterfactual: drop the 3 worst holes.
-    const worstThree = [...holesWithLoss]
-      .filter((hole) => hole.loss > 0)
-      .sort((a, b) => b.loss - a.loss)
-      .slice(0, 3);
-    const savings = worstThree.reduce((sum, hole) => sum + hole.loss, 0);
-    if (savings >= 3 && worstThree.length >= 2) {
+    // Tee club mix — compare driver vs non-driver scoring if both have meaningful samples.
+    const teeHoles = valid.filter((h) => h.par > 3 && Array.isArray(h.clubsHit) && h.clubsHit.length);
+    const driverHoles = teeHoles.filter((h) => h.clubsHit[0] === "Driver");
+    const nonDriverHoles = teeHoles.filter((h) => h.clubsHit[0] !== "Driver");
+    if (driverHoles.length >= 3 && nonDriverHoles.length >= 3) {
+      const dAvg = average(driverHoles.map((h) => h.score - h.par));
+      const oAvg = average(nonDriverHoles.map((h) => h.score - h.par));
+      const gap = dAvg - oAvg;
+      if (gap >= 0.7) lines.push({ priority: gap, text: `On non-driver tee shots you played to ${formatSigned(oAvg, 1)} vs ${formatSigned(dAvg, 1)} with driver — something to think about` });
+      else if (gap <= -0.7) lines.push({ priority: -gap, text: `Driver was your best tee club today (${formatSigned(dAvg, 1)} vs ${formatSigned(oAvg, 1)} without it)` });
+    }
+
+    // GIR — iron play.
+    const girRate = valid.filter((h) => h.gir).length / valid.length;
+    const girMade = valid.filter((h) => h.gir).length;
+    if (girRate >= 0.45) lines.push({ priority: girRate, text: `Iron play held up — ${girMade}/${valid.length} greens in regulation` });
+    else if (girRate <= 0.15 && valid.length >= 9) lines.push({ priority: 1 - girRate, text: `Approach play was thin (${girMade}/${valid.length} GIRs)` });
+
+    // Scrambling.
+    const missedGir = valid.filter((h) => !h.gir);
+    if (missedGir.length >= 5) {
+      const saves = missedGir.filter((h) => h.score - h.par <= 0).length;
+      const sRate = saves / missedGir.length;
+      if (sRate >= 0.5) lines.push({ priority: sRate + 0.5, text: `Short game bailed you out — ${saves}/${missedGir.length} up-and-downs after missed greens` });
+      else if (sRate <= 0.1 && missedGir.length >= 8) lines.push({ priority: 1 - sRate, text: `Scrambling wouldn't fall (${saves}/${missedGir.length} after missed greens)` });
+    }
+
+    // Sand saves — only if greenside bunker came into play meaningfully.
+    const gsBunker = valid.filter((h) => h.bunker === "greenside" || h.bunker === "both");
+    const sandAttempts = gsBunker.filter((h) => !h.gir);
+    if (sandAttempts.length >= 2) {
+      const saves = sandAttempts.filter((h) => h.score - h.par <= 0).length;
+      if (saves === sandAttempts.length) lines.push({ priority: 1.5, text: `Saved sand every time (${saves}/${sandAttempts.length})` });
+      else if (saves === 0) lines.push({ priority: 1.2, text: `Sand was rough (0/${sandAttempts.length} saves)` });
+    }
+
+    // Putting.
+    const puttHoles = valid.filter((h) => Number.isFinite(h.putts) && h.putts > 0);
+    if (puttHoles.length >= 9) {
+      const totalPutts = puttHoles.reduce((s, h) => s + h.putts, 0);
+      const avg = totalPutts / puttHoles.length;
+      const three = puttHoles.filter((h) => h.putts >= 3).length;
+      const one = puttHoles.filter((h) => h.putts === 1).length;
+      if (three >= 3) lines.push({ priority: 0.5 + three * 0.2, text: `${three} three-putts dragged the putter (${avg.toFixed(2)}/hole)` });
+      else if (avg <= 1.7) lines.push({ priority: 1.2, text: `Putter ran hot — ${avg.toFixed(2)} putts/hole with ${one} one-putt${one === 1 ? "" : "s"}` });
+      else if (avg >= 2.1 && three >= 1) lines.push({ priority: 0.8, text: `Putting was loose (${avg.toFixed(2)}/hole, ${three} three-putt${three === 1 ? "" : "s"})` });
+    }
+
+    if (!lines.length) return "";
+    // Top 3 observations, sorted by interest priority (extremes first).
+    const top = [...lines].sort((a, b) => b.priority - a.priority).slice(0, 3).map((l) => l.text);
+    return top.join(". ") + ".";
+  }
+
+  // Paragraph 3 — Cost. Penalties (with the clubs blamed) and the
+  // counterfactual swing if you removed the 3 worst holes.
+  function buildNarrativeCost(round, valid) {
+    const lines = [];
+
+    const penaltyHoles = valid.filter((h) => Number(h.penalties) > 0);
+    const totalPen = penaltyHoles.reduce((s, h) => s + Number(h.penalties), 0);
+    if (totalPen >= 1 && penaltyHoles.length >= 1) {
+      const byClub = new Map();
+      penaltyHoles.forEach((h) => {
+        const club = h.penaltyClub || "uncertain club";
+        byClub.set(club, (byClub.get(club) || 0) + Number(h.penalties));
+      });
+      const clubBits = [...byClub.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([club, n]) => `${n} on the ${club.toLowerCase()}`);
+      lines.push(`${totalPen} penalty stroke${totalPen === 1 ? "" : "s"} on ${penaltyHoles.length} hole${penaltyHoles.length === 1 ? "" : "s"} — ${clubBits.join(", ")}`);
+    }
+
+    // Counterfactual: drop the 3 worst over-par holes.
+    const totals = roundTotals(round);
+    const holesWithLoss = valid
+      .map((h) => ({ ...h, loss: h.score - h.par }))
+      .filter((h) => h.loss > 0)
+      .sort((a, b) => b.loss - a.loss);
+    const worstThree = holesWithLoss.slice(0, 3);
+    const savings = worstThree.reduce((s, h) => s + h.loss, 0);
+    if (savings >= 4 && worstThree.length >= 2) {
+      const labels = worstThree.map((h) => holeDisplayId(round.courseId, h.label, h.number)).join(", ");
       const adjusted = totals.gross - savings;
-      const labels = worstThree.map((hole) => escapeForText(hole.label || `#${hole.number}`)).join(", ");
-      pieces.push(`Without your three worst holes (${labels}) you'd have shot ${adjusted} — a ${savings}-stroke swing.`);
+      lines.push(`Take away your three worst (${labels}) and the card reads ${adjusted} — a ${savings}-stroke swing`);
     }
 
-    // 4. SG signal (optional, if we have it).
-    if (sg && Number.isFinite(sg.total)) {
-      pieces.push(`Strokes Gained: ${formatSigned(sg.total)} vs PGA Tour benchmark.`);
-    }
+    return lines.length ? lines.join(". ") + "." : "";
+  }
 
-    return pieces.join(" ");
+  // Paragraph 4 — Highlights. Pull out the best hole with the most context
+  // we have (tee club, GIR, putts), since that's the part people want to
+  // remember.
+  function buildNarrativeHighlights(round, valid) {
+    const holesWithLoss = valid.map((h) => ({ ...h, loss: h.score - h.par }));
+    const bestHole = [...holesWithLoss].sort((a, b) => a.loss - b.loss)[0];
+    if (!bestHole || bestHole.loss > -1) return "";
+
+    const where = holeDisplayId(round.courseId, bestHole.label, bestHole.number);
+    const tag = bestHole.loss === -1 ? "Birdie"
+              : bestHole.loss === -2 ? "Eagle"
+              : `${Math.abs(bestHole.loss)} under`;
+
+    const bits = [];
+    const tee = Array.isArray(bestHole.clubsHit) && bestHole.clubsHit[0] ? bestHole.clubsHit[0] : null;
+    if (tee) bits.push(`${tee} off the tee`);
+    if (bestHole.gir) bits.push(`green in reg`);
+    if (Number.isFinite(bestHole.putts)) {
+      if (bestHole.putts === 1) bits.push("one-putt");
+      else if (bestHole.putts === 2) bits.push("two-putt");
+    }
+    const detail = bits.length ? ` — ${bits.join(", ")}` : "";
+    return `Standout hole: ${tag} on ${where}${detail}.`;
+  }
+
+  // Paragraph 5 — Per-hole notes (verbatim, the user's voice). The thing the
+  // user explicitly called out: they want their own writing surfaced in the
+  // summary, not just the numbers.
+  function buildNarrativeNotes(round, valid) {
+    const noteHoles = valid.filter((h) => h.note && h.note.trim());
+    if (!noteHoles.length) return "";
+    const bits = noteHoles.slice(0, 6).map((h) => {
+      const where = holeDisplayId(round.courseId, h.label, h.number);
+      return `${where}: "${h.note.trim()}"`;
+    });
+    return `From your notes — ${bits.join("; ")}.`;
+  }
+
+  // Paragraph 6 — Round note. The post-round reflection the user wrote
+  // (separate from per-hole notes). Quoted verbatim as the closing line.
+  function buildNarrativeRoundNote(round) {
+    const note = round.note && round.note.trim();
+    if (!note) return "";
+    return `Your round note: "${note}"`;
   }
 
   function escapeForText(value) {
@@ -4856,9 +5015,14 @@
         const sgLabel = sg ? ` | SG ${formatSigned(sg.total)}` : "";
         const windLabel = round.wind ? ` | ${escapeHtml(formatWind(round.wind))}` : "";
         const editingBadge = editingRoundId === round.id ? ' <span class="editing-pill">editing</span>' : "";
-        const narrative = round.narrative || (round.holes && round.holes.some((h) => Number.isFinite(h.score) && h.score > 0) ? generateRoundNarrative(round, state.rounds) : "");
+        // Always regenerate the narrative — it depends on every other round
+        // ("vs your recent average" shifts as you add rounds), so a stored
+        // string would go stale. The narrative.split / wrap-in-<p> dance
+        // turns the multi-paragraph string into proper HTML paragraphs.
+        const hasScores = round.holes && round.holes.some((h) => Number.isFinite(h.score) && h.score > 0);
+        const narrative = hasScores ? generateRoundNarrative(round, state.rounds) : "";
         const narrativeHtml = narrative
-          ? `<details class="round-row-summary"><summary>Summary</summary><p>${escapeHtml(narrative)}</p></details>`
+          ? `<details class="round-row-summary"><summary>Summary</summary><div class="round-row-summary-body">${narrative.split("\n\n").map((p) => `<p>${escapeHtml(p)}</p>`).join("")}</div></details>`
           : "";
         const scorecardHtml = `<details class="round-row-scorecard"><summary>Scorecard</summary>${renderRoundScorecard(round)}</details>`;
         return `

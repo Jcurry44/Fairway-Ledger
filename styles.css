@@ -3892,7 +3892,31 @@ body.floating-card-nav-visible .floating-card-nav {
   transform: rotate(180deg);
 }
 
-.round-row-summary p {
+/* The narrative is multi-paragraph; we render them inside one
+   ".round-row-summary-body" container so all paragraphs share a single
+   green-bordered card rather than each one getting its own border. */
+.round-row-summary-body {
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--green, #217a57);
+  background: #f3f7f1;
+  border-radius: 0 8px 8px 0;
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.round-row-summary-body p {
+  margin: 0 0 8px;
+}
+
+.round-row-summary-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* Legacy single-paragraph fallback (in case an old details renders direct
+   <p> children somewhere we haven't migrated yet). */
+.round-row-summary > p {
   margin: 6px 0 0;
   padding: 10px 12px;
   border-left: 3px solid var(--green, #217a57);
