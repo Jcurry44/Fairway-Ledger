@@ -1519,6 +1519,7 @@
       const scoreCells = holes.map((hole) => scoreInputCell(hole)).join("");
       const puttCells = holes.map(puttsInputCell).join("");
       const fairwayCells = holes.map(fairwayInputCell).join("");
+      const bunkerCells = holes.map(bunkerInputCell).join("");
       const girCells = holes.map(girInputCell).join("");
       const penaltyCells = holes.map(penaltyInputCell).join("");
       const firstPuttCells = holes.map(firstPuttInputCell).join("");
@@ -1538,6 +1539,7 @@
             <div class="scorecard-label">Putts</div>${puttCells}
             <div class="scorecard-label">1st putt ft</div>${firstPuttCells}
             <div class="scorecard-label">Fairway</div>${fairwayCells}
+            <div class="scorecard-label">Bunker</div>${bunkerCells}
             <div class="scorecard-label">GIR</div>${girCells}
             <div class="scorecard-label">Pen</div>${penaltyCells}
           </div>
@@ -1657,6 +1659,25 @@
     return `
       <div class="card-pill-row" data-pill-group="fairway-input" data-hole="${hole.number}">
         <span class="card-pill-label">Fairway</span>
+        <div class="card-pill-options card-pill-options-no-custom">${pills}</div>
+      </div>`;
+  }
+
+  function renderBunkerPills(hole) {
+    // Did you end up in sand on this hole, and where? Greenside bunker
+    // matters for sand-save analytics; fairway bunker matters for tee-shot
+    // tendencies and approach difficulty. "Both" handles the rare hole
+    // where you find sand twice in different spots.
+    const options = [
+      { value: "none", label: "No" },
+      { value: "fairway", label: "Fairway" },
+      { value: "greenside", label: "Greenside" },
+      { value: "both", label: "Both" }
+    ];
+    const pills = options.map((opt) => `<button type="button" class="pill" data-pill-value="${opt.value}">${escapeHtml(opt.label)}</button>`).join("");
+    return `
+      <div class="card-pill-row" data-pill-group="bunker-input" data-hole="${hole.number}">
+        <span class="card-pill-label">Bunker</span>
         <div class="card-pill-options card-pill-options-no-custom">${pills}</div>
       </div>`;
   }
@@ -1782,6 +1803,7 @@
             ${puttsInputCell(hole)}
             ${firstPuttInputCell(hole)}
             ${fairwayInputCell(hole)}
+            ${bunkerInputCell(hole)}
             ${penaltyInputCell(hole)}
             ${girInputCell(hole)}
           </div>
@@ -1791,6 +1813,7 @@
             ${renderFirstPuttPills(hole)}
             ${renderFairwayPills(hole)}
             ${renderClubsHitPills(hole)}
+            ${renderBunkerPills(hole)}
             ${renderPenPills(hole)}
             ${renderPenaltyClubRow(hole)}
             <label class="card-note-field">
@@ -2223,6 +2246,7 @@
       const hole = scoreInput.dataset.hole;
       const puttsInput = els.scorecardGrid.querySelector(`.putts-input[data-hole="${hole}"]`);
       const fairwayInput = els.scorecardGrid.querySelector(`.fairway-input[data-hole="${hole}"]`);
+      const bunkerInput = els.scorecardGrid.querySelector(`.bunker-input[data-hole="${hole}"]`);
       const girInput = els.scorecardGrid.querySelector(`.gir-input[data-hole="${hole}"]`);
       const penaltyInput = els.scorecardGrid.querySelector(`.penalty-input[data-hole="${hole}"]`);
       const firstPuttInput = els.scorecardGrid.querySelector(`.first-putt-input[data-hole="${hole}"]`);
@@ -2230,6 +2254,7 @@
         score: scoreInput.value,
         putts: puttsInput ? puttsInput.value : "",
         fairway: fairwayInput ? fairwayInput.value : "",
+        bunker: bunkerInput ? bunkerInput.value : "",
         gir: girInput ? girInput.checked : false,
         penalty: penaltyInput ? penaltyInput.value : "",
         firstPutt: firstPuttInput ? firstPuttInput.value : ""
@@ -2245,6 +2270,7 @@
       const scoreInput = els.scorecardGrid.querySelector(`.score-input[data-hole="${hole}"]`);
       const puttsInput = els.scorecardGrid.querySelector(`.putts-input[data-hole="${hole}"]`);
       const fairwayInput = els.scorecardGrid.querySelector(`.fairway-input[data-hole="${hole}"]`);
+      const bunkerInput = els.scorecardGrid.querySelector(`.bunker-input[data-hole="${hole}"]`);
       const girInput = els.scorecardGrid.querySelector(`.gir-input[data-hole="${hole}"]`);
       const penaltyInput = els.scorecardGrid.querySelector(`.penalty-input[data-hole="${hole}"]`);
       const firstPuttInput = els.scorecardGrid.querySelector(`.first-putt-input[data-hole="${hole}"]`);
@@ -2252,6 +2278,9 @@
       if (puttsInput && values.putts !== "") puttsInput.value = values.putts;
       if (fairwayInput && values.fairway && [...fairwayInput.options].some((option) => option.value === values.fairway)) {
         fairwayInput.value = values.fairway;
+      }
+      if (bunkerInput && values.bunker && [...bunkerInput.options].some((option) => option.value === values.bunker)) {
+        bunkerInput.value = values.bunker;
       }
       if (girInput) girInput.checked = Boolean(values.gir);
       if (penaltyInput && values.penalty !== "") penaltyInput.value = values.penalty;
@@ -2335,6 +2364,17 @@
       `<option value="miss">Miss</option>`
     ].join("");
     return `<select class="fairway-input compact-select" data-hole="${hole.number}" aria-label="${escapeHtml(hole.label || `Hole ${hole.number}`)} fairway">${options}</select>`;
+  }
+
+  function bunkerInputCell(hole) {
+    const options = [
+      `<option value="" selected>—</option>`,
+      `<option value="none">No</option>`,
+      `<option value="fairway">Fairway</option>`,
+      `<option value="greenside">Greenside</option>`,
+      `<option value="both">Both</option>`
+    ].join("");
+    return `<select class="bunker-input compact-select" data-hole="${hole.number}" aria-label="${escapeHtml(hole.label || `Hole ${hole.number}`)} bunker">${options}</select>`;
   }
 
   // In-round chrome: once a round is underway the setup fields (course, tee,
@@ -2476,6 +2516,7 @@
       const holeNumber = scoreInput.dataset.hole;
       const puttsInput = els.scorecardGrid.querySelector(`.putts-input[data-hole="${holeNumber}"]`);
       const fairwayInput = els.scorecardGrid.querySelector(`.fairway-input[data-hole="${holeNumber}"]`);
+      const bunkerInput = els.scorecardGrid.querySelector(`.bunker-input[data-hole="${holeNumber}"]`);
       const girInput = els.scorecardGrid.querySelector(`.gir-input[data-hole="${holeNumber}"]`);
       const penaltyInput = els.scorecardGrid.querySelector(`.penalty-input[data-hole="${holeNumber}"]`);
       const firstPuttInput = els.scorecardGrid.querySelector(`.first-putt-input[data-hole="${holeNumber}"]`);
@@ -2506,6 +2547,7 @@
         penalties: Number.isFinite(penaltyValue) ? penaltyValue : 0,
         penaltyClub: (Number.isFinite(penaltyValue) && penaltyValue > 0) ? getHolePenaltyClub(holeNumber) : "",
         firstPuttDistance: Number.isFinite(firstPuttValue) && firstPuttValue >= 0 ? firstPuttValue : null,
+        bunker: bunkerInput ? bunkerInput.value : "",
         note: getHoleNote(holeNumber),
         clubsHit: getHoleClubs(holeNumber)
       });
@@ -5163,6 +5205,7 @@
       const scoreInput = els.scorecardGrid.querySelector(`.score-input[data-hole="${holeKey}"]`);
       const puttsInput = els.scorecardGrid.querySelector(`.putts-input[data-hole="${holeKey}"]`);
       const fairwayInput = els.scorecardGrid.querySelector(`.fairway-input[data-hole="${holeKey}"]`);
+      const bunkerInput = els.scorecardGrid.querySelector(`.bunker-input[data-hole="${holeKey}"]`);
       const girInput = els.scorecardGrid.querySelector(`.gir-input[data-hole="${holeKey}"]`);
       const penaltyInput = els.scorecardGrid.querySelector(`.penalty-input[data-hole="${holeKey}"]`);
       const firstPuttInput = els.scorecardGrid.querySelector(`.first-putt-input[data-hole="${holeKey}"]`);
@@ -5173,6 +5216,10 @@
       if (fairwayInput && hole.fairway) {
         const hasOption = [...fairwayInput.options].some((option) => option.value === hole.fairway);
         if (hasOption) fairwayInput.value = hole.fairway;
+      }
+      if (bunkerInput && hole.bunker) {
+        const hasOption = [...bunkerInput.options].some((option) => option.value === hole.bunker);
+        if (hasOption) bunkerInput.value = hole.bunker;
       }
       if (girInput) girInput.checked = Boolean(hole.gir);
     });
