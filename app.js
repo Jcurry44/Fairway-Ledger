@@ -282,6 +282,11 @@
     bucketSheetClose: document.getElementById("bucketSheetClose"),
     bucketSheetTitle: document.getElementById("bucketSheetTitle"),
     bucketSheetList: document.getElementById("bucketSheetList"),
+    parTypeSheetOverlay: document.getElementById("parTypeSheetOverlay"),
+    parTypeSheetBackdrop: document.getElementById("parTypeSheetBackdrop"),
+    parTypeSheetClose: document.getElementById("parTypeSheetClose"),
+    parTypeSheetTitle: document.getElementById("parTypeSheetTitle"),
+    parTypeSheetBody: document.getElementById("parTypeSheetBody"),
     courseLookupForm: document.getElementById("courseLookupForm"),
     courseLookupQuery: document.getElementById("courseLookupQuery"),
     courseLookupResults: document.getElementById("courseLookupResults"),
@@ -2755,34 +2760,367 @@
       : emptyState("Save a round to see scoring broken down by course.", { action: "rounds" });
   }
 
-  function renderParStats(rounds) {
-    const holes = rounds.flatMap((round) => round.holes);
-    const groups = groupBy(holes, (hole) => String(hole.par));
-    const maxAvg = Math.max(1, ...Object.values(groups).map((items) => average(items.map((hole) => hole.score))));
-    const parOrder = [3, 4, 5, 6];
-    const html = parOrder
-      .filter((par) => groups[String(par)])
-      .map((par, index) => {
-        const items = groups[String(par)];
-        const avgScore = average(items.map((hole) => hole.score));
-        const avgToPar = average(items.map((hole) => hole.score - hole.par));
-        const parsOrBetter = items.filter((hole) => hole.score <= hole.par).length;
-        const sgValues = items.map(holeStrokesGained).filter((value) => value !== null);
-        const avgSg = sgValues.length ? average(sgValues) : NaN;
-        const fill = Math.max(4, (avgScore / maxAvg) * 100);
-        const color = index === 0 ? "blue" : index === 1 ? "" : "gold";
-        return `
-          <div class="stat-bar">
-            <div class="stat-bar-top">
-              <span>Par ${par}</span>
-              <span>${avgScore.toFixed(2)} (${formatSigned(avgToPar)})</span>
-            </div>
-            <div class="track"><div class="fill ${color}" style="width:${fill}%"></div></div>
-            <div class="subtext">${items.length} holes | ${percentage(parsOrBetter, items.length)} par or better | SG ${Number.isFinite(avgSg) ? formatSigned(avgSg, 2) : "--"} per hole</div>
-          </div>`;
-      }).join("");
+  // Compute every interesting per-hole metric for one par tier (3 / 4 / 5).
+  // Returns null if there are no scored holes of that par. The richness lives
+  // here so both the inline card and the drill-down sheet can pull from one
+  // source of truth and stay consistent.
+  function computeParTypeStats(rounds, par) {
+    const items = [];
+    rounds.forEach((round) => {
+      if (!Array.isArray(round.holes)) return;
+      const course = getCourse(round.courseId);
+      const courseName = course ? course.name : "Unknown";
+      round.holes.forEach((hole) => {
+        if (hole.par !== par) return;
+        if (!Number.isFinite(hole.score) || hole.score <= 0) return;
+        items.push({
+          score: hole.score,
+          par: hole.par,
+          toPar: hole.score - hole.par,
+          putts: Number.isFinite(hole.putts) ? hole.putts : null,
+          gir: !!hole.gir,
+          fairway: hole.fairway || "na",
+          penalties: Number(hole.penalties) || 0,
+          bunker: hole.bunker || "",
+          clubsHit: Array.isArray(hole.clubsHit) ? hole.clubsHit : [],
+          teeClub: Array.isArray(hole.clubsHit) && hole.clubsHit.length ? hole.clubsHit[0] : null,
+          sg: holeStrokesGained(hole),
+          holeNumber: hole.number,
+          holeLabel: hole.label || `#${hole.number}`,
+          courseId: round.courseId,
+          courseName,
+          date: round.date,
+          roundId: round.id
+        });
+      });
+    });
+    if (!items.length) return null;
 
-    els.parStats.innerHTML = html || emptyState("Save a round to see how you score on par 3s, 4s, and 5s.", { action: "rounds" });
+    const count = items.length;
+    const avgScore = average(items.map((h) => h.score));
+    const avgToPar = average(items.map((h) => h.toPar));
+
+    // Scoring distribution buckets. Eagle-or-better lumps albatrosses in
+    // with eagles (par 3s can't have eagles, but the code stays uniform).
+    let eagleOrBetter = 0, birdies = 0, parsCount = 0, bogeys = 0, doubles = 0, worse = 0;
+    items.forEach((h) => {
+      if (h.toPar <= -2) eagleOrBetter += 1;
+      else if (h.toPar === -1) birdies += 1;
+      else if (h.toPar === 0) parsCount += 1;
+      else if (h.toPar === 1) bogeys += 1;
+      else if (h.toPar === 2) doubles += 1;
+      else worse += 1;
+    });
+    const parsOrBetter = eagleOrBetter + birdies + parsCount;
+
+    const girCount = items.filter((h) => h.gir).length;
+    // FIR only meaningful for par 4 / 5. Par 3s have no fairway (na).
+    const firEligible = items.filter((h) => h.fairway && h.fairway !== "na");
+    const firHit = firEligible.filter((h) => h.fairway === "hit").length;
+
+    const puttHoles = items.filter((h) => h.putts !== null && h.putts > 0);
+    const avgPutts = puttHoles.length ? average(puttHoles.map((h) => h.putts)) : NaN;
+
+    const totalPenalties = items.reduce((s, h) => s + h.penalties, 0);
+    const holesWithPen = items.filter((h) => h.penalties > 0).length;
+
+    const sgValues = items.map((h) => h.sg).filter((v) => v !== null);
+    const avgSg = sgValues.length ? average(sgValues) : NaN;
+
+    const bunkerHoles = items.filter((h) => h.bunker && h.bunker !== "" && h.bunker !== "none").length;
+    const greensideBunker = items.filter((h) => h.bunker === "greenside" || h.bunker === "both").length;
+    const sandSaves = items.filter((h) => (h.bunker === "greenside" || h.bunker === "both") && !h.gir && h.toPar <= 0).length;
+    const sandSaveAttempts = items.filter((h) => (h.bunker === "greenside" || h.bunker === "both") && !h.gir).length;
+
+    // Scrambling for THIS par type: missed GIR holes saved to par-or-better.
+    const missedGir = items.filter((h) => !h.gir).length;
+    const scrambleSaves = items.filter((h) => !h.gir && h.toPar <= 0).length;
+
+    const bestToPar = Math.min(...items.map((h) => h.toPar));
+    const worstToPar = Math.max(...items.map((h) => h.toPar));
+    const bestHole = items.find((h) => h.toPar === bestToPar);
+    const worstHole = items.find((h) => h.toPar === worstToPar);
+
+    return {
+      par, count, items, avgScore, avgToPar,
+      eagleOrBetter, birdies, pars: parsCount, bogeys, doubles, worse,
+      parsOrBetter, parsOrBetterPct: parsOrBetter / count,
+      birdieOrBetterPct: (eagleOrBetter + birdies) / count,
+      doubleOrWorsePct: (doubles + worse) / count,
+      girCount, girPct: girCount / count,
+      firEligibleCount: firEligible.length,
+      firHit, firPct: firEligible.length ? firHit / firEligible.length : NaN,
+      puttHolesCount: puttHoles.length, avgPutts,
+      totalPenalties, holesWithPen,
+      penPerHole: totalPenalties / count,
+      avgSg,
+      bestToPar, worstToPar, bestHole, worstHole,
+      bunkerHoles, bunkerPct: bunkerHoles / count,
+      greensideBunker, sandSaves, sandSaveAttempts,
+      sandSavePct: sandSaveAttempts ? sandSaves / sandSaveAttempts : NaN,
+      missedGir, scrambleSaves,
+      scramblingPct: missedGir ? scrambleSaves / missedGir : NaN
+    };
+  }
+
+  // Tier the avg-to-par into one of the scoring-* color buckets so the
+  // headline number on a par-type card gets a meaningful background. These
+  // breakpoints are absolute (not relative to baseline like the heatmap)
+  // because at the par-tier level we want "how close to par" semantics.
+  function parTypeTier(avgToPar) {
+    if (!Number.isFinite(avgToPar)) return "tier-empty";
+    if (avgToPar <= -0.5) return "scoring-birdie";
+    if (avgToPar < 0.25) return "scoring-par";
+    if (avgToPar < 0.75) return "scoring-bogey";
+    return "scoring-double";
+  }
+
+  // Per-par-tier card layout. Tappable to open a drill-down sheet with even
+  // more breakdowns. See computeParTypeStats() for what's available.
+  function renderParTypeCard(stats) {
+    if (!stats) return "";
+    const { par, count } = stats;
+    const total = count;
+    // Scoring distribution mini-bar — stacked segments for birdie/par/bogey/dbl+
+    const bbCount = stats.eagleOrBetter + stats.birdies;
+    const parCount = stats.pars;
+    const bogeyCount = stats.bogeys;
+    const dblPlusCount = stats.doubles + stats.worse;
+    const pct = (n) => total ? (n / total) * 100 : 0;
+    const segs = [];
+    if (bbCount) segs.push({ cls: "scoring-birdie", w: pct(bbCount), n: bbCount, label: "Birdie+" });
+    if (parCount) segs.push({ cls: "scoring-par", w: pct(parCount), n: parCount, label: "Par" });
+    if (bogeyCount) segs.push({ cls: "scoring-bogey", w: pct(bogeyCount), n: bogeyCount, label: "Bogey" });
+    if (dblPlusCount) segs.push({ cls: "scoring-double", w: pct(dblPlusCount), n: dblPlusCount, label: "Dbl+" });
+    const distBar = segs.map((s) => `<span class="par-card-dist-seg ${s.cls}" style="width:${s.w}%" title="${s.label}: ${s.n}"></span>`).join("");
+    const distLegend = segs.map((s) => `<span class="par-card-dist-key ${s.cls}">${s.label} ${s.n}</span>`).join("");
+
+    // FIR only matters for par 4 / 5.
+    const firCell = par === 3
+      ? `<div class="par-card-stat"><small>FIR</small><strong>—</strong></div>`
+      : `<div class="par-card-stat"><small>FIR</small><strong>${Number.isFinite(stats.firPct) ? Math.round(stats.firPct * 100) + "%" : "—"}</strong></div>`;
+
+    const sgText = Number.isFinite(stats.avgSg) ? formatSigned(stats.avgSg, 2) : "—";
+    const tier = parTypeTier(stats.avgToPar);
+
+    const bestLine = stats.bestHole
+      ? `Best ${formatSigned(stats.bestToPar)} · ${escapeHtml(stats.bestHole.courseName)} #${stats.bestHole.holeNumber}`
+      : "";
+
+    return `
+      <button type="button" class="par-card" data-par-detail="${par}" aria-label="Par ${par} detail">
+        <div class="par-card-head">
+          <div class="par-card-head-main">
+            <strong>Par ${par}</strong>
+            <span class="par-card-count">${count} hole${count === 1 ? "" : "s"}</span>
+          </div>
+          <span class="par-card-chevron" aria-hidden="true">›</span>
+        </div>
+        <div class="par-card-headline">
+          <span class="par-card-headline-main ${tier}">${formatSigned(stats.avgToPar)}</span>
+          <span class="par-card-headline-sub">${stats.avgScore.toFixed(2)} avg</span>
+          <span class="par-card-headline-sg" title="Strokes gained per hole">SG ${sgText}</span>
+        </div>
+        <div class="par-card-dist" role="img" aria-label="Scoring distribution">${distBar}</div>
+        <div class="par-card-dist-legend">${distLegend}</div>
+        <div class="par-card-stats">
+          <div class="par-card-stat"><small>GIR</small><strong>${Math.round(stats.girPct * 100)}%</strong></div>
+          ${firCell}
+          <div class="par-card-stat"><small>Putts</small><strong>${Number.isFinite(stats.avgPutts) ? stats.avgPutts.toFixed(2) : "—"}</strong></div>
+          <div class="par-card-stat"><small>Pen/hole</small><strong>${stats.penPerHole.toFixed(2)}</strong></div>
+        </div>
+        ${bestLine ? `<div class="par-card-foot">${bestLine}</div>` : ""}
+      </button>`;
+  }
+
+  function renderParStats(rounds) {
+    if (!els.parStats) return;
+    const parOrder = [3, 4, 5];
+    const statsByPar = parOrder.map((par) => computeParTypeStats(rounds, par));
+    const hasAny = statsByPar.some((s) => s && s.count > 0);
+    if (!hasAny) {
+      els.parStats.innerHTML = emptyState("Save a round to see how you score on par 3s, 4s, and 5s.", { action: "rounds" });
+      return;
+    }
+    const cards = parOrder.map((par, i) => {
+      const stats = statsByPar[i];
+      if (!stats) {
+        return `
+          <div class="par-card par-card-empty">
+            <div class="par-card-head">
+              <div class="par-card-head-main"><strong>Par ${par}</strong></div>
+            </div>
+            <p class="par-card-empty-msg">No scored par-${par} holes yet.</p>
+          </div>`;
+      }
+      return renderParTypeCard(stats);
+    }).join("");
+    els.parStats.innerHTML = `<div class="par-card-grid">${cards}</div>`;
+  }
+
+  // ---- Par-type drill-down sheet -----------------------------------------
+  //
+  // Reuses the bottom-sheet shell (hole-picker-overlay). The body lives in
+  // #parTypeSheetBody so we have a free-form container, not the rigid
+  // <ul> the bucket sheet uses.
+
+  function openParTypeDetail(par) {
+    if (!els.parTypeSheetOverlay || !els.parTypeSheetBody) return;
+    const rounds = getFilteredRounds();
+    const stats = computeParTypeStats(rounds, par);
+    if (els.parTypeSheetTitle) els.parTypeSheetTitle.textContent = `Par ${par}s detail`;
+    if (!stats) {
+      els.parTypeSheetBody.innerHTML = `<p class="par-detail-empty">No scored par-${par} holes in the current filter.</p>`;
+      els.parTypeSheetOverlay.hidden = false;
+      document.body.classList.add("hole-picker-open");
+      if (els.parTypeSheetClose) els.parTypeSheetClose.focus();
+      return;
+    }
+    els.parTypeSheetBody.innerHTML = buildParTypeDetailBody(stats);
+    els.parTypeSheetOverlay.hidden = false;
+    document.body.classList.add("hole-picker-open");
+    if (els.parTypeSheetClose) els.parTypeSheetClose.focus();
+  }
+
+  function closeParTypeDetail() {
+    if (!els.parTypeSheetOverlay) return;
+    els.parTypeSheetOverlay.hidden = true;
+    document.body.classList.remove("hole-picker-open");
+  }
+
+  function buildParTypeDetailBody(stats) {
+    const { par, count, items } = stats;
+    const sgText = Number.isFinite(stats.avgSg) ? formatSigned(stats.avgSg, 2) : "—";
+    const fmtPct = (v) => Number.isFinite(v) ? `${Math.round(v * 100)}%` : "—";
+
+    // --- Summary tiles -----------------------------------------------------
+    const summary = `
+      <div class="par-detail-summary">
+        <div class="par-detail-tile"><small>Avg</small><strong>${stats.avgScore.toFixed(2)}</strong></div>
+        <div class="par-detail-tile"><small>To par</small><strong>${formatSigned(stats.avgToPar)}</strong></div>
+        <div class="par-detail-tile"><small>SG/hole</small><strong>${sgText}</strong></div>
+        <div class="par-detail-tile"><small>Best</small><strong>${formatSigned(stats.bestToPar)}</strong></div>
+        <div class="par-detail-tile"><small>Worst</small><strong>+${stats.worstToPar}</strong></div>
+      </div>`;
+
+    // --- Distribution table ------------------------------------------------
+    const distRows = [
+      ["scoring-birdie", "Birdie or better", stats.eagleOrBetter + stats.birdies],
+      ["scoring-par", "Par", stats.pars],
+      ["scoring-bogey", "Bogey", stats.bogeys],
+      ["scoring-double", "Double", stats.doubles],
+      ["scoring-worse", "Triple+", stats.worse]
+    ].filter(([, , n]) => n > 0);
+    const distHtml = `
+      <section class="par-detail-section">
+        <h4 class="par-detail-h">Scoring breakdown</h4>
+        <ul class="par-detail-dist-list">
+          ${distRows.map(([cls, label, n]) => `
+            <li class="par-detail-dist-row ${cls}">
+              <span>${escapeHtml(label)}</span>
+              <span><strong>${n}</strong> <small>(${Math.round((n / count) * 100)}%)</small></span>
+            </li>`).join("")}
+        </ul>
+      </section>`;
+
+    // --- Ball-striking + short-game --------------------------------------
+    const skillsRows = [];
+    skillsRows.push(`<li><span>GIR</span><strong>${fmtPct(stats.girPct)}</strong><small>${stats.girCount}/${count} holes</small></li>`);
+    if (par !== 3) {
+      skillsRows.push(`<li><span>Fairways hit</span><strong>${fmtPct(stats.firPct)}</strong><small>${stats.firHit}/${stats.firEligibleCount} eligible</small></li>`);
+    }
+    if (Number.isFinite(stats.avgPutts)) {
+      skillsRows.push(`<li><span>Avg putts</span><strong>${stats.avgPutts.toFixed(2)}</strong><small>over ${stats.puttHolesCount} holes</small></li>`);
+    }
+    skillsRows.push(`<li><span>Scrambling</span><strong>${fmtPct(stats.scramblingPct)}</strong><small>${stats.scrambleSaves}/${stats.missedGir} missed-GIR saves</small></li>`);
+    if (stats.greensideBunker > 0 && stats.sandSaveAttempts > 0) {
+      skillsRows.push(`<li><span>Sand save</span><strong>${fmtPct(stats.sandSavePct)}</strong><small>${stats.sandSaves}/${stats.sandSaveAttempts}</small></li>`);
+    }
+    if (stats.totalPenalties > 0) {
+      skillsRows.push(`<li><span>Penalties</span><strong>${stats.totalPenalties}</strong><small>on ${stats.holesWithPen} hole${stats.holesWithPen === 1 ? "" : "s"}</small></li>`);
+    }
+    const skillsHtml = `
+      <section class="par-detail-section">
+        <h4 class="par-detail-h">Ball-striking &amp; short game</h4>
+        <ul class="par-detail-skill-list">${skillsRows.join("")}</ul>
+      </section>`;
+
+    // --- By course --------------------------------------------------------
+    const byCourse = new Map();
+    items.forEach((h) => {
+      if (!byCourse.has(h.courseId)) byCourse.set(h.courseId, { name: h.courseName, n: 0, sumToPar: 0 });
+      const e = byCourse.get(h.courseId);
+      e.n += 1;
+      e.sumToPar += h.toPar;
+    });
+    const courseRows = [...byCourse.values()]
+      .map((e) => ({ ...e, avgToPar: e.sumToPar / e.n }))
+      .sort((a, b) => b.n - a.n)
+      .slice(0, 6);
+    const courseHtml = courseRows.length > 1 ? `
+      <section class="par-detail-section">
+        <h4 class="par-detail-h">By course</h4>
+        <ul class="par-detail-course-list">
+          ${courseRows.map((c) => `
+            <li>
+              <span class="par-detail-course-name">${escapeHtml(c.name)}</span>
+              <span class="par-detail-course-meta">${c.n} hole${c.n === 1 ? "" : "s"}</span>
+              <strong class="par-detail-course-val ${parTypeTier(c.avgToPar)}">${formatSigned(c.avgToPar)}</strong>
+            </li>`).join("")}
+        </ul>
+      </section>` : "";
+
+    // --- Top tee clubs ----------------------------------------------------
+    const byClub = new Map();
+    items.forEach((h) => {
+      if (!h.teeClub) return;
+      if (!byClub.has(h.teeClub)) byClub.set(h.teeClub, { club: h.teeClub, n: 0, sumToPar: 0 });
+      const e = byClub.get(h.teeClub);
+      e.n += 1;
+      e.sumToPar += h.toPar;
+    });
+    const clubRows = [...byClub.values()]
+      .map((e) => ({ ...e, avgToPar: e.sumToPar / e.n }))
+      .sort((a, b) => b.n - a.n)
+      .slice(0, 6);
+    const clubHtml = clubRows.length ? `
+      <section class="par-detail-section">
+        <h4 class="par-detail-h">Top tee clubs</h4>
+        <ul class="par-detail-club-list">
+          ${clubRows.map((c) => `
+            <li>
+              <span class="par-detail-club-name">${escapeHtml(c.club)}</span>
+              <span class="par-detail-club-meta">${c.n} tee shot${c.n === 1 ? "" : "s"}</span>
+              <strong class="par-detail-club-val ${parTypeTier(c.avgToPar)}">${formatSigned(c.avgToPar)}</strong>
+            </li>`).join("")}
+        </ul>
+      </section>` : "";
+
+    // --- Recent 10 holes --------------------------------------------------
+    const recent = [...items]
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+      .slice(0, 10);
+    const recentHtml = recent.length ? `
+      <section class="par-detail-section">
+        <h4 class="par-detail-h">Recent ${recent.length} hole${recent.length === 1 ? "" : "s"}</h4>
+        <ul class="par-detail-recent-list">
+          ${recent.map((h) => `
+            <li>
+              <span class="par-detail-recent-when">${escapeHtml(h.date || "")}</span>
+              <span class="par-detail-recent-where">${escapeHtml(h.courseName)} <small>#${h.holeNumber}</small></span>
+              <strong class="par-detail-recent-score ${parTypeTier(h.toPar)}">${h.score} <small>(${formatSigned(h.toPar)})</small></strong>
+            </li>`).join("")}
+        </ul>
+      </section>` : "";
+
+    return `
+      <p class="par-detail-lead">${count} scored hole${count === 1 ? "" : "s"} across your filtered rounds.</p>
+      ${summary}
+      ${distHtml}
+      ${skillsHtml}
+      ${courseHtml}
+      ${clubHtml}
+      ${recentHtml}`;
   }
 
   // Wind is stored as the raw selector value: "", "calm", "5".."25", "30+".
@@ -5551,6 +5889,16 @@
       openScoringBucketSheet(button.dataset.scoringBucket);
     });
   }
+  if (els.parTypeSheetBackdrop) els.parTypeSheetBackdrop.addEventListener("click", closeParTypeDetail);
+  if (els.parTypeSheetClose) els.parTypeSheetClose.addEventListener("click", closeParTypeDetail);
+  if (els.parStats) {
+    els.parStats.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-par-detail]");
+      if (!button) return;
+      const par = Number(button.dataset.parDetail);
+      if (Number.isFinite(par)) openParTypeDetail(par);
+    });
+  }
   // Heatmap chip handlers — course toggle + nine toggle.
   if (els.heatmapCourseChips) {
     els.heatmapCourseChips.addEventListener("click", (event) => {
@@ -5607,6 +5955,7 @@
       if (els.bucketSheetOverlay && !els.bucketSheetOverlay.hidden) closeScoringBucketSheet();
       if (els.filtersSheetOverlay && !els.filtersSheetOverlay.hidden) closeFiltersSheet();
       if (els.heatmapDrilldownOverlay && !els.heatmapDrilldownOverlay.hidden) closeHeatmapDrilldown();
+      if (els.parTypeSheetOverlay && !els.parTypeSheetOverlay.hidden) closeParTypeDetail();
     }
   });
 

@@ -3077,6 +3077,411 @@ body.floating-card-nav-visible .floating-card-nav {
 .scoring-triple { background: #f1c4bb; border-color: #d68b7d; color: #6b2018; }
 .scoring-worse { background: #c97d72; border-color: #a85950; color: #fff; }
 
+/* ---------- Par 3/4/5 cards (Home → Scoring) ----------
+   Replaces the old three-line stat-bar with a richer per-par card. Each card
+   is a button so the whole tile is the drill-down hit target — tapping it
+   opens the par-detail sheet (more breakdowns, by-course, recent holes). */
+.par-card-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.par-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: #fbfdfa;
+  border: 1px solid var(--line, #d8dfd7);
+  border-radius: 12px;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.06s ease;
+}
+
+.par-card:hover,
+.par-card:focus-visible {
+  background: #f4f8f1;
+  border-color: #b6d1a5;
+  outline: none;
+}
+
+.par-card:active {
+  transform: translateY(1px);
+}
+
+.par-card-empty {
+  cursor: default;
+  background: #f7f8f5;
+}
+
+.par-card-empty:hover {
+  background: #f7f8f5;
+  border-color: var(--line, #d8dfd7);
+}
+
+.par-card-empty-msg {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.par-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.par-card-head-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.par-card-head-main strong {
+  font-size: 1.02rem;
+  font-weight: 850;
+}
+
+.par-card-count {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.par-card-chevron {
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 1.1rem;
+  opacity: 0.7;
+}
+
+.par-card-headline {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.par-card-headline-main {
+  font-size: 1.4rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  line-height: 1.15;
+}
+
+.par-card-headline-sub {
+  font-size: 0.9rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.par-card-headline-sg {
+  margin-left: auto;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scoring distribution mini-bar — stacked segments, color-coded. */
+.par-card-dist {
+  display: flex;
+  height: 8px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #ecefe9;
+}
+
+.par-card-dist-seg {
+  height: 100%;
+  display: block;
+  min-width: 2px;
+  border: none;
+}
+
+.par-card-dist-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.72rem;
+}
+
+.par-card-dist-key {
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.par-card-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px dashed #e3e8df;
+}
+
+.par-card-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  font-variant-numeric: tabular-nums;
+}
+
+.par-card-stat small {
+  font-size: 0.68rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.par-card-stat strong {
+  font-size: 0.94rem;
+  font-weight: 800;
+}
+
+.par-card-foot {
+  font-size: 0.78rem;
+  color: var(--muted);
+  padding-top: 4px;
+  border-top: 1px dashed #e3e8df;
+}
+
+@media (max-width: 540px) {
+  .par-card-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px 12px;
+  }
+  .par-card-headline-main {
+    font-size: 1.25rem;
+  }
+}
+
+/* ---------- Par-type drill-down sheet ---------- */
+.par-type-sheet {
+  max-height: 88vh;
+}
+
+.par-type-sheet-body {
+  overflow-y: auto;
+  padding: 4px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.par-detail-lead {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.par-detail-empty {
+  margin: 16px 16px 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.par-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.par-detail-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  background: #f6f9f3;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.par-detail-tile small {
+  font-size: 0.62rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.par-detail-tile strong {
+  font-size: 0.94rem;
+  font-weight: 850;
+}
+
+@media (max-width: 480px) {
+  .par-detail-summary {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.par-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.par-detail-h {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.par-detail-dist-list,
+.par-detail-skill-list,
+.par-detail-course-list,
+.par-detail-club-list,
+.par-detail-recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.par-detail-dist-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-variant-numeric: tabular-nums;
+}
+
+.par-detail-dist-row strong {
+  font-weight: 850;
+}
+
+.par-detail-skill-list li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 7px 10px;
+  background: #fbfdfa;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.par-detail-skill-list li > span:first-child {
+  font-weight: 700;
+}
+
+.par-detail-skill-list li strong {
+  font-size: 0.98rem;
+  font-weight: 850;
+}
+
+.par-detail-skill-list li small {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.par-detail-course-list li,
+.par-detail-club-list li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 8px 10px;
+  background: #fbfdfa;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.par-detail-course-name,
+.par-detail-club-name {
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.par-detail-course-meta,
+.par-detail-club-meta {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.par-detail-course-val,
+.par-detail-club-val {
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.88rem;
+}
+
+.par-detail-recent-list li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 7px 10px;
+  background: #fbfdfa;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.par-detail-recent-when {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.par-detail-recent-where {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.par-detail-recent-where small {
+  color: var(--muted);
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.par-detail-recent-score {
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  font-weight: 850;
+}
+
+.par-detail-recent-score small {
+  font-weight: 700;
+  margin-left: 2px;
+}
+
 /* Bucket sheet — drill-down list when a scoring tier is tapped. */
 
 .bucket-sheet-list .bucket-row {
