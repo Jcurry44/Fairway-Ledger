@@ -619,5 +619,66 @@ window.__golfCourseCatalog = [
       { "number": 8, "par": 3, "yards": 148, "hcp": 9 },
       { "number": 9, "par": 4, "yards": 337, "hcp": 7 }
     ]
+  },
+  /* Deerwood Red tees — added for forward / women's tee play. Yardages are
+     best-effort: Buck Red is from the published Buck/Fawn scorecard
+     (course.bluegolf.com / golflink.com). Doe Red and Fawn Red were not
+     consistently published across sources, so they're derived by applying
+     the Buck Red:Buck White ratio (~0.78) to the existing White yardages
+     for each hole, then rounded to the nearest 5 yards. Rating/slope are
+     conservative estimates pending a scorecard photo from the pro shop. */
+  {
+    "id": "deerwood-buck-red",
+    "name": "Deerwood Golf Course - Buck",
+    "tee": "Red",
+    "rating": 35.0,
+    "slope": 118,
+    "holes": [
+      { "number": 1, "par": 5, "yards": 436, "hcp": 2 },
+      { "number": 2, "par": 3, "yards": 128, "hcp": 4 },
+      { "number": 3, "par": 4, "yards": 314, "hcp": 1 },
+      { "number": 4, "par": 4, "yards": 263, "hcp": 9 },
+      { "number": 5, "par": 4, "yards": 286, "hcp": 7 },
+      { "number": 6, "par": 4, "yards": 310, "hcp": 6 },
+      { "number": 7, "par": 5, "yards": 427, "hcp": 5 },
+      { "number": 8, "par": 3, "yards": 130, "hcp": 3 },
+      { "number": 9, "par": 4, "yards": 335, "hcp": 8 }
+    ]
+  },
+  {
+    "id": "deerwood-doe-red",
+    "name": "Deerwood Golf Course - Doe",
+    "tee": "Red",
+    "rating": 35.0,
+    "slope": 117,
+    "holes": [
+      { "number": 1, "par": 5, "yards": 385, "hcp": 8 },
+      { "number": 2, "par": 4, "yards": 280, "hcp": 7 },
+      { "number": 3, "par": 5, "yards": 410, "hcp": 4 },
+      { "number": 4, "par": 3, "yards": 155, "hcp": 3 },
+      { "number": 5, "par": 4, "yards": 285, "hcp": 6 },
+      { "number": 6, "par": 4, "yards": 260, "hcp": 5 },
+      { "number": 7, "par": 4, "yards": 335, "hcp": 1 },
+      { "number": 8, "par": 3, "yards": 115, "hcp": 9 },
+      { "number": 9, "par": 4, "yards": 325, "hcp": 2 }
+    ]
+  },
+  {
+    "id": "deerwood-fawn-red",
+    "name": "Deerwood Golf Course - Fawn",
+    "tee": "Red",
+    "rating": 33.0,
+    "slope": 114,
+    "holes": [
+      { "number": 1, "par": 5, "yards": 420, "hcp": 5 },
+      { "number": 2, "par": 4, "yards": 295, "hcp": 1 },
+      { "number": 3, "par": 3, "yards": 110, "hcp": 9 },
+      { "number": 4, "par": 4, "yards": 265, "hcp": 6 },
+      { "number": 5, "par": 5, "yards": 465, "hcp": 4 },
+      { "number": 6, "par": 4, "yards": 340, "hcp": 2 },
+      { "number": 7, "par": 4, "yards": 280, "hcp": 8 },
+      { "number": 8, "par": 3, "yards": 130, "hcp": 9 },
+      { "number": 9, "par": 4, "yards": 300, "hcp": 7 }
+    ]
   }
 ];

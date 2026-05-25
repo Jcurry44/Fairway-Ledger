@@ -10,7 +10,7 @@
 // bump the version — but bumping it is the only way to drop a now-unused
 // asset from a returning visitor's cache.
 
-const CACHE_VERSION = 'fairway-ledger-v35-2026-05-24';
+const CACHE_VERSION = 'fairway-ledger-v36-2026-05-25';
 
 // Paths are relative to the SW's location (./sw.js at the project root).
 const CORE_ASSETS = [

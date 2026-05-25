@@ -279,7 +279,7 @@
   }
 
   const DEERWOOD_COURSE_ID = "deerwood";
-  const DEERWOOD_TEE_OPTIONS = ["White", "Blue"];
+  const DEERWOOD_TEE_OPTIONS = ["Red", "White", "Blue"];
   // 9-hole rounds pick a single nine. 18-hole rounds pick Front 9 + Back 9
   // independently (all 6 permutations), so 18-hole layouts are computed in
   // getDeerwoodLayout rather than enumerated here.
