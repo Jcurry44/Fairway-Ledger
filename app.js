@@ -41,6 +41,11 @@
   const IN_PROGRESS_KEY = "fairwayLedger.inProgressRound.v1";
   const IN_PROGRESS_DEBOUNCE_MS = 500;
   const BACKUP_NAG_THRESHOLD = 3;
+  // Auto-export an off-device JSON backup once you've added this many rounds
+  // since your last export (manual or auto). Triggered from the round-save
+  // submit handler so the browser counts it as a user gesture (required on
+  // iOS Safari to allow a programmatic download).
+  const AUTO_BACKUP_ROUND_THRESHOLD = 5;
   const today = new Date().toISOString().slice(0, 10);
 
   let sampleCourses = [];
@@ -6921,6 +6926,7 @@
         renderAll();
         setActiveTab("home");
         showToast("Round saved.");
+        maybeAutoBackup();
       }
     } catch (error) {
       showToast(error.message);
@@ -7017,24 +7023,47 @@
     });
   }
 
-  els.exportButton.addEventListener("click", () => {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    const exportDate = new Date().toISOString().slice(0, 10);
-    link.download = `fairway-ledger-${exportDate}.json`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-    writeBackupMeta({
-      lastExportAt: new Date().toISOString(),
-      lastExportRoundCount: state.rounds.length
+  function triggerBackupDownload(opts) {
+    const { filenameSuffix = "", toast = "Export ready." } = opts || {};
+    try {
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const exportDate = new Date().toISOString().slice(0, 10);
+      link.download = `fairway-ledger-${exportDate}${filenameSuffix}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      writeBackupMeta({
+        lastExportAt: new Date().toISOString(),
+        lastExportRoundCount: state.rounds.length
+      });
+      updateBackupBadge();
+      if (toast) showToast(toast);
+      renderSnapshotPanel();
+      return true;
+    } catch (err) {
+      console.warn("backup download failed", err);
+      return false;
+    }
+  }
+
+  els.exportButton.addEventListener("click", () => triggerBackupDownload());
+
+  // Auto-backup: after a NEW round is saved (not an edit), if the user has
+  // ≥AUTO_BACKUP_ROUND_THRESHOLD unbacked rounds, trigger an export download.
+  // Must run inside the round-save submit handler's call stack so iOS Safari
+  // accepts it as a user-gesture-initiated download.
+  function maybeAutoBackup() {
+    const unbacked = unbackedRoundCount();
+    if (unbacked < AUTO_BACKUP_ROUND_THRESHOLD) return;
+    triggerBackupDownload({
+      filenameSuffix: "-auto",
+      toast: `Auto-backup downloaded (${unbacked} unbacked rounds). Check Downloads.`
     });
-    updateBackupBadge();
-    showToast("Export ready.");
-  });
+  }
 
   function applyImport(imported) {
     takeSnapshot("before-import", { force: true });

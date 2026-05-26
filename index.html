@@ -15,9 +15,9 @@
     <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
          icon, theme color in the browser chrome, and a standalone display
          mode instead of a tab. -->
-    <link rel="manifest" href="./manifest.json?v=2026-05-26a">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-05-26a">
-    <link rel="apple-touch-icon" href="./icon.svg?v=2026-05-26a">
+    <link rel="manifest" href="./manifest.json?v=2026-05-26b">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-05-26b">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-05-26b">
     <meta name="theme-color" content="#1f7a59">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -32,11 +32,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
 
-    <link rel="stylesheet" href="./styles.css?v=2026-05-26a">
-    <script src="./data/courses.js?v=2026-05-26a" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-26a" defer></script>
-    <script src="./lib/shapes.js?v=2026-05-26a" defer></script>
-    <script src="./app.js?v=2026-05-26a" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-26b">
+    <script src="./data/courses.js?v=2026-05-26b" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-26b" defer></script>
+    <script src="./lib/shapes.js?v=2026-05-26b" defer></script>
+    <script src="./app.js?v=2026-05-26b" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -576,7 +576,10 @@
               <strong id="snapshotCap">20</strong> snapshots. Tap Restore on
               any row to roll the entire app back to that point — the current
               state is snapshotted first, so a restore can itself be undone.
-              For off-device safety, use Export from the header too.
+              Every <strong>5 new rounds</strong>, the app also auto-downloads
+              a backup file (<code>fairway-ledger-YYYY-MM-DD-auto.json</code>)
+              to your Downloads folder for true off-device safety. You can
+              also Export on demand from the header.
             </p>
             <div id="snapshotBackupStatus" class="snapshot-backup-status"></div>
             <ul id="snapshotList" class="snapshot-list"></ul>
