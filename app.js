@@ -239,18 +239,67 @@
     compactPendingHole(holeNumber);
   }
 
-  // Pre-select the likely clubs on every hole so the card shows them ready:
-  // Driver (tee shot) + Putter on par 4/5/6; just Putter on par 3 (the iron
-  // tee shot is up to the player). The TEE badge is suppressed when only
-  // Putter is selected, so a fresh par 3 doesn't mislead. Skipped in edit
-  // mode.
+  // What's the user's most-frequently-used tee club at this physical hole,
+  // across every round (any tee variant)? Used as the pre-seed for the
+  // "Clubs hit" pill row so Fawn 2 lands ready with the 6i if that's what
+  // they actually hit most days, instead of a default Driver they then
+  // have to undo. Returns null when there isn't enough history yet — the
+  // caller falls back to the par-based default.
+  function mostUsedTeeClubForHole(courseId, hole, rounds, minPlays) {
+    if (!hole) return null;
+    const threshold = Number.isFinite(minPlays) ? minPlays : 3;
+    const physId = physicalHoleId(courseId, hole);
+    const usage = new Map(); // club -> { count, lastDate }
+    let totalPlays = 0;
+    // Iterate newest-first so the first time we encounter each club is the
+    // most recent — used to break ties in favor of "what they've been
+    // doing lately" rather than ancient history.
+    const ordered = [...rounds].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    for (const round of ordered) {
+      if (!round || !Array.isArray(round.holes)) continue;
+      for (const h of round.holes) {
+        if (physicalHoleId(round.courseId, h) !== physId) continue;
+        if (!Number.isFinite(h.score) || h.score <= 0) continue;
+        if (!Array.isArray(h.clubsHit) || !h.clubsHit.length) continue;
+        // Putter is never a tee shot; skip Putter-only entries entirely.
+        const tee = h.clubsHit.find((c) => c !== "Putter");
+        if (!tee) continue;
+        totalPlays++;
+        if (!usage.has(tee)) usage.set(tee, { count: 0, lastDate: round.date || "" });
+        usage.get(tee).count += 1;
+      }
+    }
+    if (totalPlays < threshold) return null;
+    let best = null;
+    for (const [club, info] of usage) {
+      if (!best
+          || info.count > best.count
+          || (info.count === best.count && info.lastDate > best.lastDate)) {
+        best = { club, count: info.count, lastDate: info.lastDate };
+      }
+    }
+    return best ? best.club : null;
+  }
+
+  // Pre-select the likely clubs on every hole so the card shows them ready.
+  // Order of preference for the tee club on a par 4/5/6:
+  //   1. Most-frequently-used at this physical hole (≥3 plays of history)
+  //   2. Driver (the catalog default)
+  // Par 3s seed Putter only by default — but if the user has consistent
+  // history with a specific club, pre-seed that too. The TEE badge is
+  // suppressed when only Putter is selected. Skipped in edit mode.
   function seedDefaultClubs(course) {
     if (editingRoundId || !course || !Array.isArray(course.holes)) return;
     course.holes.forEach((hole) => {
       if (getHoleClubs(hole.number).length > 0) return;
-      // Default seed depends on hole type, then is filtered to the bag —
-      // never pre-select a club the user has said they don't carry.
-      const desired = hole.par === 3 ? ["Putter"] : ["Driver", "Putter"];
+      const learned = mostUsedTeeClubForHole(course.id, hole, state.rounds);
+      let desired;
+      if (hole.par === 3) {
+        desired = learned && isInBag(learned) ? [learned, "Putter"] : ["Putter"];
+      } else {
+        const tee = learned && isInBag(learned) ? learned : "Driver";
+        desired = [tee, "Putter"];
+      }
       const filtered = desired.filter(isInBag);
       if (filtered.length) setHoleClubs(hole.number, filtered);
     });
