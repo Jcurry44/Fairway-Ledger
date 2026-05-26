@@ -33,8 +33,18 @@ test("HOLE_FIELDS lists all canonical hole fields", () => {
 });
 
 test("ROUND_FIELDS lists all canonical round fields", () => {
-  const expected = ["id", "date", "courseId", "tee", "wind", "note", "narrative", "survey", "holes"];
+  const expected = ["id", "date", "courseId", "tee", "wind", "note", "narrative", "tag", "survey", "holes"];
   assert.deepEqual([...S.ROUND_FIELDS], expected);
+});
+
+test("makeRound(): tag defaults to empty string", () => {
+  const r = S.makeRound();
+  assert.equal(r.tag, "");
+});
+
+test("makeRound(): tag override is preserved", () => {
+  const r = S.makeRound({ tag: "league" });
+  assert.equal(r.tag, "league");
 });
 
 // ---- makeHole ------------------------------------------------------------

@@ -436,6 +436,9 @@
     roundTee: document.getElementById("roundTee"),
     roundTeeField: document.getElementById("roundTeeField"),
     roundWind: document.getElementById("roundWind"),
+    roundTag: document.getElementById("roundTag"),
+    roundTagField: document.getElementById("roundTagField"),
+    filterTag: document.getElementById("filterTag"),
     roundSetup: document.getElementById("roundSetup"),
     roundSetupBanner: document.getElementById("roundSetupBanner"),
     roundNote: document.getElementById("roundNote"),
@@ -1350,6 +1353,7 @@
   function getFilteredRounds() {
     const courseValue = els.filterCourse.value || "all";
     const teeValue = els.filterTee.value || "all";
+    const tagValue = els.filterTag ? (els.filterTag.value || "all") : "all";
     let rounds = [...state.rounds];
 
     if (courseValue === DEERWOOD_COURSE_ID) {
@@ -1360,6 +1364,12 @@
 
     if (teeValue !== "all") {
       rounds = rounds.filter((round) => round.tee === teeValue);
+    }
+
+    if (tagValue === "untagged") {
+      rounds = rounds.filter((round) => !round.tag);
+    } else if (tagValue !== "all") {
+      rounds = rounds.filter((round) => round.tag === tagValue);
     }
 
     rounds.sort((a, b) => b.date.localeCompare(a.date));
@@ -3587,6 +3597,11 @@
     return `${wind} mph wind`;
   }
 
+  function formatRoundTag(tag) {
+    if (!tag) return "";
+    return tag.charAt(0).toUpperCase() + tag.slice(1);
+  }
+
   function renderScoreMark(score, par, emptyText = "—") {
     const variant = scoreMarkClass(score, par);
     if (!variant) return `<span class="score-mark score-mark-empty">${escapeHtml(emptyText)}</span>`;
@@ -5487,6 +5502,7 @@
         const sg = roundStrokesGained(round);
         const sgLabel = sg ? ` | SG ${formatSigned(sg.total)}` : "";
         const windLabel = round.wind ? ` | ${escapeHtml(formatWind(round.wind))}` : "";
+        const tagBadge = round.tag ? ` <span class="round-tag-badge round-tag-${escapeHtml(round.tag)}">${escapeHtml(formatRoundTag(round.tag))}</span>` : "";
         const editingBadge = editingRoundId === round.id ? ' <span class="editing-pill">editing</span>' : "";
         // Always regenerate the narrative — it depends on every other round
         // ("vs your recent average" shifts as you add rounds), so a stored
@@ -5501,7 +5517,7 @@
         return `
           <div class="round-row${editingRoundId === round.id ? " editing" : ""}">
             <div class="round-row-main">
-              <strong>${totals.gross} (${formatSigned(totals.toPar, 0)})${editingBadge}</strong>
+              <strong>${totals.gross} (${formatSigned(totals.toPar, 0)})${editingBadge}${tagBadge}</strong>
               <span class="subtext">${round.date} | ${escapeHtml(course ? course.name : "Unknown")}${windLabel}${sgLabel}</span>
               ${narrativeHtml}
               ${scorecardHtml}
@@ -5722,7 +5738,11 @@
     const courseVal = els.filterCourse ? els.filterCourse.value : "all";
     const teeVal = els.filterTee ? els.filterTee.value : "all";
     const windowVal = els.filterWindow ? els.filterWindow.value : "all";
-    const hasActive = (courseVal && courseVal !== "all") || (teeVal && teeVal !== "all") || (windowVal && windowVal !== "all");
+    const tagVal = els.filterTag ? els.filterTag.value : "all";
+    const hasActive = (courseVal && courseVal !== "all")
+      || (teeVal && teeVal !== "all")
+      || (windowVal && windowVal !== "all")
+      || (tagVal && tagVal !== "all");
     els.homeFiltersButton.classList.toggle("has-active-filter", hasActive);
   }
 
@@ -5730,7 +5750,8 @@
     if (els.filterCourse) els.filterCourse.value = "all";
     if (els.filterTee) els.filterTee.value = "all";
     if (els.filterWindow) els.filterWindow.value = "all";
-    // Fire a single change event — the existing handler re-reads all three.
+    if (els.filterTag) els.filterTag.value = "all";
+    // Fire a single change event — the existing handler re-reads all of them.
     if (els.filterCourse) els.filterCourse.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
@@ -6542,6 +6563,7 @@
     els.roundDate.value = round.date || today;
     els.roundNote.value = round.note || "";
     if (els.roundWind) els.roundWind.value = round.wind || "";
+    if (els.roundTag) els.roundTag.value = round.tag || "";
 
     // Hydrate the optional reflection survey from the saved round (if any).
     resetPendingSurvey();
@@ -6963,7 +6985,7 @@
     });
   }
 
-  [els.filterCourse, els.filterTee, els.filterWindow].forEach((control) => {
+  [els.filterCourse, els.filterTee, els.filterWindow, els.filterTag].filter(Boolean).forEach((control) => {
     control.addEventListener("change", () => {
       const rounds = getFilteredRounds();
       renderMetrics(rounds);
@@ -7006,6 +7028,7 @@
           courseId: course.id,
           tee: course.tee,
           wind: els.roundWind ? els.roundWind.value || "" : "",
+          tag: els.roundTag ? els.roundTag.value || "" : "",
           note,
           survey: surveyForSave,
           holes
@@ -7022,6 +7045,7 @@
         updateEditModeUi();
         els.roundNote.value = "";
         if (els.roundWind) els.roundWind.value = "";
+        if (els.roundTag) els.roundTag.value = "";
         resetRoundChrome();
         renderAll();
         setActiveTab("home");
@@ -7033,6 +7057,7 @@
           courseId: course.id,
           tee: course.tee,
           wind: els.roundWind ? els.roundWind.value || "" : "",
+          tag: els.roundTag ? els.roundTag.value || "" : "",
           note,
           survey: surveyForSave,
           holes
@@ -7047,6 +7072,7 @@
         saveState();
         els.roundNote.value = "";
         if (els.roundWind) els.roundWind.value = "";
+        if (els.roundTag) els.roundTag.value = "";
         resetRoundChrome();
         renderAll();
         setActiveTab("home");
