@@ -653,13 +653,54 @@
     return parts.join(" · ");
   }
 
+  // The Deerwood catalog entries ship without per-hole `label` fields
+  // (intentionally, to keep that data file compact). Without a label like
+  // "Buck 3" / "Doe 5" / "Fawn 2", physicalHoleId() can't pool plays
+  // across tee variants — every Buck 3 from Blue vs White vs Red looks
+  // like its own physical hole and the heatmap fails to aggregate. Derive
+  // the nine from the course id and inject the canonical label here.
+  function deerwoodNineFromCourseId(courseId) {
+    if (!courseId || !isDeerwoodCourseId(courseId)) return null;
+    if (/-buck-/.test(courseId)) return "Buck";
+    if (/-doe-/.test(courseId)) return "Doe";
+    if (/-fawn-/.test(courseId)) return "Fawn";
+    return null;
+  }
+
   function normalizeCourse(course) {
+    const holes = Array.isArray(course.holes) ? course.holes.map(toHole) : [];
+    const nine = deerwoodNineFromCourseId(course.id);
+    if (nine) {
+      holes.forEach((h) => {
+        const ok = typeof h.label === "string" && /^(buck|doe|fawn)\s+\d+$/i.test(h.label);
+        if (!ok) h.label = `${nine} ${h.number}`;
+      });
+    }
     return {
       ...course,
       rating: Number.isFinite(Number(course.rating)) ? Number(course.rating) : null,
       slope: Number.isFinite(Number(course.slope)) ? Number(course.slope) : null,
-      holes: Array.isArray(course.holes) ? course.holes.map(toHole) : []
+      holes
     };
+  }
+
+  // Migrate already-saved Deerwood rounds whose holes were stored with
+  // numeric labels (1, 2, 3 ...) instead of "Buck 1" / "Doe 5" / "Fawn 2".
+  // Purely additive — only overwrites labels that fail the regex. Idempotent
+  // and safe to call on every load. Without this, snapshots/imports from
+  // before this fix would still mis-pool in the heatmap.
+  function ensureDeerwoodRoundLabels(stateValue) {
+    if (!stateValue || !Array.isArray(stateValue.rounds)) return stateValue;
+    stateValue.rounds.forEach((round) => {
+      const nine = deerwoodNineFromCourseId(round.courseId);
+      if (!nine || !Array.isArray(round.holes)) return;
+      round.holes.forEach((hole) => {
+        if (!hole || !Number.isFinite(hole.number)) return;
+        const ok = typeof hole.label === "string" && /^(buck|doe|fawn)\s+\d+$/i.test(hole.label);
+        if (!ok) hole.label = `${nine} ${hole.number}`;
+      });
+    });
+    return stateValue;
   }
 
   function loadCourseCatalog() {
@@ -728,7 +769,7 @@
         // saves (missing wind, narrative, firstPuttDistance, etc.) pick up
         // the new fields with their defaults. Unknown fields are preserved.
         saved.rounds = saved.rounds.map(normalizeRound);
-        return ensureProfileShape(ensureCourseDataShape(mergeNewDefaultCourses(saved)));
+        return ensureDeerwoodRoundLabels(ensureProfileShape(ensureCourseDataShape(mergeNewDefaultCourses(saved))));
       }
     } catch (error) {
       console.warn("Could not load saved golf data", error);
@@ -989,7 +1030,7 @@
       ...incoming,
       rounds: incoming.rounds.map(normalizeRound)
     };
-    state = ensureProfileShape(ensureCourseDataShape(mergeNewDefaultCourses(normalized)));
+    state = ensureDeerwoodRoundLabels(ensureProfileShape(ensureCourseDataShape(mergeNewDefaultCourses(normalized))));
     clearEditState({ rerender: false });
     saveState();
     return true;
@@ -7704,7 +7745,7 @@
   function applyImport(imported) {
     takeSnapshot("before-import", { force: true });
     imported.rounds = imported.rounds.map(normalizeRound);
-    state = ensureProfileShape(ensureCourseDataShape(mergeNewDefaultCourses(imported)));
+    state = ensureDeerwoodRoundLabels(ensureProfileShape(ensureCourseDataShape(mergeNewDefaultCourses(imported))));
     clearEditState({ rerender: false });
     const previousMeta = readBackupMeta();
     writeBackupMeta({
