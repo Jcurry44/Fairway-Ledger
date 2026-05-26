@@ -39,6 +39,18 @@
   const BRIEF_COLLAPSED_KEY = "fairwayLedger.briefCollapsed.v1";
   const VIEW_MODE_KEY = "fairwayLedger.viewMode.v1";
   const IN_PROGRESS_KEY = "fairwayLedger.inProgressRound.v1";
+  // Card scorecard sectioning preference. "default" keeps the original
+  // outcome-first layout (Score → Putts → Fairway → Clubs → ...). "narrative"
+  // reorders to match how you experience the hole — tee → approach →
+  // green → score. Off by default to avoid surprising returning users
+  // (Rob suggested this; Jeff wanted to ship it behind a toggle first).
+  const CARD_FLOW_KEY = "fairwayLedger.cardFlow.v1";
+  let cardFlowMode = (() => {
+    try {
+      const saved = localStorage.getItem(CARD_FLOW_KEY);
+      return saved === "narrative" ? "narrative" : "default";
+    } catch { return "default"; }
+  })();
   const IN_PROGRESS_DEBOUNCE_MS = 500;
   const BACKUP_NAG_THRESHOLD = 3;
   // Auto-export an off-device JSON backup once you've added this many rounds
@@ -493,6 +505,8 @@
     trophyRoomNote: document.getElementById("trophyRoomNote"),
     statsExplorerGrid: document.getElementById("statsExplorerGrid"),
     statsExplorerNote: document.getElementById("statsExplorerNote"),
+    cardFlowDefault: document.getElementById("cardFlowDefault"),
+    cardFlowNarrative: document.getElementById("cardFlowNarrative"),
     homeFiltersButton: document.getElementById("homeFiltersButton"),
     filtersSheetOverlay: document.getElementById("filtersSheetOverlay"),
     filtersSheetBackdrop: document.getElementById("filtersSheetBackdrop"),
@@ -2233,19 +2247,33 @@
             ${penaltyInputCell(hole)}
             ${girInputCell(hole)}
           </div>
-          ${renderScorePills(hole)}
-          ${renderPuttsPills(hole)}
+          ${cardFlowMode === "narrative" ? "" : `${renderScorePills(hole)}${renderPuttsPills(hole)}`}
           <div class="card-extra">
-            ${renderFirstPuttPills(hole)}
-            ${renderFairwayPills(hole)}
-            ${renderClubsHitPills(hole)}
-            ${renderBunkerPills(hole)}
-            ${renderPenPills(hole)}
-            ${renderPenaltyClubRow(hole)}
-            <label class="card-note-field">
-              <span>What happened on this hole?</span>
-              <textarea class="card-note-input" data-hole="${hole.number}" rows="2" placeholder="Drove left, chipped twice, 2-putt from 12ft… (tap the mic on your keyboard for voice)">${escapeHtml(getHoleNote(hole.number))}</textarea>
-            </label>
+            ${cardFlowMode === "narrative" ? `
+              ${renderClubsHitPills(hole)}
+              ${renderFairwayPills(hole)}
+              ${renderBunkerPills(hole)}
+              ${renderFirstPuttPills(hole)}
+              ${renderPuttsPills(hole)}
+              ${renderPenPills(hole)}
+              ${renderPenaltyClubRow(hole)}
+              <label class="card-note-field">
+                <span>What happened on this hole?</span>
+                <textarea class="card-note-input" data-hole="${hole.number}" rows="2" placeholder="Drove left, chipped twice, 2-putt from 12ft… (tap the mic on your keyboard for voice)">${escapeHtml(getHoleNote(hole.number))}</textarea>
+              </label>
+              ${renderScorePills(hole)}
+            ` : `
+              ${renderFirstPuttPills(hole)}
+              ${renderFairwayPills(hole)}
+              ${renderClubsHitPills(hole)}
+              ${renderBunkerPills(hole)}
+              ${renderPenPills(hole)}
+              ${renderPenaltyClubRow(hole)}
+              <label class="card-note-field">
+                <span>What happened on this hole?</span>
+                <textarea class="card-note-input" data-hole="${hole.number}" rows="2" placeholder="Drove left, chipped twice, 2-putt from 12ft… (tap the mic on your keyboard for voice)">${escapeHtml(getHoleNote(hole.number))}</textarea>
+              </label>
+            `}
           </div>
         </article>`;
     }).join("");
@@ -7299,6 +7327,31 @@
       resetBagToAll();
     });
   }
+
+  function setCardFlowMode(next) {
+    if (next !== "narrative" && next !== "default") return;
+    if (cardFlowMode === next) return;
+    cardFlowMode = next;
+    try { localStorage.setItem(CARD_FLOW_KEY, next); } catch {}
+    // Re-render the scorecard if it's currently visible. Pending inputs
+    // live in the hidden input cells and pendingHoles map — both untouched
+    // by the re-render, so a switch in the middle of a round preserves
+    // every score/putt/club/note that's been entered so far.
+    if (els.scorecardGrid) renderScorecard(getSelectedRoundCourse());
+    syncCardFlowRadios();
+  }
+
+  function syncCardFlowRadios() {
+    if (els.cardFlowDefault) els.cardFlowDefault.checked = cardFlowMode === "default";
+    if (els.cardFlowNarrative) els.cardFlowNarrative.checked = cardFlowMode === "narrative";
+  }
+  syncCardFlowRadios();
+  if (els.cardFlowDefault) els.cardFlowDefault.addEventListener("change", () => {
+    if (els.cardFlowDefault.checked) setCardFlowMode("default");
+  });
+  if (els.cardFlowNarrative) els.cardFlowNarrative.addEventListener("change", () => {
+    if (els.cardFlowNarrative.checked) setCardFlowMode("narrative");
+  });
 
   if (els.holePickerBackdrop) els.holePickerBackdrop.addEventListener("click", closeHolePicker);
   if (els.holePickerClose) els.holePickerClose.addEventListener("click", closeHolePicker);
