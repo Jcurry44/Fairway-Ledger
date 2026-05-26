@@ -214,14 +214,20 @@
   }
 
   // The tee club is whatever sits at index 0. Putter is never a tee shot, so
-  // keep it out of the lead slot whenever another club is present — that way
-  // removing a pre-seeded Driver and tapping the real tee club just works.
+  // keep every Putter instance after the non-Putter clubs — that way removing
+  // a pre-seeded Driver and tapping the real tee club just works, even when
+  // multi-use (e.g. ["Putter", "PW", "Putter"]) is in play.
   function normalizeClubOrder(clubs) {
-    if (clubs.length > 1 && clubs[0] === "Putter") {
-      return [...clubs.slice(1), "Putter"];
-    }
+    const putters = clubs.filter((c) => c === "Putter");
+    const others = clubs.filter((c) => c !== "Putter");
+    if (others.length && putters.length) return [...others, ...putters];
     return clubs;
   }
+
+  // Cap how many times the same club can be tapped on one hole. Five covers
+  // realistic scenarios (a triple on a par 5 with two wedge approaches and a
+  // chip is ~3 wedges). Tap past the cap loops back to 0.
+  const MAX_CLUB_USES = 5;
 
   function setHoleClubs(holeNumber, clubs) {
     const entry = getOrCreatePendingHole(holeNumber);
@@ -250,9 +256,17 @@
     });
   }
 
+  // Tap-to-bump semantics: each tap adds another instance of `club`, up to
+  // MAX_CLUB_USES. Tapping past the cap clears every instance back to 0 so
+  // the user has a one-finger way to undo a mis-tap without a separate
+  // remove gesture. The order of insertion still matters — first non-Putter
+  // tap remains the tee shot.
   function toggleHoleClub(holeNumber, club) {
     const current = getHoleClubs(holeNumber);
-    const next = current.includes(club) ? current.filter((c) => c !== club) : [...current, club];
+    const count = current.filter((c) => c === club).length;
+    const next = count >= MAX_CLUB_USES
+      ? current.filter((c) => c !== club)
+      : [...current, club];
     setHoleClubs(holeNumber, next);
     return next;
   }
@@ -1971,24 +1985,27 @@
 
   function renderClubsHitPills(hole) {
     const selected = getHoleClubs(hole.number); // ordered array — index 0 is tee club
-    const selectedSet = new Set(selected);
-    // Putter is never a tee shot. If it's the only club selected (e.g. a
-    // freshly-seeded par 3) suppress the TEE badge until a real tee club
-    // joins the list.
-    const teeClub = (selected[0] && !(selected[0] === "Putter" && selected.length === 1)) ? selected[0] : null;
+    const counts = selected.reduce((acc, c) => { acc[c] = (acc[c] || 0) + 1; return acc; }, {});
+    // Putter is never a tee shot. If only Putter is selected (e.g. a freshly
+    // seeded par 3) suppress the TEE badge until a real tee club joins.
+    const firstNonPutter = selected.find((c) => c !== "Putter");
+    const teeClub = firstNonPutter
+      || (selected[0] && selected[0] !== "Putter" ? selected[0] : null);
     // Only render pills for clubs in the user's bag (plus any already
     // selected on this hole, even if they're no longer in the bag).
     const available = clubsForHole(hole.number);
     const pills = available.map((club) => {
-      const isActive = selectedSet.has(club);
+      const count = counts[club] || 0;
+      const isActive = count > 0;
       const isTee = club === teeClub;
       const cls = `pill pill-club${isActive ? " active" : ""}${isTee ? " pill-club-tee" : ""}`;
       const teeBadge = isTee ? `<span class="pill-tee-badge" aria-label="tee shot">TEE</span>` : "";
-      return `<button type="button" class="${cls}" data-toggle-club="${escapeHtml(club)}" data-hole="${hole.number}">${escapeHtml(club)}${teeBadge}</button>`;
+      const countBadge = count >= 2 ? `<span class="pill-count" aria-label="hit ${count} times">×${count}</span>` : "";
+      return `<button type="button" class="${cls}" data-toggle-club="${escapeHtml(club)}" data-hole="${hole.number}">${escapeHtml(club)}${countBadge}${teeBadge}</button>`;
     }).join("");
     return `
       <div class="card-clubs-row" data-hole="${hole.number}">
-        <span class="card-pill-label">Clubs hit <span class="card-pill-sublabel">(first tap = tee shot)</span></span>
+        <span class="card-pill-label">Clubs hit <span class="card-pill-sublabel">(first tap = tee shot · tap again to add another)</span></span>
         <div class="card-clubs-grid">${pills}</div>
       </div>`;
   }
