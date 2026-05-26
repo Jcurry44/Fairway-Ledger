@@ -15,9 +15,9 @@
     <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
          icon, theme color in the browser chrome, and a standalone display
          mode instead of a tab. -->
-    <link rel="manifest" href="./manifest.json?v=2026-05-25a">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-05-25a">
-    <link rel="apple-touch-icon" href="./icon.svg?v=2026-05-25a">
+    <link rel="manifest" href="./manifest.json?v=2026-05-26a">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-05-26a">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-05-26a">
     <meta name="theme-color" content="#1f7a59">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -32,11 +32,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
 
-    <link rel="stylesheet" href="./styles.css?v=2026-05-25a">
-    <script src="./data/courses.js?v=2026-05-25a" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-25a" defer></script>
-    <script src="./lib/shapes.js?v=2026-05-25a" defer></script>
-    <script src="./app.js?v=2026-05-25a" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-26a">
+    <script src="./data/courses.js?v=2026-05-26a" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-26a" defer></script>
+    <script src="./lib/shapes.js?v=2026-05-26a" defer></script>
+    <script src="./app.js?v=2026-05-26a" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -80,7 +80,6 @@
               Import
               <input id="importInput" type="file" accept="application/json">
             </label>
-            <button class="danger-button" id="clearButton" type="button">Clear</button>
           </div>
         </div>
       </header>
@@ -561,6 +560,49 @@
             <div id="profileBagGrid" class="profile-bag-grid"></div>
             <p id="profileBagSummary" class="profile-bag-summary"></p>
           </article>
+
+          <article class="panel wide-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Safety net</p>
+                <h2>Backups</h2>
+              </div>
+              <button type="button" id="snapshotTakeButton" class="ghost-button">Take snapshot now</button>
+            </div>
+            <p class="profile-bag-hint">
+              The app automatically saves a snapshot before any change that
+              could lose data (Clear, Sample Data, Import) and roughly every
+              10 minutes while you're actively editing. Keeping the last
+              <strong id="snapshotCap">20</strong> snapshots. Tap Restore on
+              any row to roll the entire app back to that point — the current
+              state is snapshotted first, so a restore can itself be undone.
+              For off-device safety, use Export from the header too.
+            </p>
+            <div id="snapshotBackupStatus" class="snapshot-backup-status"></div>
+            <ul id="snapshotList" class="snapshot-list"></ul>
+          </article>
+
+          <article class="panel wide-panel danger-zone-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow danger-zone-eyebrow">Danger zone</p>
+                <h2>Advanced data controls</h2>
+              </div>
+              <button type="button" id="dangerZoneToggle" class="ghost-button" aria-expanded="false" aria-controls="dangerZoneBody">Show</button>
+            </div>
+            <div id="dangerZoneBody" class="danger-zone-body" hidden>
+              <p class="danger-zone-warning">
+                These actions can permanently destroy your rounds. The app
+                always takes a snapshot first (see Backups above), but
+                snapshots live in this browser too — anything that wipes
+                browser storage takes them with it. Export to a file first
+                if you want a copy outside the browser.
+              </p>
+              <div class="danger-zone-actions">
+                <button class="danger-button" id="clearButton" type="button">Clear all data</button>
+              </div>
+            </div>
+          </article>
         </section>
       </main>
     </div>
@@ -657,6 +699,35 @@
           <button id="holePickerClose" class="hole-picker-close" type="button" aria-label="Close">&times;</button>
         </div>
         <ul id="holePickerList" class="hole-picker-list"></ul>
+      </div>
+    </div>
+
+    <!-- Typed-confirmation modal for destructive actions (Clear / Sample Data
+         when rounds exist / Import when rounds exist). One in-app component
+         replaces window.confirm so we can show round counts, a backup hint,
+         and require the user to type the round count before the destructive
+         button enables. Wiring via openDestructiveConfirm() in app.js. -->
+    <div id="destructiveConfirmOverlay" class="hole-picker-overlay" hidden>
+      <button id="destructiveConfirmBackdrop" class="hole-picker-backdrop" type="button" aria-label="Cancel"></button>
+      <div class="hole-picker-sheet destructive-confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="destructiveConfirmTitle">
+        <div class="hole-picker-handle" aria-hidden="true"></div>
+        <div class="hole-picker-header">
+          <h3 id="destructiveConfirmTitle">Confirm</h3>
+          <button id="destructiveConfirmClose" class="hole-picker-close" type="button" aria-label="Cancel">&times;</button>
+        </div>
+        <div class="destructive-confirm-body">
+          <p id="destructiveConfirmMessage" class="destructive-confirm-message"></p>
+          <ul id="destructiveConfirmFacts" class="destructive-confirm-facts"></ul>
+          <p id="destructiveConfirmBackupHint" class="destructive-confirm-backup-hint" hidden></p>
+          <label id="destructiveConfirmTypeLabel" class="destructive-confirm-type-label" hidden>
+            <span>Type <strong id="destructiveConfirmExpected"></strong> to confirm</span>
+            <input id="destructiveConfirmInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text">
+          </label>
+          <div class="destructive-confirm-actions">
+            <button id="destructiveConfirmCancel" class="ghost-button" type="button">Cancel</button>
+            <button id="destructiveConfirmGo" class="danger-button" type="button" disabled>Confirm</button>
+          </div>
+        </div>
       </div>
     </div>
   </body>

@@ -409,6 +409,24 @@
     holePickerBackdrop: document.getElementById("holePickerBackdrop"),
     holePickerClose: document.getElementById("holePickerClose"),
     holePickerList: document.getElementById("holePickerList"),
+    destructiveConfirmOverlay: document.getElementById("destructiveConfirmOverlay"),
+    destructiveConfirmBackdrop: document.getElementById("destructiveConfirmBackdrop"),
+    destructiveConfirmClose: document.getElementById("destructiveConfirmClose"),
+    destructiveConfirmTitle: document.getElementById("destructiveConfirmTitle"),
+    destructiveConfirmMessage: document.getElementById("destructiveConfirmMessage"),
+    destructiveConfirmFacts: document.getElementById("destructiveConfirmFacts"),
+    destructiveConfirmBackupHint: document.getElementById("destructiveConfirmBackupHint"),
+    destructiveConfirmTypeLabel: document.getElementById("destructiveConfirmTypeLabel"),
+    destructiveConfirmExpected: document.getElementById("destructiveConfirmExpected"),
+    destructiveConfirmInput: document.getElementById("destructiveConfirmInput"),
+    destructiveConfirmCancel: document.getElementById("destructiveConfirmCancel"),
+    destructiveConfirmGo: document.getElementById("destructiveConfirmGo"),
+    snapshotList: document.getElementById("snapshotList"),
+    snapshotBackupStatus: document.getElementById("snapshotBackupStatus"),
+    snapshotTakeButton: document.getElementById("snapshotTakeButton"),
+    snapshotCap: document.getElementById("snapshotCap"),
+    dangerZoneToggle: document.getElementById("dangerZoneToggle"),
+    dangerZoneBody: document.getElementById("dangerZoneBody"),
     toast: document.getElementById("toast")
   };
 
@@ -713,7 +731,141 @@
   }
 
   function saveState() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const json = JSON.stringify(state);
+    localStorage.setItem(STORAGE_KEY, json);
+    // Best-effort autosave snapshot. Throttled + deduped inside takeSnapshot
+    // so this stays cheap even on a per-keystroke save path.
+    takeSnapshot("autosave", { json });
+  }
+
+  // ---- Snapshot system: rolling backups in localStorage ------------------
+  //
+  // Every saveState (throttled + deduped) and every destructive action
+  // (Clear, Sample Data replace, Import) writes a copy of state under a
+  // timestamped key. The Profile tab surfaces these as one-tap restore
+  // points. This is the user's safety net against fat-finger Clears, bad
+  // imports, and browser cache eviction — *as long as* localStorage itself
+  // survives. Pair with the Export button for off-device durability.
+
+  const SNAPSHOT_KEY_PREFIX = "fairwayLedger.snapshot.v1.";
+  const SNAPSHOT_MAX = 20;
+  // Autosave snapshots are deduped by JSON and gated to one per this
+  // interval, so saving 30 rounds in a row doesn't burn through the cap.
+  const SNAPSHOT_AUTO_MIN_INTERVAL_MS = 10 * 60 * 1000;
+
+  const SNAPSHOT_REASON_LABELS = {
+    autosave: "Autosave",
+    manual: "Manual",
+    "before-clear": "Before Clear",
+    "before-sample": "Before Sample Data",
+    "before-import": "Before Import",
+    "pre-restore": "Before Restore"
+  };
+
+  let lastSnapshotJson = null;
+  let lastSnapshotAt = 0;
+
+  function listSnapshots() {
+    const out = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key || !key.startsWith(SNAPSHOT_KEY_PREFIX)) continue;
+        try {
+          const raw = JSON.parse(localStorage.getItem(key));
+          if (!raw || !raw.state) continue;
+          out.push({
+            key,
+            takenAt: raw.takenAt || null,
+            reason: raw.reason || "autosave",
+            roundCount: Number.isFinite(raw.roundCount)
+              ? raw.roundCount
+              : (Array.isArray(raw.state.rounds) ? raw.state.rounds.length : 0),
+            courseCount: Number.isFinite(raw.courseCount)
+              ? raw.courseCount
+              : (Array.isArray(raw.state.courses) ? raw.state.courses.length : 0),
+            bytes: (localStorage.getItem(key) || "").length
+          });
+        } catch {}
+      }
+    } catch {}
+    out.sort((a, b) => (b.takenAt || "").localeCompare(a.takenAt || ""));
+    return out;
+  }
+
+  function pruneSnapshots(extraDrop = 0) {
+    const snaps = listSnapshots();
+    const keepCount = Math.max(0, SNAPSHOT_MAX - extraDrop);
+    if (snaps.length <= keepCount) return;
+    snaps.slice(keepCount).forEach((s) => {
+      try { localStorage.removeItem(s.key); } catch {}
+    });
+  }
+
+  function takeSnapshot(reason = "autosave", opts = {}) {
+    const force = opts.force === true;
+    const providedJson = typeof opts.json === "string" ? opts.json : null;
+    try {
+      const stateJson = providedJson != null ? providedJson : JSON.stringify(state);
+      const now = Date.now();
+      if (!force && reason === "autosave") {
+        // Skip if state hasn't changed since the last snapshot, OR if we
+        // already snapped recently. Avoids 20 near-identical autosaves
+        // pushing out the meaningful pre-destructive ones.
+        if (stateJson === lastSnapshotJson) return null;
+        if (now - lastSnapshotAt < SNAPSHOT_AUTO_MIN_INTERVAL_MS) return null;
+      }
+      const takenAt = new Date(now).toISOString();
+      const key = SNAPSHOT_KEY_PREFIX + takenAt.replace(/[:.]/g, "-");
+      const payload = {
+        takenAt,
+        reason,
+        roundCount: Array.isArray(state.rounds) ? state.rounds.length : 0,
+        courseCount: Array.isArray(state.courses) ? state.courses.length : 0,
+        state: JSON.parse(stateJson)
+      };
+      const serialized = JSON.stringify(payload);
+      try {
+        localStorage.setItem(key, serialized);
+      } catch (quotaErr) {
+        // Quota exceeded — drop oldest snapshots and retry once. The
+        // committed state in STORAGE_KEY is untouched either way.
+        pruneSnapshots(3);
+        try { localStorage.setItem(key, serialized); }
+        catch { return null; }
+      }
+      lastSnapshotJson = stateJson;
+      lastSnapshotAt = now;
+      pruneSnapshots();
+      return key;
+    } catch {
+      return null;
+    }
+  }
+
+  function restoreSnapshot(snapshotKey) {
+    let payload = null;
+    try {
+      payload = JSON.parse(localStorage.getItem(snapshotKey));
+    } catch {}
+    if (!payload || !payload.state) return false;
+    const incoming = payload.state;
+    if (!Array.isArray(incoming.courses) || !Array.isArray(incoming.rounds)) return false;
+    // Snap the CURRENT state first, so a restore can itself be undone.
+    takeSnapshot("pre-restore", { force: true });
+    const normalized = {
+      ...incoming,
+      rounds: incoming.rounds.map(normalizeRound)
+    };
+    state = ensureProfileShape(ensureCourseDataShape(mergeNewDefaultCourses(normalized)));
+    clearEditState({ rerender: false });
+    saveState();
+    return true;
+  }
+
+  function deleteSnapshot(snapshotKey) {
+    try { localStorage.removeItem(snapshotKey); return true; }
+    catch { return false; }
   }
 
   // In-progress round auto-save. Captures the user's mid-entry form state to
@@ -5762,6 +5914,7 @@
     updateBackupBadge();
     renderCourseList();
     renderProfileBag();
+    renderSnapshotPanel();
     tagHomePanelsWithSections();
     applyHomeSectionUi();
     updateFiltersButtonState();
@@ -5821,6 +5974,230 @@
     showToast.timer = window.setTimeout(() => els.toast.classList.remove("show"), 2200);
   }
 
+  // ---- Destructive-action typed-confirmation modal -----------------------
+  //
+  // Replaces window.confirm for anything that can wipe rounds. Shows what
+  // will be lost (round count, course count, last-backup status), points out
+  // that the app will snapshot first, and (when `expected` is set) gates the
+  // destructive button behind typing that exact string. The string is the
+  // current round count when there are rounds — easy enough to fulfill on
+  // purpose, hard to fulfill by accident.
+
+  function openDestructiveConfirm(config) {
+    const {
+      title = "Confirm",
+      message = "",
+      facts = [],
+      expected = null,
+      confirmLabel = "Delete",
+      showBackupHint = true,
+      onConfirm
+    } = config || {};
+    const overlay = els.destructiveConfirmOverlay;
+    if (!overlay || typeof onConfirm !== "function") return;
+
+    els.destructiveConfirmTitle.textContent = title;
+    els.destructiveConfirmMessage.textContent = message;
+    els.destructiveConfirmFacts.innerHTML = "";
+    facts.filter(Boolean).forEach((line) => {
+      const li = document.createElement("li");
+      li.textContent = line;
+      els.destructiveConfirmFacts.appendChild(li);
+    });
+
+    if (showBackupHint) {
+      const lastBackup = describeLastBackup();
+      const unbacked = unbackedRoundCount();
+      const unbackedLine = unbacked > 0
+        ? ` You have ${unbacked} round${unbacked === 1 ? "" : "s"} not yet in an exported file.`
+        : "";
+      els.destructiveConfirmBackupHint.textContent =
+        `${lastBackup}.${unbackedLine} The app will save a snapshot first (restore from Profile › Backups), but Export gives you a copy outside the browser too.`;
+      els.destructiveConfirmBackupHint.hidden = false;
+    } else {
+      els.destructiveConfirmBackupHint.hidden = true;
+    }
+
+    const expectedStr = expected == null ? null : String(expected);
+    if (expectedStr != null && expectedStr.length > 0) {
+      els.destructiveConfirmTypeLabel.hidden = false;
+      els.destructiveConfirmExpected.textContent = expectedStr;
+      els.destructiveConfirmInput.value = "";
+      els.destructiveConfirmGo.disabled = true;
+      els.destructiveConfirmInput.oninput = () => {
+        els.destructiveConfirmGo.disabled =
+          els.destructiveConfirmInput.value.trim() !== expectedStr;
+      };
+    } else {
+      els.destructiveConfirmTypeLabel.hidden = true;
+      els.destructiveConfirmInput.oninput = null;
+      els.destructiveConfirmGo.disabled = false;
+    }
+    els.destructiveConfirmGo.textContent = confirmLabel;
+
+    function close() {
+      overlay.hidden = true;
+      els.destructiveConfirmInput.oninput = null;
+      els.destructiveConfirmGo.onclick = null;
+      els.destructiveConfirmCancel.onclick = null;
+      els.destructiveConfirmClose.onclick = null;
+      els.destructiveConfirmBackdrop.onclick = null;
+      document.removeEventListener("keydown", onKey);
+    }
+    function onKey(event) {
+      if (event.key === "Escape") close();
+    }
+    els.destructiveConfirmGo.onclick = () => {
+      if (els.destructiveConfirmGo.disabled) return;
+      close();
+      try { onConfirm(); }
+      catch (err) { console.error("destructive confirm onConfirm threw", err); }
+    };
+    els.destructiveConfirmCancel.onclick = close;
+    els.destructiveConfirmClose.onclick = close;
+    els.destructiveConfirmBackdrop.onclick = close;
+    document.addEventListener("keydown", onKey);
+
+    overlay.hidden = false;
+    window.setTimeout(() => {
+      const focusTarget = expectedStr != null && expectedStr.length > 0
+        ? els.destructiveConfirmInput
+        : els.destructiveConfirmGo;
+      try { focusTarget.focus(); } catch {}
+    }, 50);
+  }
+
+  // ---- Snapshot panel (Profile tab) --------------------------------------
+
+  function describeSnapshotTime(takenAt) {
+    if (!takenAt) return "Unknown time";
+    const when = new Date(takenAt);
+    if (Number.isNaN(when.getTime())) return takenAt;
+    const now = Date.now();
+    const diffMs = now - when.getTime();
+    const mins = Math.round(diffMs / 60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins} min ago`;
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return `${hours} hr ago`;
+    const days = Math.round(hours / 24);
+    if (days < 14) return `${days} day${days === 1 ? "" : "s"} ago`;
+    return when.toLocaleString();
+  }
+
+  function renderSnapshotPanel() {
+    if (!els.snapshotList) return;
+    const snaps = listSnapshots();
+    if (els.snapshotCap) els.snapshotCap.textContent = String(SNAPSHOT_MAX);
+    if (els.snapshotBackupStatus) {
+      const meta = readBackupMeta();
+      const unbacked = unbackedRoundCount();
+      const exportPiece = meta.lastExportAt
+        ? `Last file export: ${describeLastBackup().replace(/^Last backup:\s*/, "")}.`
+        : "No file exports yet — tap Export in the header for an off-device copy.";
+      const snapPiece = snaps.length === 0
+        ? "No snapshots yet."
+        : `${snaps.length} snapshot${snaps.length === 1 ? "" : "s"} stored in this browser.`;
+      const unbackedPiece = unbacked > 0
+        ? ` ${unbacked} round${unbacked === 1 ? "" : "s"} not in the most recent file export.`
+        : "";
+      els.snapshotBackupStatus.textContent = `${snapPiece} ${exportPiece}${unbackedPiece}`;
+    }
+    els.snapshotList.innerHTML = "";
+    if (!snaps.length) {
+      const empty = document.createElement("li");
+      empty.className = "snapshot-empty";
+      empty.textContent = "No snapshots yet. One will appear as soon as data changes.";
+      els.snapshotList.appendChild(empty);
+      return;
+    }
+    snaps.forEach((snap) => {
+      const li = document.createElement("li");
+      li.className = "snapshot-row";
+
+      const main = document.createElement("div");
+      main.className = "snapshot-row-main";
+      const headline = document.createElement("div");
+      headline.className = "snapshot-row-headline";
+      const tag = document.createElement("span");
+      const reasonClass = `snapshot-reason-${snap.reason}`.replace(/[^a-z0-9-]/gi, "-");
+      tag.className = `snapshot-reason-tag ${reasonClass}`;
+      tag.textContent = SNAPSHOT_REASON_LABELS[snap.reason] || snap.reason;
+      headline.appendChild(tag);
+      const when = document.createElement("span");
+      when.textContent = describeSnapshotTime(snap.takenAt);
+      headline.appendChild(when);
+      main.appendChild(headline);
+
+      const meta = document.createElement("div");
+      meta.className = "snapshot-row-meta";
+      const sizeKb = Math.max(1, Math.round(snap.bytes / 1024));
+      meta.textContent = `${snap.roundCount} round${snap.roundCount === 1 ? "" : "s"} · ${snap.courseCount} course${snap.courseCount === 1 ? "" : "s"} · ${sizeKb} KB`;
+      main.appendChild(meta);
+
+      const actions = document.createElement("div");
+      actions.className = "snapshot-row-actions";
+      const restoreBtn = document.createElement("button");
+      restoreBtn.type = "button";
+      restoreBtn.className = "primary-button";
+      restoreBtn.textContent = "Restore";
+      restoreBtn.addEventListener("click", () => handleRestoreSnapshot(snap));
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "ghost-button";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.addEventListener("click", () => handleDeleteSnapshot(snap));
+      actions.appendChild(restoreBtn);
+      actions.appendChild(deleteBtn);
+
+      li.appendChild(main);
+      li.appendChild(actions);
+      els.snapshotList.appendChild(li);
+    });
+  }
+
+  function handleRestoreSnapshot(snap) {
+    const currentRounds = Array.isArray(state.rounds) ? state.rounds.length : 0;
+    openDestructiveConfirm({
+      title: "Restore this snapshot?",
+      message: `Replace the current data with the snapshot from ${describeSnapshotTime(snap.takenAt)}.`,
+      facts: [
+        `Current: ${currentRounds} round${currentRounds === 1 ? "" : "s"}.`,
+        `Snapshot: ${snap.roundCount} round${snap.roundCount === 1 ? "" : "s"}, ${snap.courseCount} course${snap.courseCount === 1 ? "" : "s"}.`,
+        "The current state will be saved as a 'Before Restore' snapshot first."
+      ],
+      expected: currentRounds > 0 ? String(currentRounds) : null,
+      confirmLabel: "Restore",
+      showBackupHint: false,
+      onConfirm: () => {
+        const ok = restoreSnapshot(snap.key);
+        if (!ok) {
+          showToast("Could not restore that snapshot.");
+          return;
+        }
+        renderAll();
+        renderSnapshotPanel();
+        showToast(`Restored ${snap.roundCount} round${snap.roundCount === 1 ? "" : "s"}.`);
+      }
+    });
+  }
+
+  function handleDeleteSnapshot(snap) {
+    openDestructiveConfirm({
+      title: "Delete this snapshot?",
+      message: `Remove the snapshot from ${describeSnapshotTime(snap.takenAt)}. This doesn't change your current rounds.`,
+      facts: [`Snapshot has ${snap.roundCount} round${snap.roundCount === 1 ? "" : "s"}.`],
+      expected: null,
+      confirmLabel: "Delete snapshot",
+      showBackupHint: false,
+      onConfirm: () => {
+        deleteSnapshot(snap.key);
+        renderSnapshotPanel();
+        showToast("Snapshot deleted.");
+      }
+    });
+  }
+
   function setActiveTab(tabName) {
     const panels = [...document.querySelectorAll("[data-tab-panel]")];
     const targetName = panels.some((panel) => panel.dataset.tabPanel === tabName) ? tabName : "home";
@@ -5836,6 +6213,9 @@
     });
     localStorage.setItem(ACTIVE_TAB_KEY, targetName);
     updateFloatingNavVisibility();
+    // Refresh the snapshot panel on Profile entry so timestamps don't drift
+    // (e.g. "2 min ago" should re-evaluate without a full reload).
+    if (targetName === "profile") renderSnapshotPanel();
   }
 
   function refreshRoundSetup() {
@@ -6556,8 +6936,8 @@
     renderCourseLookupResults(results, query);
   });
 
-  function loadSampleData() {
-    if (state.rounds.length && !window.confirm("Replace current data with sample data?")) return;
+  function applySampleData() {
+    takeSnapshot("before-sample", { force: true });
     state = {
       courses: structuredClone(sampleCourses),
       rounds: structuredClone(sampleRounds)
@@ -6569,11 +6949,31 @@
     renderAll();
     showToast("Sample data loaded.");
   }
+
+  function loadSampleData() {
+    const currentRounds = state.rounds.length;
+    if (!currentRounds) {
+      // No data to lose — just load. Identical to the old fast path.
+      applySampleData();
+      return;
+    }
+    openDestructiveConfirm({
+      title: "Replace your data with sample data?",
+      message: "Sample Data overwrites every round and course with the built-in demo set. You can roll back via Profile › Backups, but only as long as this browser keeps its storage.",
+      facts: [
+        `You currently have ${currentRounds} round${currentRounds === 1 ? "" : "s"}.`,
+        "A snapshot will be taken before the overwrite."
+      ],
+      expected: currentRounds,
+      confirmLabel: "Replace with sample",
+      onConfirm: applySampleData
+    });
+  }
   els.loadSampleButton.addEventListener("click", loadSampleData);
   if (els.welcomeSampleButton) els.welcomeSampleButton.addEventListener("click", loadSampleData);
 
-  els.clearButton.addEventListener("click", () => {
-    if (!window.confirm("Clear all courses and rounds?")) return;
+  function applyClearAll() {
+    takeSnapshot("before-clear", { force: true });
     state = { courses: [], rounds: [] };
     clearEditState({ rerender: false });
     clearInProgressRound();
@@ -6581,7 +6981,41 @@
     saveState();
     renderAll();
     showToast("Data cleared.");
+  }
+
+  if (els.clearButton) els.clearButton.addEventListener("click", () => {
+    const currentRounds = state.rounds.length;
+    const currentCourses = state.courses.length;
+    openDestructiveConfirm({
+      title: "Clear all data?",
+      message: "Erases every round and every course in this browser. The course catalog will reload from defaults on the next refresh.",
+      facts: [
+        `${currentRounds} round${currentRounds === 1 ? "" : "s"} will be deleted.`,
+        `${currentCourses} course${currentCourses === 1 ? "" : "s"} will be deleted.`,
+        "A snapshot will be taken before the wipe — restore from Profile › Backups."
+      ],
+      expected: currentRounds > 0 ? currentRounds : null,
+      confirmLabel: currentRounds > 0 ? "Clear all data" : "Clear",
+      onConfirm: applyClearAll
+    });
   });
+
+  if (els.snapshotTakeButton) {
+    els.snapshotTakeButton.addEventListener("click", () => {
+      const key = takeSnapshot("manual", { force: true });
+      renderSnapshotPanel();
+      showToast(key ? "Snapshot saved." : "Could not save snapshot.");
+    });
+  }
+
+  if (els.dangerZoneToggle && els.dangerZoneBody) {
+    els.dangerZoneToggle.addEventListener("click", () => {
+      const isHidden = els.dangerZoneBody.hidden;
+      els.dangerZoneBody.hidden = !isHidden;
+      els.dangerZoneToggle.setAttribute("aria-expanded", String(isHidden));
+      els.dangerZoneToggle.textContent = isHidden ? "Hide" : "Show";
+    });
+  }
 
   els.exportButton.addEventListener("click", () => {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
@@ -6602,6 +7036,21 @@
     showToast("Export ready.");
   });
 
+  function applyImport(imported) {
+    takeSnapshot("before-import", { force: true });
+    imported.rounds = imported.rounds.map(normalizeRound);
+    state = ensureProfileShape(ensureCourseDataShape(mergeNewDefaultCourses(imported)));
+    clearEditState({ rerender: false });
+    const previousMeta = readBackupMeta();
+    writeBackupMeta({
+      lastExportAt: previousMeta.lastExportAt,
+      lastExportRoundCount: state.rounds.length
+    });
+    saveState();
+    renderAll();
+    showToast("Import complete.");
+  }
+
   els.importInput.addEventListener("change", () => {
     const file = els.importInput.files[0];
     if (!file) return;
@@ -6616,17 +7065,27 @@
         // so older exports pick up new Deerwood layouts, hazards arrays,
         // round-shape normalization (wind, narrative, firstPuttDistance,
         // etc.) — anything the rest of the app assumes exists.
-        imported.rounds = imported.rounds.map(normalizeRound);
-        state = ensureProfileShape(ensureCourseDataShape(mergeNewDefaultCourses(imported)));
-        clearEditState({ rerender: false });
-        const previousMeta = readBackupMeta();
-        writeBackupMeta({
-          lastExportAt: previousMeta.lastExportAt,
-          lastExportRoundCount: state.rounds.length
+        const currentRounds = state.rounds.length;
+        const incomingRounds = imported.rounds.length;
+        const incomingCourses = imported.courses.length;
+        if (currentRounds === 0) {
+          // No data to lose — apply immediately. Same fast path as the old
+          // import flow when starting from an empty state.
+          applyImport(imported);
+          return;
+        }
+        openDestructiveConfirm({
+          title: "Replace your data with this file?",
+          message: `Import overwrites everything currently in the app with the contents of ${file.name}.`,
+          facts: [
+            `You currently have ${currentRounds} round${currentRounds === 1 ? "" : "s"}.`,
+            `The file has ${incomingRounds} round${incomingRounds === 1 ? "" : "s"} and ${incomingCourses} course${incomingCourses === 1 ? "" : "s"}.`,
+            "A snapshot of the current data will be taken before the import."
+          ],
+          expected: currentRounds,
+          confirmLabel: "Replace with file",
+          onConfirm: () => applyImport(imported)
         });
-        saveState();
-        renderAll();
-        showToast("Import complete.");
       } catch (error) {
         showToast(error.message);
       } finally {

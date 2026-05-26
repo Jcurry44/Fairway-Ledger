@@ -5624,3 +5624,210 @@ td {
     text-align: left;
   }
 }
+
+/* ---- Snapshot/backup safety net (Profile tab) ----------------------- */
+
+.snapshot-backup-status {
+  margin: 6px 0 10px;
+  font-size: 0.9rem;
+  color: var(--ink-soft, #4a5b51);
+}
+
+.snapshot-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.snapshot-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  background: #f7faf8;
+  border: 1px solid var(--line, #e2e9e3);
+  border-radius: 12px;
+}
+
+.snapshot-row-main {
+  min-width: 0;
+}
+
+.snapshot-row-headline {
+  font-weight: 750;
+  color: var(--ink);
+  font-size: 0.98rem;
+}
+
+.snapshot-row-meta {
+  color: var(--ink-soft, #4a5b51);
+  font-size: 0.86rem;
+  margin-top: 2px;
+}
+
+.snapshot-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.snapshot-row-actions button {
+  padding: 7px 11px;
+  font-size: 0.86rem;
+}
+
+.snapshot-empty {
+  padding: 14px;
+  text-align: center;
+  color: var(--ink-soft, #4a5b51);
+  background: #f3f7f4;
+  border-radius: 12px;
+  border: 1px dashed var(--line, #e2e9e3);
+}
+
+.snapshot-reason-tag {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #e7efe9;
+  color: var(--ink, #1d2c25);
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+
+.snapshot-reason-tag.snapshot-reason-before-clear,
+.snapshot-reason-tag.snapshot-reason-before-import,
+.snapshot-reason-tag.snapshot-reason-before-sample {
+  background: #ffe9e4;
+  color: var(--red, #b03a2e);
+}
+
+.snapshot-reason-tag.snapshot-reason-manual {
+  background: #e0eedd;
+  color: #285c20;
+}
+
+.snapshot-reason-tag.snapshot-reason-pre-restore {
+  background: #f1e9d8;
+  color: #6b4a14;
+}
+
+/* ---- Danger zone (Profile tab) -------------------------------------- */
+
+.danger-zone-panel {
+  border-color: #efccc6;
+}
+
+.danger-zone-eyebrow {
+  color: var(--red, #b03a2e) !important;
+}
+
+.danger-zone-body {
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px dashed #efccc6;
+}
+
+.danger-zone-warning {
+  color: var(--ink-soft, #4a5b51);
+  font-size: 0.9rem;
+  margin: 0 0 12px;
+}
+
+.danger-zone-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---- Typed-confirmation modal --------------------------------------- */
+
+.destructive-confirm-sheet {
+  width: min(440px, 100%);
+}
+
+.destructive-confirm-body {
+  padding: 4px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.destructive-confirm-message {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.destructive-confirm-facts {
+  list-style: none;
+  padding: 12px 14px;
+  margin: 0;
+  background: #fff4f1;
+  border: 1px solid #efccc6;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--red, #b03a2e);
+  font-size: 0.92rem;
+}
+
+.destructive-confirm-facts:empty {
+  display: none;
+}
+
+.destructive-confirm-backup-hint {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--ink-soft, #4a5b51);
+}
+
+.destructive-confirm-type-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.destructive-confirm-type-label input {
+  font: inherit;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line, #e2e9e3);
+  background: #fff;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.destructive-confirm-type-label input:focus {
+  outline: 2px solid var(--green, #1f7a59);
+  outline-offset: 1px;
+}
+
+.destructive-confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.destructive-confirm-actions button {
+  min-width: 96px;
+}
+
+.destructive-confirm-actions .danger-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
