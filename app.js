@@ -281,6 +281,49 @@
     return best ? best.club : null;
   }
 
+  // Per Rob via the user: on a hole where multiple clubs have been used, can
+  // the app tell them which one they actually score best with? Returns
+  //   { best: { club, avgToPar, plays }, baseline: { club, avgToPar, plays } }
+  // when:
+  //   - at least 2 different non-Putter tee clubs have been hit
+  //   - each candidate club has ≥ minPlaysPerClub plays of history
+  //   - the gap between "best avg" and the user's most-used club is ≥ minGap
+  //   - the most-used club isn't already the best (no point telling them)
+  // Otherwise null. The baseline is the user's MOST-USED club (their
+  // mental default), not the second-best — that's the comparison the user
+  // actually feels.
+  function getBestScoringTeeClubForHole(courseId, hole, rounds, opts) {
+    if (!hole) return null;
+    const { minPlaysPerClub = 3, minGap = 0.4 } = opts || {};
+    const physId = physicalHoleId(courseId, hole);
+    const groups = new Map(); // club -> [score-to-par, ...]
+    for (const round of rounds) {
+      if (!round || !Array.isArray(round.holes)) continue;
+      for (const h of round.holes) {
+        if (physicalHoleId(round.courseId, h) !== physId) continue;
+        if (!Number.isFinite(h.score) || h.score <= 0) continue;
+        if (!Number.isFinite(h.par) || h.par <= 0) continue;
+        if (!Array.isArray(h.clubsHit) || !h.clubsHit.length) continue;
+        const tee = h.clubsHit.find((c) => c !== "Putter");
+        if (!tee) continue;
+        if (!groups.has(tee)) groups.set(tee, []);
+        groups.get(tee).push(h.score - h.par);
+      }
+    }
+    const eligible = [];
+    for (const [club, scores] of groups) {
+      if (scores.length < minPlaysPerClub) continue;
+      const avgToPar = scores.reduce((s, v) => s + v, 0) / scores.length;
+      eligible.push({ club, avgToPar, plays: scores.length });
+    }
+    if (eligible.length < 2) return null;
+    const best = [...eligible].sort((a, b) => a.avgToPar - b.avgToPar)[0];
+    const baseline = [...eligible].sort((a, b) => b.plays - a.plays)[0];
+    if (best.club === baseline.club) return null;
+    if (baseline.avgToPar - best.avgToPar < minGap) return null;
+    return { best, baseline };
+  }
+
   // Pre-select the likely clubs on every hole so the card shows them ready.
   // Order of preference for the tee club on a par 4/5/6:
   //   1. Most-frequently-used at this physical hole (≥3 plays of history)
@@ -2052,9 +2095,25 @@
       const countBadge = count >= 2 ? `<span class="pill-count" aria-label="hit ${count} times">×${count}</span>` : "";
       return `<button type="button" class="${cls}" data-toggle-club="${escapeHtml(club)}" data-hole="${hole.number}">${escapeHtml(club)}${countBadge}${teeBadge}</button>`;
     }).join("");
+    // Best-scoring-club recommendation — only on fresh round flows (editing
+    // would be circular against the round being edited) and only when the
+    // recommendation differs from whatever the user has currently picked.
+    let recHtml = "";
+    if (!editingRoundId) {
+      const course = getSelectedRoundCourse();
+      const rec = course ? getBestScoringTeeClubForHole(course.id, hole, state.rounds) : null;
+      if (rec) {
+        const currentTee = selected.find((c) => c !== "Putter");
+        if (currentTee !== rec.best.club) {
+          const fmt = (v) => (v > 0 ? `+${v.toFixed(1)}` : v.toFixed(1));
+          recHtml = `<div class="club-hint" role="note"><span class="club-hint-icon" aria-hidden="true">💡</span> You've scored best with <strong>${escapeHtml(rec.best.club)}</strong> here (${fmt(rec.best.avgToPar)} avg, ${rec.best.plays} plays) vs your usual <strong>${escapeHtml(rec.baseline.club)}</strong> (${fmt(rec.baseline.avgToPar)} avg, ${rec.baseline.plays} plays).</div>`;
+        }
+      }
+    }
     return `
       <div class="card-clubs-row" data-hole="${hole.number}">
         <span class="card-pill-label">Clubs hit <span class="card-pill-sublabel">(first tap = tee shot · tap again to add another)</span></span>
+        ${recHtml}
         <div class="card-clubs-grid">${pills}</div>
       </div>`;
   }

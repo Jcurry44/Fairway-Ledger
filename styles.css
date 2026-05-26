@@ -1793,6 +1793,34 @@ body.floating-card-nav-visible .floating-card-nav {
   margin-left: 6px;
 }
 
+/* "Best-scoring club" recommendation hint above the clubs row. Shows only
+   when the user has multi-club history on this physical hole AND there's a
+   meaningful gap (≥0.4 strokes) between their most-used club and their
+   best-scoring one. Computed in getBestScoringTeeClubForHole. */
+.club-hint {
+  margin: 6px 0 8px;
+  padding: 8px 10px;
+  background: #eaf3ed;
+  border: 1px solid #c8dccf;
+  border-radius: 8px;
+  color: var(--ink, #1d2c25);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.club-hint-icon {
+  flex: 0 0 auto;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.club-hint strong {
+  font-weight: 750;
+}
+
 /* Tee Club Performance panel — aggregate by tee club across rounds. */
 
 .tee-club-panel {
