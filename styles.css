@@ -2161,6 +2161,7 @@ body.floating-card-nav-visible .floating-card-nav {
 [data-tab-panel="home"][data-active-section="trends"] [data-home-section]:not([data-home-section="trends"]) { display: none; }
 [data-tab-panel="home"][data-active-section="holes"] [data-home-section]:not([data-home-section="holes"]) { display: none; }
 [data-tab-panel="home"][data-active-section="clubs"] [data-home-section]:not([data-home-section="clubs"]) { display: none; }
+[data-tab-panel="home"][data-active-section="records"] [data-home-section]:not([data-home-section="records"]) { display: none; }
 
 /* Second-row sub-chips, contextual to the active section. Each section's
    sub-chip nav narrows the view further to a single panel — no scrolling
@@ -5276,6 +5277,65 @@ td {
 .round-tag-practice {
   background: #e6eff8;
   color: #1f4f7a;
+}
+
+/* Trophy Room (Home → Records) — card grid of lifetime personal-best
+   records. Each card is tappable when it's anchored to a specific round
+   (opens that round in edit/inspect mode). Streaks and aces with no
+   single anchor render without the tap affordance. */
+.trophy-room-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.trophy-card {
+  background: #f7faf8;
+  border: 1px solid var(--line, #e2e9e3);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  cursor: default;
+  transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+}
+
+.trophy-card-tap {
+  cursor: pointer;
+}
+
+.trophy-card-tap:hover {
+  border-color: var(--green, #1f7a59);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(31, 122, 89, 0.12);
+}
+
+.trophy-card-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted, #6c7a72);
+}
+
+.trophy-card-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--ink, #1d2c25);
+  line-height: 1.1;
+}
+
+.trophy-card-sub {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--green, #1f7a59);
+}
+
+.trophy-card-context {
+  font-size: 0.78rem;
+  color: var(--muted, #6c7a72);
 }
 
 .course-detail {

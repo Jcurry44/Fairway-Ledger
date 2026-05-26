@@ -489,6 +489,8 @@
     profileBagGrid: document.getElementById("profileBagGrid"),
     profileBagSummary: document.getElementById("profileBagSummary"),
     bagResetButton: document.getElementById("bagResetButton"),
+    trophyRoomGrid: document.getElementById("trophyRoomGrid"),
+    trophyRoomNote: document.getElementById("trophyRoomNote"),
     homeFiltersButton: document.getElementById("homeFiltersButton"),
     filtersSheetOverlay: document.getElementById("filtersSheetOverlay"),
     filtersSheetBackdrop: document.getElementById("filtersSheetBackdrop"),
@@ -5554,6 +5556,208 @@
     });
   }
 
+  // ---- Trophy Room (Home → Records) -------------------------------------
+  //
+  // Computes lifetime personal-best records from EVERY saved round (not the
+  // filtered set — the user's expectation here is "what's my all-time
+  // best?", which shouldn't shift with the Last-5 filter on). Each trophy
+  // anchors back to the round that set it; tapping the card loads that
+  // round for editing/inspection.
+
+  function computeTrophies(rounds) {
+    const out = [];
+    if (!Array.isArray(rounds) || !rounds.length) return out;
+    const scored = rounds.filter((r) =>
+      r && Array.isArray(r.holes) && r.holes.some((h) => Number.isFinite(h.score) && h.score > 0)
+    );
+    if (!scored.length) return out;
+
+    const fmtDate = (d) => {
+      try {
+        const date = new Date(d);
+        if (Number.isNaN(date.getTime())) return d;
+        return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+      } catch { return d; }
+    };
+    const courseLabel = (cId) => {
+      const c = getCourse(cId);
+      return c ? (c.name + (c.tee ? ` (${c.tee})` : "")) : "Unknown course";
+    };
+    const fmtSigned = (n) => (n > 0 ? `+${n}` : n === 0 ? "E" : String(n));
+    const trophy = (id, label, value, round, sub) => {
+      out.push({
+        id, label, value,
+        context: round ? `${fmtDate(round.date)} · ${courseLabel(round.courseId)}` : "",
+        sub: sub || "",
+        roundId: round ? round.id : null
+      });
+    };
+
+    const has18 = scored.filter((r) => r.holes.length === 18);
+    const has9 = scored.filter((r) => r.holes.length === 9);
+
+    function pickBest(arr, valueOf, direction) {
+      let best = null;
+      arr.forEach((r) => {
+        const v = valueOf(r);
+        if (v === null || !Number.isFinite(v)) return;
+        if (best === null) best = { round: r, value: v };
+        else if (direction === "min" && v < best.value) best = { round: r, value: v };
+        else if (direction === "max" && v > best.value) best = { round: r, value: v };
+      });
+      return best;
+    }
+
+    let b;
+    b = pickBest(has18, (r) => roundTotals(r).gross, "min");
+    if (b) trophy("low-18-gross", "Lowest 18-hole gross", String(b.value), b.round);
+    b = pickBest(has18, (r) => roundTotals(r).toPar, "min");
+    if (b) trophy("low-18-topar", "Lowest 18 vs par", fmtSigned(b.value), b.round);
+    b = pickBest(has9, (r) => roundTotals(r).gross, "min");
+    if (b) trophy("low-9-gross", "Lowest 9-hole gross", String(b.value), b.round);
+    b = pickBest(has9, (r) => roundTotals(r).toPar, "min");
+    if (b) trophy("low-9-topar", "Lowest 9 vs par", fmtSigned(b.value), b.round);
+
+    b = pickBest(scored, (r) => r.holes.filter((h) =>
+      Number.isFinite(h.score) && Number.isFinite(h.par) && h.score <= h.par - 1
+    ).length, "max");
+    if (b && b.value > 0) trophy("most-birdies", "Most birdies-or-better in a round", String(b.value), b.round);
+
+    b = pickBest(scored, (r) => r.holes.filter((h) =>
+      Number.isFinite(h.score) && Number.isFinite(h.par) && h.score <= h.par
+    ).length, "max");
+    if (b && b.value > 0) trophy("most-pars", "Most pars-or-better in a round", String(b.value), b.round);
+
+    b = pickBest(has18, (r) => { const t = roundTotals(r); return t.putts > 0 ? t.putts : null; }, "min");
+    if (b) trophy("low-putts", "Lowest putts (18 holes)", String(b.value), b.round);
+
+    b = pickBest(scored, (r) => { const t = roundTotals(r); return t.firTotal > 0 ? t.firMade : null; }, "max");
+    if (b && b.value > 0) {
+      const t = roundTotals(b.round);
+      trophy("most-firs", "Most fairways in a round", `${b.value} / ${t.firTotal}`, b.round);
+    }
+
+    b = pickBest(scored, (r) => r.holes.filter((h) => h.gir).length, "max");
+    if (b && b.value > 0) trophy("most-girs", "Most greens in regulation", `${b.value} / ${b.round.holes.length}`, b.round);
+
+    function bestStretch(n, id, label) {
+      let best = null;
+      scored.forEach((r) => {
+        const holes = r.holes;
+        if (!holes || holes.length < n) return;
+        for (let i = 0; i <= holes.length - n; i++) {
+          let toPar = 0;
+          let valid = true;
+          for (let j = 0; j < n; j++) {
+            const h = holes[i + j];
+            if (!Number.isFinite(h.score) || h.score <= 0 || !Number.isFinite(h.par)) {
+              valid = false; break;
+            }
+            toPar += h.score - h.par;
+          }
+          if (!valid) continue;
+          if (best === null || toPar < best.value) {
+            best = { value: toPar, round: r, startHole: holes[i].number, endHole: holes[i + n - 1].number };
+          }
+        }
+      });
+      if (best) trophy(id, label, fmtSigned(best.value), best.round, `Holes ${best.startHole}–${best.endHole}`);
+    }
+    bestStretch(3, "best-3stretch", "Best 3-hole stretch");
+    bestStretch(9, "best-9stretch", "Best 9-hole stretch");
+
+    // Chronological hole stream — for streaks that span rounds (longest
+    // pars-in-a-row, longest no-3-putt, etc.).
+    const chrono = [...scored].sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+    const events = [];
+    chrono.forEach((r) => r.holes.forEach((h) => {
+      if (!Number.isFinite(h.score) || h.score <= 0) return;
+      events.push({
+        round: r,
+        hole: h,
+        isPar: Number.isFinite(h.par) && h.score <= h.par,
+        isBirdie: Number.isFinite(h.par) && h.score <= h.par - 1,
+        isNo3Putt: !(Number.isFinite(h.putts) && h.putts >= 3)
+      });
+    }));
+
+    function longestRun(predicate, id, label) {
+      let bestRun = 0;
+      let bestEnd = null;
+      let curr = 0;
+      events.forEach((e, idx) => {
+        if (predicate(e)) {
+          curr++;
+          if (curr > bestRun) { bestRun = curr; bestEnd = idx; }
+        } else { curr = 0; }
+      });
+      if (bestRun >= 2 && bestEnd != null) {
+        const endRound = events[bestEnd].round;
+        trophy(id, label, `${bestRun}`, endRound, `ended ${fmtDate(endRound.date)}`);
+      }
+    }
+    longestRun((e) => e.isPar, "streak-pars", "Longest pars-or-better streak");
+    longestRun((e) => e.isBirdie, "streak-birdies", "Longest birdies streak");
+    longestRun((e) => e.isNo3Putt, "streak-no3putt", "Longest no-3-putt streak");
+
+    let aceCount = 0;
+    let lastAceRound = null;
+    events.forEach((e) => {
+      if (e.hole.par === 3 && e.hole.score === 1) {
+        aceCount++;
+        lastAceRound = e.round;
+      }
+    });
+    if (aceCount > 0) {
+      trophy("aces", "Holes-in-one", String(aceCount), lastAceRound,
+        aceCount === 1 ? "your first ace" : `${aceCount} all-time`);
+    }
+
+    [90, 85, 80, 75, 70].forEach((threshold) => {
+      const firstUnder = [...has18]
+        .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+        .find((r) => roundTotals(r).gross < threshold);
+      if (firstUnder) {
+        trophy(`broke-${threshold}`, `First time broke ${threshold}`, String(roundTotals(firstUnder).gross), firstUnder);
+      }
+    });
+
+    return out;
+  }
+
+  function renderTrophyRoom() {
+    if (!els.trophyRoomGrid) return;
+    const trophies = computeTrophies(state.rounds);
+    if (els.trophyRoomNote) {
+      els.trophyRoomNote.textContent = trophies.length
+        ? `${trophies.length} record${trophies.length === 1 ? "" : "s"} across ${state.rounds.length} round${state.rounds.length === 1 ? "" : "s"}`
+        : "";
+    }
+    if (!trophies.length) {
+      els.trophyRoomGrid.innerHTML = emptyState("Save a few rounds and your personal bests will show up here.");
+      return;
+    }
+    els.trophyRoomGrid.innerHTML = trophies.map((t) => `
+      <article class="trophy-card${t.roundId ? " trophy-card-tap" : ""}"${t.roundId ? ` data-trophy-round="${escapeHtml(t.roundId)}"` : ""}>
+        <span class="trophy-card-label">${escapeHtml(t.label)}</span>
+        <strong class="trophy-card-value">${escapeHtml(t.value)}</strong>
+        ${t.sub ? `<span class="trophy-card-sub">${escapeHtml(t.sub)}</span>` : ""}
+        ${t.context ? `<span class="trophy-card-context">${escapeHtml(t.context)}</span>` : ""}
+      </article>`).join("");
+    els.trophyRoomGrid.querySelectorAll("[data-trophy-round]").forEach((card) => {
+      card.addEventListener("click", () => {
+        const round = state.rounds.find((r) => r.id === card.dataset.trophyRound);
+        if (!round) {
+          showToast("Round not found.");
+          return;
+        }
+        loadRoundIntoForm(round);
+        setActiveTab("rounds");
+        showToast("Editing round. Make changes and click Update round.");
+      });
+    });
+  }
+
   // Profile tab — bag editor. Each known club is a toggleable pill; the
   // active set is state.profile.bag. Other surfaces (in-round pickers,
   // seeded defaults) consult getBag()/clubsForHole() so changes here
@@ -5629,9 +5833,10 @@
     "scoring-by-nine": "holes",
     "tee-club-performance": "clubs",
     "putting-by-distance": "clubs",
-    "scrambling": "clubs"
+    "scrambling": "clubs",
+    "trophy-room": "records"
   };
-  const HOME_SECTIONS = ["overview", "trends", "holes", "clubs"];
+  const HOME_SECTIONS = ["overview", "trends", "holes", "clubs", "records"];
   const HOME_SECTION_KEY = "fairwayLedger.homeSection.v1";
   const HOME_SUBSECTIONS_KEY = "fairwayLedger.homeSubsections.v1";
   // First sub-chip the user lands on when entering a section with no prior
@@ -6065,6 +6270,7 @@
     updateBackupBadge();
     renderCourseList();
     renderProfileBag();
+    renderTrophyRoom();
     renderSnapshotPanel();
     tagHomePanelsWithSections();
     applyHomeSectionUi();
