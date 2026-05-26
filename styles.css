@@ -2162,6 +2162,7 @@ body.floating-card-nav-visible .floating-card-nav {
 [data-tab-panel="home"][data-active-section="holes"] [data-home-section]:not([data-home-section="holes"]) { display: none; }
 [data-tab-panel="home"][data-active-section="clubs"] [data-home-section]:not([data-home-section="clubs"]) { display: none; }
 [data-tab-panel="home"][data-active-section="records"] [data-home-section]:not([data-home-section="records"]) { display: none; }
+[data-tab-panel="home"][data-active-section="explorer"] [data-home-section]:not([data-home-section="explorer"]) { display: none; }
 
 /* Second-row sub-chips, contextual to the active section. Each section's
    sub-chip nav narrows the view further to a single panel — no scrolling
@@ -5334,6 +5335,51 @@ td {
 }
 
 .trophy-card-context {
+  font-size: 0.78rem;
+  color: var(--muted, #6c7a72);
+}
+
+/* Stats Explorer (Home → Explorer) — pre-built query cards. Same visual
+   model as Trophy Room but the framing is "questions about your game"
+   rather than "achievements". */
+.stats-explorer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.stats-card {
+  background: #f7faf8;
+  border: 1px solid var(--line, #e2e9e3);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stats-card-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted, #6c7a72);
+}
+
+.stats-card-value {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--ink, #1d2c25);
+  line-height: 1.15;
+}
+
+.stats-card-sub {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--green, #1f7a59);
+}
+
+.stats-card-context {
   font-size: 0.78rem;
   color: var(--muted, #6c7a72);
 }

@@ -491,6 +491,8 @@
     bagResetButton: document.getElementById("bagResetButton"),
     trophyRoomGrid: document.getElementById("trophyRoomGrid"),
     trophyRoomNote: document.getElementById("trophyRoomNote"),
+    statsExplorerGrid: document.getElementById("statsExplorerGrid"),
+    statsExplorerNote: document.getElementById("statsExplorerNote"),
     homeFiltersButton: document.getElementById("homeFiltersButton"),
     filtersSheetOverlay: document.getElementById("filtersSheetOverlay"),
     filtersSheetBackdrop: document.getElementById("filtersSheetBackdrop"),
@@ -5725,6 +5727,228 @@
     return out;
   }
 
+  // ---- Stats Explorer (Home → Explorer) ---------------------------------
+  //
+  // Phase 1: pre-built queries. Each computeStat* function returns a card
+  // descriptor { id, label, value, sub, context } or null when there's not
+  // enough data to answer. The Explorer panel renders them as a card grid
+  // — same visual model as Trophy Room but the framing is "questions about
+  // your game" rather than "achievements". Phase 2 (NLP queries) deferred
+  // until the user wires up an API key.
+
+  function computeStatsExplorer(rounds) {
+    const out = [];
+    if (!Array.isArray(rounds) || !rounds.length) return out;
+    const scored = rounds.filter((r) =>
+      r && Array.isArray(r.holes) && r.holes.some((h) => Number.isFinite(h.score) && h.score > 0)
+    );
+    if (!scored.length) return out;
+
+    const fmtSigned = (n) => (n > 0 ? `+${n.toFixed(1)}` : n === 0 ? "E" : n.toFixed(1));
+    const fmt1 = (n) => (Number.isFinite(n) ? n.toFixed(1) : "--");
+    const avg = (xs) => xs.length ? xs.reduce((s, v) => s + v, 0) / xs.length : null;
+    const overallGross = avg(scored.map((r) => roundTotals(r).gross));
+    const overallToPar = avg(scored.map((r) => roundTotals(r).toPar));
+
+    function card(id, label, value, sub, context) {
+      out.push({ id, label, value, sub: sub || "", context: context || "" });
+    }
+
+    function compareSubset(label, predicate, opts) {
+      const subset = scored.filter(predicate);
+      if (subset.length < (opts && opts.minCount ? opts.minCount : 2)) return null;
+      const subsetAvg = avg(subset.map((r) => roundTotals(r).gross));
+      const delta = overallGross != null ? subsetAvg - overallGross : null;
+      const sub = delta != null
+        ? `${delta < 0 ? "−" : "+"}${Math.abs(delta).toFixed(1)} vs overall avg`
+        : "";
+      const value = `${fmt1(subsetAvg)} avg gross`;
+      const context = `${subset.length} of ${scored.length} rounds`;
+      return { value, sub, context };
+    }
+
+    // Rounds with ≥8 pars
+    (() => {
+      const r = compareSubset("8+ pars", (r) =>
+        r.holes.filter((h) => Number.isFinite(h.score) && Number.isFinite(h.par) && h.score <= h.par).length >= 8
+      );
+      if (r) card("pars-8plus", "Rounds with ≥8 pars", r.value, r.sub, r.context);
+    })();
+
+    // Triple-free rounds
+    (() => {
+      const r = compareSubset("no triples", (r) =>
+        r.holes.every((h) => !Number.isFinite(h.score) || h.score <= 0 || !Number.isFinite(h.par) || h.score - h.par < 3)
+      );
+      if (r) card("no-triples", "Rounds with no triple+ bogeys", r.value, r.sub, r.context);
+    })();
+
+    // Penalty-free rounds
+    (() => {
+      const r = compareSubset("no penalties", (r) =>
+        r.holes.every((h) => !Number.isFinite(h.penalties) || h.penalties === 0)
+      );
+      if (r) card("no-pen", "Penalty-free rounds", r.value, r.sub, r.context);
+    })();
+
+    // Rounds with ≥3 birdies
+    (() => {
+      const r = compareSubset("3+ birdies", (r) =>
+        r.holes.filter((h) => Number.isFinite(h.score) && Number.isFinite(h.par) && h.score <= h.par - 1).length >= 3
+      );
+      if (r) card("birdies-3plus", "Rounds with ≥3 birdies", r.value, r.sub, r.context);
+    })();
+
+    // No-3-putt rounds
+    (() => {
+      const r = compareSubset("no 3-putts", (r) =>
+        r.holes.every((h) => !Number.isFinite(h.putts) || h.putts < 3)
+      );
+      if (r) card("no-3putt", "No-3-putt rounds", r.value, r.sub, r.context);
+    })();
+
+    // Average gross by month
+    (() => {
+      const byMonth = new Map();
+      scored.forEach((r) => {
+        if (!r.date) return;
+        const m = r.date.slice(0, 7); // YYYY-MM
+        if (!byMonth.has(m)) byMonth.set(m, []);
+        byMonth.get(m).push(roundTotals(r).gross);
+      });
+      if (!byMonth.size) return;
+      const months = [...byMonth.entries()]
+        .map(([m, scores]) => ({ m, avg: avg(scores), count: scores.length }))
+        .filter((x) => x.count >= 2);
+      if (months.length < 2) return;
+      months.sort((a, b) => a.avg - b.avg);
+      const best = months[0];
+      const worst = months[months.length - 1];
+      const monthName = (m) => {
+        try {
+          const date = new Date(m + "-01T00:00:00");
+          return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+        } catch { return m; }
+      };
+      card("best-month", "Best scoring month",
+        `${fmt1(best.avg)} avg gross`,
+        `${best.count} round${best.count === 1 ? "" : "s"}`,
+        monthName(best.m));
+      if (best.m !== worst.m) {
+        card("worst-month", "Toughest scoring month",
+          `${fmt1(worst.avg)} avg gross`,
+          `${worst.count} round${worst.count === 1 ? "" : "s"}`,
+          monthName(worst.m));
+      }
+    })();
+
+    // Average gross by wind condition
+    (() => {
+      const byWind = new Map();
+      scored.forEach((r) => {
+        const w = r.wind || "(no wind logged)";
+        if (!byWind.has(w)) byWind.set(w, []);
+        byWind.get(w).push(roundTotals(r).gross);
+      });
+      const entries = [...byWind.entries()].filter(([, scores]) => scores.length >= 2);
+      if (entries.length < 2) return;
+      entries.sort((a, b) => avg(a[1]) - avg(b[1]));
+      const best = entries[0];
+      card("wind-best", "You score best when wind is",
+        `${fmt1(avg(best[1]))} avg gross`,
+        `${best[1].length} round${best[1].length === 1 ? "" : "s"}`,
+        best[0] === "(no wind logged)" ? "wind unlogged" : formatWind(best[0]));
+    })();
+
+    // Same-course progression — for any physical course with ≥10 rounds,
+    // compare avg of first 5 vs last 5 to surface "are you getting better?".
+    (() => {
+      const byPhysical = new Map();
+      scored.forEach((r) => {
+        const c = getCourse(r.courseId);
+        if (!c) return;
+        const key = c.name;
+        if (!byPhysical.has(key)) byPhysical.set(key, []);
+        byPhysical.get(key).push(r);
+      });
+      let bestProgress = null;
+      byPhysical.forEach((rs, name) => {
+        if (rs.length < 10) return;
+        const chrono = [...rs].sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+        const first5 = chrono.slice(0, 5);
+        const last5 = chrono.slice(-5);
+        const firstAvg = avg(first5.map((r) => roundTotals(r).gross));
+        const lastAvg = avg(last5.map((r) => roundTotals(r).gross));
+        const improvement = firstAvg - lastAvg; // positive = improved
+        if (bestProgress == null || Math.abs(improvement) > Math.abs(bestProgress.improvement)) {
+          bestProgress = { name, firstAvg, lastAvg, improvement, total: chrono.length };
+        }
+      });
+      if (bestProgress) {
+        const dir = bestProgress.improvement > 0 ? "better" : "worse";
+        card("course-progression",
+          `Same-course progression: ${bestProgress.name}`,
+          `${dir === "better" ? "−" : "+"}${Math.abs(bestProgress.improvement).toFixed(1)} ${dir}`,
+          `first 5: ${fmt1(bestProgress.firstAvg)} · last 5: ${fmt1(bestProgress.lastAvg)}`,
+          `${bestProgress.total} rounds total here`);
+      }
+    })();
+
+    // Top tagged-play comparison (only if tags exist)
+    (() => {
+      const tagged = scored.filter((r) => r.tag);
+      const untagged = scored.filter((r) => !r.tag);
+      if (!tagged.length) return;
+      const byTag = new Map();
+      tagged.forEach((r) => {
+        if (!byTag.has(r.tag)) byTag.set(r.tag, []);
+        byTag.get(r.tag).push(roundTotals(r).gross);
+      });
+      const entries = [...byTag.entries()].filter(([, xs]) => xs.length >= 2);
+      if (!entries.length) return;
+      entries.sort((a, b) => avg(a[1]) - avg(b[1]));
+      const best = entries[0];
+      const ref = untagged.length >= 2 ? avg(untagged.map((r) => roundTotals(r).gross)) : overallGross;
+      const refLabel = untagged.length >= 2 ? "vs untagged" : "vs overall";
+      const delta = avg(best[1]) - ref;
+      const deltaText = `${delta < 0 ? "−" : "+"}${Math.abs(delta).toFixed(1)} ${refLabel}`;
+      card("tag-best", `Best play type: ${formatRoundTag(best[0])}`,
+        `${fmt1(avg(best[1]))} avg gross`, deltaText,
+        `${best[1].length} round${best[1].length === 1 ? "" : "s"}`);
+    })();
+
+    // Headline: overall avg as a sanity check on the rest of the cards.
+    if (overallGross != null) {
+      card("overall-avg", "Overall average",
+        `${fmt1(overallGross)} avg gross`,
+        `${overallToPar != null ? fmtSigned(overallToPar) + " vs par" : ""}`,
+        `${scored.length} scored round${scored.length === 1 ? "" : "s"}`);
+    }
+
+    return out;
+  }
+
+  function renderStatsExplorer() {
+    if (!els.statsExplorerGrid) return;
+    const cards = computeStatsExplorer(state.rounds);
+    if (els.statsExplorerNote) {
+      els.statsExplorerNote.textContent = cards.length
+        ? `${cards.length} insight${cards.length === 1 ? "" : "s"} from ${state.rounds.length} round${state.rounds.length === 1 ? "" : "s"}`
+        : "";
+    }
+    if (!cards.length) {
+      els.statsExplorerGrid.innerHTML = emptyState("Save more rounds and the explorer will fill in.");
+      return;
+    }
+    els.statsExplorerGrid.innerHTML = cards.map((c) => `
+      <article class="stats-card">
+        <span class="stats-card-label">${escapeHtml(c.label)}</span>
+        <strong class="stats-card-value">${escapeHtml(c.value)}</strong>
+        ${c.sub ? `<span class="stats-card-sub">${escapeHtml(c.sub)}</span>` : ""}
+        ${c.context ? `<span class="stats-card-context">${escapeHtml(c.context)}</span>` : ""}
+      </article>`).join("");
+  }
+
   function renderTrophyRoom() {
     if (!els.trophyRoomGrid) return;
     const trophies = computeTrophies(state.rounds);
@@ -5834,9 +6058,10 @@
     "tee-club-performance": "clubs",
     "putting-by-distance": "clubs",
     "scrambling": "clubs",
-    "trophy-room": "records"
+    "trophy-room": "records",
+    "stats-explorer": "explorer"
   };
-  const HOME_SECTIONS = ["overview", "trends", "holes", "clubs", "records"];
+  const HOME_SECTIONS = ["overview", "trends", "holes", "clubs", "records", "explorer"];
   const HOME_SECTION_KEY = "fairwayLedger.homeSection.v1";
   const HOME_SUBSECTIONS_KEY = "fairwayLedger.homeSubsections.v1";
   // First sub-chip the user lands on when entering a section with no prior
@@ -6271,6 +6496,7 @@
     renderCourseList();
     renderProfileBag();
     renderTrophyRoom();
+    renderStatsExplorer();
     renderSnapshotPanel();
     tagHomePanelsWithSections();
     applyHomeSectionUi();
