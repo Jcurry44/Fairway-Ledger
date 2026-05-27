@@ -1419,7 +1419,18 @@
     if (els.roundCourse.value === DEERWOOD_COURSE_ID) {
       return buildDeerwoodCourse(els.roundHoleCount.value, getSelectedRoundLayoutId(), els.roundTee.value);
     }
-    return getCourse(els.roundCourse.value);
+    const base = getCourse(els.roundCourse.value);
+    if (!base || els.roundHoleCount.value !== "9") return base;
+    // Non-Deerwood 9-hole round: slice the catalog course to the chosen
+    // half. Hole numbers are preserved (Back 9 keeps holes 10..18) so
+    // physicalHoleId("course:arrowhead-white:12") pools correctly with
+    // hole 12 of any 18-hole round at the same course.
+    const half = els.roundLayout.value === "back" ? "back" : "front";
+    const all = Array.isArray(base.holes) ? base.holes : [];
+    const sliced = half === "back"
+      ? all.slice(Math.max(0, all.length - 9))  // last 9 (or fewer if odd catalog)
+      : all.slice(0, 9);                         // first 9
+    return { ...base, holes: sliced };
   }
 
   function ensureSavedCourse(course) {
@@ -1812,7 +1823,9 @@
 
   function renderRoundSetupOptions() {
     const isDeerwood = els.roundCourse.value === DEERWOOD_COURSE_ID;
-    els.roundHoleCountField.hidden = !isDeerwood;
+    // 9/18 picker visible for every course — Jeff's buddy plays a 9-hole
+    // league at Arrowhead; nothing about that is Deerwood-specific.
+    els.roundHoleCountField.hidden = false;
 
     if (!isDeerwood) {
       // Non-Deerwood: populate the Tee dropdown with the available tees for
@@ -1829,9 +1842,33 @@
         .join("");
       if (tees.includes(currentTee)) els.roundTee.value = currentTee;
       els.roundTeeField.hidden = tees.length < 2;
-      els.roundLayoutField.hidden = true;
-      els.roundFrontNineField.hidden = true;
-      els.roundBackNineField.hidden = true;
+
+      // Default hole-count to 18 if not set.
+      if (!els.roundHoleCount.value) els.roundHoleCount.value = "18";
+      const isNineHole = els.roundHoleCount.value === "9";
+      // For non-Deerwood 9-hole rounds, repurpose the layout picker as a
+      // Front-9 / Back-9 chooser. Slicing happens in getSelectedRoundCourse.
+      els.roundLayoutField.hidden = !isNineHole;
+      els.roundFrontNineField.hidden = true;   // Deerwood-only
+      els.roundBackNineField.hidden = true;    // Deerwood-only
+
+      if (isNineHole) {
+        const halves = [
+          { id: "front", label: "Front 9 (1-9)" },
+          { id: "back",  label: "Back 9 (10-18)" }
+        ];
+        // Capture the value BEFORE replacing innerHTML — setting innerHTML
+        // resets <select>.value to the first option as a side-effect, so
+        // restoring it afterward is the only way to honor a prior pick.
+        // (The Deerwood-side rebuild does the same dance for the same reason.)
+        const previousLayout = els.roundLayout.value;
+        els.roundLayout.innerHTML = halves
+          .map((h) => `<option value="${h.id}">${h.label}</option>`)
+          .join("");
+        els.roundLayout.value = halves.some((h) => h.id === previousLayout)
+          ? previousLayout
+          : "front";
+      }
       syncAllChipsToSelects();
       return;
     }
@@ -7278,17 +7315,23 @@
     refreshRoundSetup();
   });
   // Hole count switch (9 ↔ 18) used to wipe all entered data. That broke
-  // the common "I'm going to play another 9" flow. Now: preserve holes 1-9
-  // across the switch. Going 9 → 18 keeps your front 9 and adds fresh
-  // holes 10-18. Going 18 → 9 keeps the front 9 and drops the back 9
-  // (which is unrecoverable either way — the new layout has no slot for
-  // it). For Deerwood: hole numbers map to whichever nine is active, so
-  // preservation is correct as long as the front-nine selection doesn't
-  // change as a side effect. If it does, the user can re-pick the right
-  // nine — but no data has been silently destroyed.
+  // the common "I'm going to play another 9" flow. Now: preserve whatever
+  // holes are currently on the scorecard so any entered data survives the
+  // switch. For Deerwood 9-hole that's [1..9]; for non-Deerwood Back 9
+  // that's [10..18]; for 18-hole layouts it's [1..18]. Holes not in the
+  // new layout get dropped naturally (refreshRoundPreservingHoles only
+  // re-applies preserved hole numbers that the new layout actually has).
   els.roundHoleCount.addEventListener("change", () => {
     resetReviewState();
-    refreshRoundPreservingHoles([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    const currentNumbers = [...els.scorecardGrid.querySelectorAll(".score-input[data-hole]")]
+      .map((input) => Number(input.dataset.hole))
+      .filter(Number.isFinite);
+    // Belt-and-suspenders: if for some reason no scorecard is rendered yet
+    // (very early in setup), fall back to preserving the canonical front 9.
+    const preserve = currentNumbers.length
+      ? currentNumbers
+      : [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    refreshRoundPreservingHoles(preserve);
   });
   // Layout change (Deerwood 9-hole nine picker: Buck → Doe → Fawn) is a
   // deliberate "different physical course" action, so still clear. Score
