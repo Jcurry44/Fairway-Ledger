@@ -5384,6 +5384,32 @@ td {
   color: var(--muted, #6c7a72);
 }
 
+/* Round-detail sheet — opens from a Trophy card tap. Shows the scorecard
+   read-only. Body scrolls when the scorecard is taller than the sheet. */
+.round-detail-sheet {
+  width: min(720px, 100%);
+  max-height: min(86vh, 820px);
+}
+
+.round-detail-subtitle {
+  padding: 0 18px 6px;
+  color: var(--muted, #6c7a72);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.round-detail-body {
+  padding: 6px 18px 12px;
+  overflow-y: auto;
+}
+
+.round-detail-actions {
+  padding: 12px 18px 18px;
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--line, #e2e9e3);
+}
+
 /* Stats Explorer (Home → Explorer) — pre-built query cards. Same visual
    model as Trophy Room but the framing is "questions about your game"
    rather than "achievements". */

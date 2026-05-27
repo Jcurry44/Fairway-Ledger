@@ -15,9 +15,9 @@
     <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
          icon, theme color in the browser chrome, and a standalone display
          mode instead of a tab. -->
-    <link rel="manifest" href="./manifest.json?v=2026-05-26k">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-05-26k">
-    <link rel="apple-touch-icon" href="./icon.svg?v=2026-05-26k">
+    <link rel="manifest" href="./manifest.json?v=2026-05-26l">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-05-26l">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-05-26l">
     <meta name="theme-color" content="#1f7a59">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -32,11 +32,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
 
-    <link rel="stylesheet" href="./styles.css?v=2026-05-26k">
-    <script src="./data/courses.js?v=2026-05-26k" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-26k" defer></script>
-    <script src="./lib/shapes.js?v=2026-05-26k" defer></script>
-    <script src="./app.js?v=2026-05-26k" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-26l">
+    <script src="./data/courses.js?v=2026-05-26l" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-26l" defer></script>
+    <script src="./lib/shapes.js?v=2026-05-26l" defer></script>
+    <script src="./app.js?v=2026-05-26l" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -774,6 +774,25 @@
           <button id="holePickerClose" class="hole-picker-close" type="button" aria-label="Close">&times;</button>
         </div>
         <ul id="holePickerList" class="hole-picker-list"></ul>
+      </div>
+    </div>
+
+    <!-- Round detail sheet — opens when the user taps a Trophy card. Shows
+         the full scorecard for the round that set the record, read-only,
+         with a secondary "Edit this round" action for actual changes. -->
+    <div id="roundDetailOverlay" class="hole-picker-overlay" hidden>
+      <button id="roundDetailBackdrop" class="hole-picker-backdrop" type="button" aria-label="Close round detail"></button>
+      <div class="hole-picker-sheet round-detail-sheet" role="dialog" aria-modal="true" aria-labelledby="roundDetailTitle">
+        <div class="hole-picker-handle" aria-hidden="true"></div>
+        <div class="hole-picker-header">
+          <h3 id="roundDetailTitle">Round</h3>
+          <button id="roundDetailClose" class="hole-picker-close" type="button" aria-label="Close">&times;</button>
+        </div>
+        <div id="roundDetailSubtitle" class="round-detail-subtitle"></div>
+        <div id="roundDetailBody" class="round-detail-body"></div>
+        <div class="round-detail-actions">
+          <button id="roundDetailEditButton" class="ghost-button" type="button">Edit this round</button>
+        </div>
       </div>
     </div>
 

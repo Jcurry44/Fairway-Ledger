@@ -514,6 +514,13 @@
     bagResetButton: document.getElementById("bagResetButton"),
     trophyRoomGrid: document.getElementById("trophyRoomGrid"),
     trophyRoomNote: document.getElementById("trophyRoomNote"),
+    roundDetailOverlay: document.getElementById("roundDetailOverlay"),
+    roundDetailBackdrop: document.getElementById("roundDetailBackdrop"),
+    roundDetailClose: document.getElementById("roundDetailClose"),
+    roundDetailTitle: document.getElementById("roundDetailTitle"),
+    roundDetailSubtitle: document.getElementById("roundDetailSubtitle"),
+    roundDetailBody: document.getElementById("roundDetailBody"),
+    roundDetailEditButton: document.getElementById("roundDetailEditButton"),
     statsExplorerGrid: document.getElementById("statsExplorerGrid"),
     statsExplorerNote: document.getElementById("statsExplorerNote"),
     cardFlowDefault: document.getElementById("cardFlowDefault"),
@@ -5723,31 +5730,41 @@
     b = pickBest(has9, (r) => roundTotals(r).toPar, "min");
     if (b) trophy("low-9-topar", "Lowest 9 vs par", fmtSigned(b.value), b.round);
 
-    b = pickBest(scored, (r) => r.holes.filter((h) =>
+    // Per-round counts: restrict to 18-hole rounds. A 9-hole round
+    // genuinely can't compete with an 18-hole round on "most birdies",
+    // "most pars", etc — the comparison is apples-to-oranges and the
+    // 18-hole round always wins on raw counts. Mixing them silently
+    // misrepresents records.
+    b = pickBest(has18, (r) => r.holes.filter((h) =>
       Number.isFinite(h.score) && Number.isFinite(h.par) && h.score <= h.par - 1
     ).length, "max");
-    if (b && b.value > 0) trophy("most-birdies", "Most birdies-or-better in a round", String(b.value), b.round);
+    if (b && b.value > 0) trophy("most-birdies", "Most birdies-or-better (18-hole round)", String(b.value), b.round);
 
-    b = pickBest(scored, (r) => r.holes.filter((h) =>
+    b = pickBest(has18, (r) => r.holes.filter((h) =>
       Number.isFinite(h.score) && Number.isFinite(h.par) && h.score <= h.par
     ).length, "max");
-    if (b && b.value > 0) trophy("most-pars", "Most pars-or-better in a round", String(b.value), b.round);
+    if (b && b.value > 0) trophy("most-pars", "Most pars-or-better (18-hole round)", String(b.value), b.round);
 
     b = pickBest(has18, (r) => { const t = roundTotals(r); return t.putts > 0 ? t.putts : null; }, "min");
     if (b) trophy("low-putts", "Lowest putts (18 holes)", String(b.value), b.round);
 
-    b = pickBest(scored, (r) => { const t = roundTotals(r); return t.firTotal > 0 ? t.firMade : null; }, "max");
+    b = pickBest(has18, (r) => { const t = roundTotals(r); return t.firTotal > 0 ? t.firMade : null; }, "max");
     if (b && b.value > 0) {
       const t = roundTotals(b.round);
-      trophy("most-firs", "Most fairways in a round", `${b.value} / ${t.firTotal}`, b.round);
+      trophy("most-firs", "Most fairways (18-hole round)", `${b.value} / ${t.firTotal}`, b.round);
     }
 
-    b = pickBest(scored, (r) => r.holes.filter((h) => h.gir).length, "max");
-    if (b && b.value > 0) trophy("most-girs", "Most greens in regulation", `${b.value} / ${b.round.holes.length}`, b.round);
+    b = pickBest(has18, (r) => r.holes.filter((h) => h.gir).length, "max");
+    if (b && b.value > 0) trophy("most-girs", "Most GIR (18-hole round)", `${b.value} / ${b.round.holes.length}`, b.round);
 
-    function bestStretch(n, id, label) {
+    // Best 3-hole stretch is hole-level, fine to mix 9 and 18.
+    // Best 9-hole stretch only makes sense for 18-hole rounds — for a
+    // 9-hole round the "stretch" IS the whole round, which is already
+    // covered by the Lowest 9-hole gross/topar trophies above.
+    function bestStretch(n, id, label, fromArr) {
+      const pool = fromArr || scored;
       let best = null;
-      scored.forEach((r) => {
+      pool.forEach((r) => {
         const holes = r.holes;
         if (!holes || holes.length < n) return;
         for (let i = 0; i <= holes.length - n; i++) {
@@ -5769,7 +5786,7 @@
       if (best) trophy(id, label, fmtSigned(best.value), best.round, `Holes ${best.startHole}–${best.endHole}`);
     }
     bestStretch(3, "best-3stretch", "Best 3-hole stretch");
-    bestStretch(9, "best-9stretch", "Best 9-hole stretch");
+    bestStretch(9, "best-9stretch", "Best 9-hole stretch (in an 18-hole round)", has18);
 
     // Chronological hole stream — for streaks that span rounds (longest
     // pars-in-a-row, longest no-3-putt, etc.).
@@ -5850,70 +5867,79 @@
     const fmtSigned = (n) => (n > 0 ? `+${n.toFixed(1)}` : n === 0 ? "E" : n.toFixed(1));
     const fmt1 = (n) => (Number.isFinite(n) ? n.toFixed(1) : "--");
     const avg = (xs) => xs.length ? xs.reduce((s, v) => s + v, 0) / xs.length : null;
-    const overallGross = avg(scored.map((r) => roundTotals(r).gross));
-    const overallToPar = avg(scored.map((r) => roundTotals(r).toPar));
+
+    // Every "avg gross" comparison MUST restrict to 18-hole rounds.
+    // Mixing 9-hole and 18-hole gross silently misrepresents results — a
+    // 45 9-hole round and a 90 18-hole round both average to "67.5"
+    // which is meaningless. has18 is the apples-to-apples pool for any
+    // gross-score math. Hole-level counts (streaks, etc) live separately
+    // in Trophy Room and can mix safely.
+    const has18 = scored.filter((r) => r.holes.length === 18);
+    const overallGross = avg(has18.map((r) => roundTotals(r).gross));
+    const overallToPar = avg(has18.map((r) => roundTotals(r).toPar));
+    // Most cards only have meaning with ≥4 18-hole rounds.
+    const enoughFor18 = has18.length >= 4;
 
     function card(id, label, value, sub, context) {
       out.push({ id, label, value, sub: sub || "", context: context || "" });
     }
 
-    function compareSubset(label, predicate, opts) {
-      const subset = scored.filter(predicate);
+    function compareSubset(predicate, opts) {
+      if (!enoughFor18) return null;
+      const subset = has18.filter(predicate);
       if (subset.length < (opts && opts.minCount ? opts.minCount : 2)) return null;
       const subsetAvg = avg(subset.map((r) => roundTotals(r).gross));
       const delta = overallGross != null ? subsetAvg - overallGross : null;
       const sub = delta != null
-        ? `${delta < 0 ? "−" : "+"}${Math.abs(delta).toFixed(1)} vs overall avg`
+        ? `${delta < 0 ? "−" : "+"}${Math.abs(delta).toFixed(1)} vs your 18-hole avg`
         : "";
       const value = `${fmt1(subsetAvg)} avg gross`;
-      const context = `${subset.length} of ${scored.length} rounds`;
+      const context = `${subset.length} of ${has18.length} 18-hole rounds`;
       return { value, sub, context };
     }
 
-    // Rounds with ≥8 pars
+    // All subset comparisons restrict to 18-hole rounds via compareSubset.
+
     (() => {
-      const r = compareSubset("8+ pars", (r) =>
+      const r = compareSubset((r) =>
         r.holes.filter((h) => Number.isFinite(h.score) && Number.isFinite(h.par) && h.score <= h.par).length >= 8
       );
       if (r) card("pars-8plus", "Rounds with ≥8 pars", r.value, r.sub, r.context);
     })();
 
-    // Triple-free rounds
     (() => {
-      const r = compareSubset("no triples", (r) =>
+      const r = compareSubset((r) =>
         r.holes.every((h) => !Number.isFinite(h.score) || h.score <= 0 || !Number.isFinite(h.par) || h.score - h.par < 3)
       );
       if (r) card("no-triples", "Rounds with no triple+ bogeys", r.value, r.sub, r.context);
     })();
 
-    // Penalty-free rounds
     (() => {
-      const r = compareSubset("no penalties", (r) =>
+      const r = compareSubset((r) =>
         r.holes.every((h) => !Number.isFinite(h.penalties) || h.penalties === 0)
       );
       if (r) card("no-pen", "Penalty-free rounds", r.value, r.sub, r.context);
     })();
 
-    // Rounds with ≥3 birdies
     (() => {
-      const r = compareSubset("3+ birdies", (r) =>
+      const r = compareSubset((r) =>
         r.holes.filter((h) => Number.isFinite(h.score) && Number.isFinite(h.par) && h.score <= h.par - 1).length >= 3
       );
       if (r) card("birdies-3plus", "Rounds with ≥3 birdies", r.value, r.sub, r.context);
     })();
 
-    // No-3-putt rounds
     (() => {
-      const r = compareSubset("no 3-putts", (r) =>
+      const r = compareSubset((r) =>
         r.holes.every((h) => !Number.isFinite(h.putts) || h.putts < 3)
       );
       if (r) card("no-3putt", "No-3-putt rounds", r.value, r.sub, r.context);
     })();
 
-    // Average gross by month
+    // Average gross by month — 18-hole rounds only (see overallGross note).
     (() => {
+      if (!enoughFor18) return;
       const byMonth = new Map();
-      scored.forEach((r) => {
+      has18.forEach((r) => {
         if (!r.date) return;
         const m = r.date.slice(0, 7); // YYYY-MM
         if (!byMonth.has(m)) byMonth.set(m, []);
@@ -5933,22 +5959,23 @@
           return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
         } catch { return m; }
       };
-      card("best-month", "Best scoring month",
+      card("best-month", "Best scoring month (18-hole)",
         `${fmt1(best.avg)} avg gross`,
         `${best.count} round${best.count === 1 ? "" : "s"}`,
         monthName(best.m));
       if (best.m !== worst.m) {
-        card("worst-month", "Toughest scoring month",
+        card("worst-month", "Toughest scoring month (18-hole)",
           `${fmt1(worst.avg)} avg gross`,
           `${worst.count} round${worst.count === 1 ? "" : "s"}`,
           monthName(worst.m));
       }
     })();
 
-    // Average gross by wind condition
+    // Average gross by wind condition — 18-hole rounds only.
     (() => {
+      if (!enoughFor18) return;
       const byWind = new Map();
-      scored.forEach((r) => {
+      has18.forEach((r) => {
         const w = r.wind || "(no wind logged)";
         if (!byWind.has(w)) byWind.set(w, []);
         byWind.get(w).push(roundTotals(r).gross);
@@ -5959,15 +5986,16 @@
       const best = entries[0];
       card("wind-best", "You score best when wind is",
         `${fmt1(avg(best[1]))} avg gross`,
-        `${best[1].length} round${best[1].length === 1 ? "" : "s"}`,
+        `${best[1].length} 18-hole round${best[1].length === 1 ? "" : "s"}`,
         best[0] === "(no wind logged)" ? "wind unlogged" : formatWind(best[0]));
     })();
 
-    // Same-course progression — for any physical course with ≥10 rounds,
-    // compare avg of first 5 vs last 5 to surface "are you getting better?".
+    // Same-course progression — 18-hole only. For any physical course with
+    // ≥10 18-hole rounds, compare avg of first 5 vs last 5 to surface
+    // "are you getting better?".
     (() => {
       const byPhysical = new Map();
-      scored.forEach((r) => {
+      has18.forEach((r) => {
         const c = getCourse(r.courseId);
         if (!c) return;
         const key = c.name;
@@ -5993,14 +6021,15 @@
           `Same-course progression: ${bestProgress.name}`,
           `${dir === "better" ? "−" : "+"}${Math.abs(bestProgress.improvement).toFixed(1)} ${dir}`,
           `first 5: ${fmt1(bestProgress.firstAvg)} · last 5: ${fmt1(bestProgress.lastAvg)}`,
-          `${bestProgress.total} rounds total here`);
+          `${bestProgress.total} 18-hole rounds here`);
       }
     })();
 
-    // Top tagged-play comparison (only if tags exist)
+    // Top tagged-play comparison (only if tags exist) — 18-hole only.
     (() => {
-      const tagged = scored.filter((r) => r.tag);
-      const untagged = scored.filter((r) => !r.tag);
+      if (!enoughFor18) return;
+      const tagged = has18.filter((r) => r.tag);
+      const untagged = has18.filter((r) => !r.tag);
       if (!tagged.length) return;
       const byTag = new Map();
       tagged.forEach((r) => {
@@ -6017,15 +6046,15 @@
       const deltaText = `${delta < 0 ? "−" : "+"}${Math.abs(delta).toFixed(1)} ${refLabel}`;
       card("tag-best", `Best play type: ${formatRoundTag(best[0])}`,
         `${fmt1(avg(best[1]))} avg gross`, deltaText,
-        `${best[1].length} round${best[1].length === 1 ? "" : "s"}`);
+        `${best[1].length} 18-hole round${best[1].length === 1 ? "" : "s"}`);
     })();
 
-    // Headline: overall avg as a sanity check on the rest of the cards.
+    // Headline: 18-hole avg as a sanity check on the rest of the cards.
     if (overallGross != null) {
-      card("overall-avg", "Overall average",
+      card("overall-avg", "Overall average (18-hole)",
         `${fmt1(overallGross)} avg gross`,
         `${overallToPar != null ? fmtSigned(overallToPar) + " vs par" : ""}`,
-        `${scored.length} scored round${scored.length === 1 ? "" : "s"}`);
+        `${has18.length} 18-hole round${has18.length === 1 ? "" : "s"}`);
     }
 
     return out;
@@ -6078,9 +6107,7 @@
           showToast("Round not found.");
           return;
         }
-        loadRoundIntoForm(round);
-        setActiveTab("rounds");
-        showToast("Editing round. Make changes and click Update round.");
+        showRoundDetail(round);
       });
     });
   }
@@ -6842,6 +6869,58 @@
     });
   }
 
+  // ---- Round detail sheet -----------------------------------------------
+  //
+  // Opens when the user taps a Trophy Room card. Shows the full scorecard
+  // for the round that set the record — read-only, like the Scorecard
+  // accordion in Recent Scorecards. Includes a secondary "Edit this round"
+  // action so the editing path is one tap away when actually wanted.
+
+  function showRoundDetail(round) {
+    if (!els.roundDetailOverlay || !round) return;
+    const course = getCourse(round.courseId);
+    const totals = roundTotals(round);
+    const courseName = course
+      ? course.name + (course.tee ? ` (${course.tee})` : "")
+      : "Unknown course";
+    const dateStr = (() => {
+      try {
+        const d = new Date(round.date);
+        if (Number.isNaN(d.getTime())) return round.date;
+        return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+      } catch { return round.date; }
+    })();
+    els.roundDetailTitle.textContent = `${totals.gross} (${formatSigned(totals.toPar, 0)})`;
+    const bits = [dateStr, courseName];
+    if (round.wind) bits.push(formatWind(round.wind));
+    if (round.tag) bits.push(formatRoundTag(round.tag));
+    els.roundDetailSubtitle.textContent = bits.filter(Boolean).join(" · ");
+    els.roundDetailBody.innerHTML = renderRoundScorecard(round);
+    els.roundDetailEditButton.onclick = () => {
+      closeRoundDetail();
+      loadRoundIntoForm(round);
+      setActiveTab("rounds");
+      showToast("Editing round. Make changes and click Update round.");
+    };
+    function onKey(e) { if (e.key === "Escape") closeRoundDetail(); }
+    els.roundDetailOverlay._escHandler = onKey;
+    document.addEventListener("keydown", onKey);
+    els.roundDetailOverlay.hidden = false;
+    document.body.classList.add("hole-picker-open");
+  }
+
+  function closeRoundDetail() {
+    if (!els.roundDetailOverlay) return;
+    els.roundDetailOverlay.hidden = true;
+    document.body.classList.remove("hole-picker-open");
+    if (els.roundDetailEditButton) els.roundDetailEditButton.onclick = null;
+    const onKey = els.roundDetailOverlay._escHandler;
+    if (onKey) {
+      document.removeEventListener("keydown", onKey);
+      els.roundDetailOverlay._escHandler = null;
+    }
+  }
+
   function handleRestoreSnapshot(snap) {
     const currentRounds = Array.isArray(state.rounds) ? state.rounds.length : 0;
     openDestructiveConfirm({
@@ -7490,6 +7569,8 @@
   }
   if (els.heatmapDrilldownBackdrop) els.heatmapDrilldownBackdrop.addEventListener("click", closeHeatmapDrilldown);
   if (els.heatmapDrilldownClose) els.heatmapDrilldownClose.addEventListener("click", closeHeatmapDrilldown);
+  if (els.roundDetailBackdrop) els.roundDetailBackdrop.addEventListener("click", closeRoundDetail);
+  if (els.roundDetailClose) els.roundDetailClose.addEventListener("click", closeRoundDetail);
   if (els.holePickerList) {
     els.holePickerList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-jump-hole]");
