@@ -2234,7 +2234,6 @@ body.floating-card-nav-visible .floating-card-nav {
 [data-tab-panel="home"][data-active-section="holes"] [data-home-section]:not([data-home-section="holes"]) { display: none; }
 [data-tab-panel="home"][data-active-section="clubs"] [data-home-section]:not([data-home-section="clubs"]) { display: none; }
 [data-tab-panel="home"][data-active-section="records"] [data-home-section]:not([data-home-section="records"]) { display: none; }
-[data-tab-panel="home"][data-active-section="explorer"] [data-home-section]:not([data-home-section="explorer"]) { display: none; }
 
 /* Second-row sub-chips, contextual to the active section. Each section's
    sub-chip nav narrows the view further to a single panel — no scrolling

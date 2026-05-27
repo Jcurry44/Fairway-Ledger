@@ -15,9 +15,9 @@
     <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
          icon, theme color in the browser chrome, and a standalone display
          mode instead of a tab. -->
-    <link rel="manifest" href="./manifest.json?v=2026-05-26p">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-05-26p">
-    <link rel="apple-touch-icon" href="./icon.svg?v=2026-05-26p">
+    <link rel="manifest" href="./manifest.json?v=2026-05-26q">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-05-26q">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-05-26q">
     <meta name="theme-color" content="#1f7a59">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -32,11 +32,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
 
-    <link rel="stylesheet" href="./styles.css?v=2026-05-26p">
-    <script src="./data/courses.js?v=2026-05-26p" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-26p" defer></script>
-    <script src="./lib/shapes.js?v=2026-05-26p" defer></script>
-    <script src="./app.js?v=2026-05-26p" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-26q">
+    <script src="./data/courses.js?v=2026-05-26q" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-26q" defer></script>
+    <script src="./lib/shapes.js?v=2026-05-26q" defer></script>
+    <script src="./app.js?v=2026-05-26q" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -99,7 +99,6 @@
             <button class="home-chip" type="button" data-home-section-target="holes">Holes</button>
             <button class="home-chip" type="button" data-home-section-target="clubs">Clubs</button>
             <button class="home-chip" type="button" data-home-section-target="records">Records</button>
-            <button class="home-chip" type="button" data-home-section-target="explorer">Explorer</button>
             <button id="homeFiltersButton" class="home-filter-button" type="button" data-open-filters aria-label="Filters" title="Filters">
               <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
             </button>
@@ -311,16 +310,6 @@
               <div id="trophyRoomGrid" class="trophy-room-grid"></div>
             </article>
 
-            <article class="panel wide-panel" data-panel-id="stats-explorer">
-              <div class="panel-heading">
-                <div>
-                  <p class="eyebrow">Pre-built queries</p>
-                  <h2>Stats Explorer</h2>
-                </div>
-                <span class="panel-note" id="statsExplorerNote"></span>
-              </div>
-              <div id="statsExplorerGrid" class="stats-explorer-grid"></div>
-            </article>
           </section>
         </section>
 

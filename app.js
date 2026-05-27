@@ -6364,10 +6364,13 @@
     "tee-club-performance": "clubs",
     "putting-by-distance": "clubs",
     "scrambling": "clubs",
-    "trophy-room": "records",
-    "stats-explorer": "explorer"
+    "trophy-room": "records"
+    // "stats-explorer": "explorer" — Explorer chip + panel temporarily
+    // removed from Home (Jeff: "don't really like it right now"). The
+    // computeStatsExplorer / renderStatsExplorer functions stay as dead
+    // code so it's a one-line revival when we revisit.
   };
-  const HOME_SECTIONS = ["overview", "trends", "holes", "clubs", "records", "explorer"];
+  const HOME_SECTIONS = ["overview", "trends", "holes", "clubs", "records"];
   const HOME_SECTION_KEY = "fairwayLedger.homeSection.v1";
   const HOME_SUBSECTIONS_KEY = "fairwayLedger.homeSubsections.v1";
   // First sub-chip the user lands on when entering a section with no prior
