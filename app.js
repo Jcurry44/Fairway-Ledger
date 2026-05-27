@@ -5637,23 +5637,26 @@
               ${scorecardHtml}
             </div>
             <div class="row-actions">
-              <button type="button" data-edit-round="${round.id}">Edit</button>
+              <button type="button" data-view-round="${round.id}">View</button>
               <button type="button" data-delete-round="${round.id}">Delete</button>
             </div>
           </div>`;
       }).join("");
 
     els.recentRounds.innerHTML = rows || emptyState("Your scorecards will appear here once you save a round.", { action: "rounds" });
-    els.recentRounds.querySelectorAll("[data-edit-round]").forEach((button) => {
+    // Tap "View" → opens the same read-only scorecard sheet that Trophy
+    // Room cards use. Edit is the secondary action inside the sheet so the
+    // default action everywhere is "look at the round", not "jump straight
+    // into editing it." Consistent with Jeff's feedback after the autonomous
+    // batch shipped.
+    els.recentRounds.querySelectorAll("[data-view-round]").forEach((button) => {
       button.addEventListener("click", () => {
-        const round = state.rounds.find((candidate) => candidate.id === button.dataset.editRound);
+        const round = state.rounds.find((candidate) => candidate.id === button.dataset.viewRound);
         if (!round) {
           showToast("Round not found.");
           return;
         }
-        loadRoundIntoForm(round);
-        renderRecentRounds();
-        showToast("Editing round. Make changes and click Update round.");
+        showRoundDetail(round);
       });
     });
     els.recentRounds.querySelectorAll("[data-delete-round]").forEach((button) => {
