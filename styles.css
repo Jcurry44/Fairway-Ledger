@@ -2119,8 +2119,13 @@ body.floating-card-nav-visible .floating-card-nav {
 .home-chips::-webkit-scrollbar { display: none; }
 
 .home-chip {
-  flex: 1 1 0;
-  min-width: 0;
+  /* Take natural width so labels never get squished into overlapping
+     text. The parent .home-chips has overflow-x: auto, so on narrow
+     screens (mobile) the row scrolls horizontally instead of jamming
+     6 chips into 360px. On wide screens the flex-grow keeps them
+     spread evenly across the row. */
+  flex: 1 1 auto;
+  min-width: max-content;
   padding: 10px 14px;
   border: none;
   border-radius: 8px;
@@ -2129,9 +2134,19 @@ body.floating-card-nav-visible .floating-card-nav {
   font-size: 0.92rem;
   font-weight: 800;
   letter-spacing: 0.02em;
+  white-space: nowrap;
+  text-align: center;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease;
   -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 640px) {
+  .home-chip {
+    /* Tighter on mobile to fit more chips before scrolling. */
+    padding: 8px 12px;
+    font-size: 0.88rem;
+  }
 }
 
 .home-chip:hover {
