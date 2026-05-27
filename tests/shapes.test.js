@@ -23,6 +23,7 @@ test("HOLE_FIELDS lists all canonical hole fields", () => {
     "gir",
     "penalties",
     "penaltyClub",
+    "penaltyClubs",
     "firstPuttDistance",
     "bunker",
     "note",
@@ -30,6 +31,24 @@ test("HOLE_FIELDS lists all canonical hole fields", () => {
     "clubsHit",
   ];
   assert.deepEqual([...S.HOLE_FIELDS], expected);
+});
+
+test("makeHole(): legacy penaltyClub string upgrades to penaltyClubs array", () => {
+  const h = S.makeHole({ penaltyClub: "Driver" });
+  assert.deepEqual(h.penaltyClubs, ["Driver"]);
+  assert.equal(h.penaltyClub, "Driver");
+});
+
+test("makeHole(): penaltyClubs array stays as the canonical value", () => {
+  const h = S.makeHole({ penaltyClubs: ["Driver", "7i"] });
+  assert.deepEqual(h.penaltyClubs, ["Driver", "7i"]);
+  assert.equal(h.penaltyClub, "Driver");
+});
+
+test("makeHole(): blank penalty fields stay blank arrays/strings", () => {
+  const h = S.makeHole();
+  assert.deepEqual(h.penaltyClubs, []);
+  assert.equal(h.penaltyClub, "");
 });
 
 test("ROUND_FIELDS lists all canonical round fields", () => {

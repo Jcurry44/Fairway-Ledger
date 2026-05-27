@@ -1519,6 +1519,8 @@ body.floating-card-nav-visible .floating-card-nav {
 }
 
 .card-penalty-club-row .penalty-club-input {
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 36px;
   padding: 6px 10px;
   border-radius: 8px;
@@ -1527,6 +1529,31 @@ body.floating-card-nav-visible .floating-card-nav {
   color: var(--ink);
   font-size: 0.88rem;
   font-weight: 700;
+}
+
+/* Penalty-club selects container — one row per penalty stroke when
+   penalties >= 2. Each row gets a small "Pen N" tag so the user can
+   see which select is for which stroke. */
+.penalty-club-selects {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.penalty-club-select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.penalty-club-index {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted, #6c7a72);
+  min-width: 44px;
 }
 
 .card-pill-row:first-of-type {

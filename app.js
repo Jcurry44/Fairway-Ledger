@@ -101,7 +101,8 @@
     if (!entry) return;
     const empty = !entry.note
       && !(entry.clubs && entry.clubs.length)
-      && !entry.penaltyClub;
+      && !entry.penaltyClub
+      && !(entry.penaltyClubs && entry.penaltyClubs.length);
     if (empty) delete pendingHoles[key];
   }
 
@@ -389,21 +390,54 @@
     return next;
   }
 
-  // ---- Penalty club ------------------------------------------------------
+  // ---- Penalty clubs ----------------------------------------------------
   //
-  // The club blamed for a hole's penalty stroke(s) — one per hole, defaults
-  // to the tee club when a penalty is first logged.
+  // One entry per penalty stroke on a hole, in order. Two penalties from
+  // two different clubs (drove OB on the tee → Driver, then chunked a
+  // wedge OB → PW) are recorded as ["Driver", "PW"]. The first entry
+  // doubles as the "primary" penalty club for back-compat readers.
+  //
+  // Legacy callers (getHolePenaltyClub / setHolePenaltyClub, singular)
+  // operate on penaltyClubs[0] so existing code paths keep working
+  // without per-call updates.
+
+  function getHolePenaltyClubs(holeNumber) {
+    const entry = pendingHoles[String(holeNumber)];
+    if (!entry) return [];
+    if (Array.isArray(entry.penaltyClubs)) return entry.penaltyClubs;
+    if (entry.penaltyClub) return [entry.penaltyClub];
+    return [];
+  }
+
+  function setHolePenaltyClubs(holeNumber, clubs) {
+    const entry = getOrCreatePendingHole(holeNumber);
+    const cleaned = Array.isArray(clubs) ? clubs.filter((c) => typeof c === "string" && c) : [];
+    if (cleaned.length) {
+      entry.penaltyClubs = cleaned;
+      // Keep singular field in sync for any legacy reader.
+      entry.penaltyClub = cleaned[0];
+    } else {
+      delete entry.penaltyClubs;
+      delete entry.penaltyClub;
+    }
+    compactPendingHole(holeNumber);
+  }
+
+  function setHolePenaltyClubAt(holeNumber, index, club) {
+    const current = [...getHolePenaltyClubs(holeNumber)];
+    current[index] = club || "";
+    // Trim trailing empty entries so a cleared last picker doesn't
+    // leave a phantom slot in storage.
+    while (current.length && !current[current.length - 1]) current.pop();
+    setHolePenaltyClubs(holeNumber, current);
+  }
 
   function getHolePenaltyClub(holeNumber) {
-    const entry = pendingHoles[String(holeNumber)];
-    return (entry && entry.penaltyClub) || "";
+    return getHolePenaltyClubs(holeNumber)[0] || "";
   }
 
   function setHolePenaltyClub(holeNumber, club) {
-    const entry = getOrCreatePendingHole(holeNumber);
-    if (club) entry.penaltyClub = club;
-    else delete entry.penaltyClub;
-    compactPendingHole(holeNumber);
+    setHolePenaltyClubs(holeNumber, club ? [club] : []);
   }
 
   function readInitialViewMode() {
@@ -1126,7 +1160,13 @@
         Object.entries(pendingHoles).forEach(([key, data]) => {
           if (data.note) holeNotes[key] = data.note;
           if (data.clubs && data.clubs.length) holeClubs[key] = [...data.clubs];
-          if (data.penaltyClub) holePenaltyClubs[key] = data.penaltyClub;
+          // Write the canonical array form. Legacy drafts wrote a single
+          // string under the same key — restore handles both shapes.
+          if (Array.isArray(data.penaltyClubs) && data.penaltyClubs.length) {
+            holePenaltyClubs[key] = data.penaltyClubs.slice();
+          } else if (data.penaltyClub) {
+            holePenaltyClubs[key] = [data.penaltyClub];
+          }
         });
         return { holeNotes, holeClubs, holePenaltyClubs };
       })()
@@ -1230,8 +1270,14 @@
     Object.entries(data.holeClubs || {}).forEach(([num, clubs]) => {
       if (Array.isArray(clubs) && clubs.length) setHoleClubs(Number(num), clubs);
     });
-    Object.entries(data.holePenaltyClubs || {}).forEach(([num, club]) => {
-      if (club) setHolePenaltyClub(Number(num), club);
+    Object.entries(data.holePenaltyClubs || {}).forEach(([num, value]) => {
+      // Back-compat: legacy drafts stored a single string; new drafts
+      // store an array. Accept both.
+      if (Array.isArray(value) && value.length) {
+        setHolePenaltyClubs(Number(num), value);
+      } else if (typeof value === "string" && value) {
+        setHolePenaltyClub(Number(num), value);
+      }
     });
     renderScorecard(getSelectedRoundCourse());
     renderCourseBrief();
@@ -2089,7 +2135,13 @@
   // typed input (which preserves all existing read/save logic) plus offers
   // a small custom input as an escape hatch for values outside the pill set.
   function renderPillsRow({ label, holeNumber, inputClass, values, customMin, customMax, customPlaceholder = "…", parValue, scoreTiers = false }) {
-    const pills = values.map((v) => {
+    // values can be bare numbers OR { value, label } objects so a chip can
+    // display "Tap-in" while still saving 1 as the underlying value.
+    const pills = values.map((entry) => {
+      const v = (entry && typeof entry === "object") ? entry.value : entry;
+      const displayLabel = (entry && typeof entry === "object" && entry.label != null)
+        ? entry.label
+        : String(v);
       const isPar = parValue !== undefined && Number(v) === Number(parValue);
       let tierCls = "";
       // Score pills carry their scoring-tier shape (circle birdie / box bogey).
@@ -2097,7 +2149,7 @@
         const variant = scoreMarkClass(Number(v), Number(parValue));
         if (variant) tierCls = ` pill-${variant.replace("score-mark-", "tier-")}`;
       }
-      return `<button type="button" class="pill${isPar ? " pill-par" : ""}${tierCls}" data-pill-value="${v}">${v}</button>`;
+      return `<button type="button" class="pill${isPar ? " pill-par" : ""}${tierCls}" data-pill-value="${v}">${escapeHtml(displayLabel)}</button>`;
     }).join("");
     return `
       <div class="card-pill-row" data-pill-group="${inputClass}" data-hole="${holeNumber}">
@@ -2153,7 +2205,13 @@
       label: "1st putt (ft)",
       holeNumber: hole.number,
       inputClass: "first-putt-input",
-      values: [3, 6, 10, 15, 20, 30, 50],
+      // Tap-in saves as 1 ft so it still falls in the "Inside 3 ft" bucket
+      // for Putting by Distance analytics. 35/40 fill in the gap between
+      // 30 and 50 that always required the custom input.
+      values: [
+        { value: 1, label: "Tap-in" },
+        3, 6, 10, 15, 20, 30, 35, 40, 50
+      ],
       customMin: 0,
       customMax: 120,
       customPlaceholder: "ft"
@@ -2283,14 +2341,14 @@
   function clubsForHole(holeNumber) {
     const bag = getBag();
     const onHole = getHoleClubs(holeNumber);
-    const penaltyClub = getHolePenaltyClub(holeNumber);
+    const penaltyClubs = getHolePenaltyClubs(holeNumber);
     const extras = [];
     onHole.forEach((club) => {
       if (!bag.includes(club) && !extras.includes(club)) extras.push(club);
     });
-    if (penaltyClub && !bag.includes(penaltyClub) && !extras.includes(penaltyClub)) {
-      extras.push(penaltyClub);
-    }
+    penaltyClubs.forEach((club) => {
+      if (club && !bag.includes(club) && !extras.includes(club)) extras.push(club);
+    });
     // Preserve canonical CLUB_OPTIONS order: bag clubs first (in canon order),
     // then any extras (in canon order).
     return CLUB_OPTIONS.filter((c) => bag.includes(c) || extras.includes(c));
@@ -2298,18 +2356,15 @@
 
   // Shown only when a hole has a penalty logged — captures which club caused
   // it. syncPenaltyClubRows() toggles visibility and defaults to the tee club.
+  // Shell only — the actual N selects are rebuilt dynamically by
+  // syncPenaltyClubRows() based on the current penalties count, so the
+  // user can blame a different club for each penalty stroke on the same
+  // hole.
   function renderPenaltyClubRow(hole) {
-    const current = getHolePenaltyClub(hole.number);
-    const options = clubsForHole(hole.number)
-      .map((club) => `<option value="${escapeHtml(club)}"${club === current ? " selected" : ""}>${escapeHtml(club)}</option>`)
-      .join("");
     return `
       <div class="card-penalty-club-row" data-hole="${hole.number}" hidden>
         <span class="card-pill-label">Penalty club</span>
-        <select class="penalty-club-input compact-select" data-hole="${hole.number}" aria-label="Club that caused the penalty">
-          <option value="">— club —</option>
-          ${options}
-        </select>
+        <div class="penalty-club-selects" data-hole="${hole.number}"></div>
       </div>`;
   }
 
@@ -2568,7 +2623,8 @@
     stack.addEventListener("change", (event) => {
       const penClubSelect = event.target.closest(".penalty-club-input");
       if (penClubSelect) {
-        setHolePenaltyClub(penClubSelect.dataset.hole, penClubSelect.value);
+        const idx = Number(penClubSelect.dataset.penaltyIndex) || 0;
+        setHolePenaltyClubAt(penClubSelect.dataset.hole, idx, penClubSelect.value);
         scheduleInProgressSave();
         return;
       }
@@ -2607,8 +2663,10 @@
     syncPenaltyClubRows();
   }
 
-  // Reveal the penalty-club picker only on holes with a penalty logged, and
-  // default it to the tee club the first time a penalty appears.
+  // Reveal the penalty-club picker only on holes with a penalty logged.
+  // Render exactly N picker selects when penalties = N — one per stroke —
+  // so the user can attribute each to a different club. Each picker
+  // defaults to the hole's tee club the first time it appears.
   function syncPenaltyClubRows() {
     els.scorecardGrid.querySelectorAll(".card-penalty-club-row[data-hole]").forEach((row) => {
       const hole = row.dataset.hole;
@@ -2617,19 +2675,69 @@
       const show = Number.isFinite(pen) && pen > 0;
       row.hidden = !show;
       if (!show) return;
-      const select = row.querySelector(".penalty-club-input");
-      if (select && !select.value && !getHolePenaltyClub(hole)) {
-        // Default to the hole's tee club; fall back to Driver, or the first
-        // non-Putter club in the bag if Driver isn't carried.
-        const bag = getBag();
-        const tee = getHoleClubs(hole)[0];
-        const fallback = bag.includes("Driver") ? "Driver" : (bag.find((c) => c !== "Putter") || "");
-        const guess = tee || fallback;
-        if (guess && [...select.options].some((option) => option.value === guess)) {
-          select.value = guess;
-          setHolePenaltyClub(hole, guess);
+
+      const container = row.querySelector(".penalty-club-selects");
+      if (!container) return;
+
+      const currentClubs = getHolePenaltyClubs(hole);
+      const bag = getBag();
+      // Default to the first non-Putter club on the hole (the real tee
+      // shot) — clubsHit[0] alone can be Putter if no tee club was logged
+      // and putts auto-added Putter, which would weirdly suggest blaming
+      // the putter for a penalty.
+      const tee = getHoleClubs(hole).find((c) => c !== "Putter");
+      const fallback = bag.includes("Driver") ? "Driver" : (bag.find((c) => c !== "Putter") || "");
+      const defaultClub = tee || fallback;
+      const optionsHtml = clubsForHole(hole)
+        .map((club) => `<option value="${escapeHtml(club)}">${escapeHtml(club)}</option>`)
+        .join("");
+
+      // Rebuild only when the slot count actually changes — otherwise
+      // we'd blow away the user's typed selections on every score keystroke.
+      const existingCount = container.querySelectorAll(".penalty-club-input").length;
+      if (existingCount !== pen) {
+        let html = "";
+        for (let i = 0; i < pen; i++) {
+          const indexLabel = pen > 1
+            ? `<span class="penalty-club-index">Pen ${i + 1}</span>`
+            : "";
+          html += `
+            <div class="penalty-club-select-row">
+              ${indexLabel}
+              <select class="penalty-club-input compact-select" data-hole="${hole}" data-penalty-index="${i}" aria-label="Club that caused penalty ${i + 1}">
+                <option value="">— club —</option>
+                ${optionsHtml}
+              </select>
+            </div>`;
         }
+        container.innerHTML = html;
       }
+
+      // Apply saved values; for any slot with no saved value, default to
+      // the tee club and persist the default into state so the saved round
+      // captures it on next save.
+      let mutatedState = false;
+      const nextClubs = [...currentClubs];
+      container.querySelectorAll(".penalty-club-input").forEach((select) => {
+        const idx = Number(select.dataset.penaltyIndex);
+        const saved = nextClubs[idx];
+        if (saved && [...select.options].some((opt) => opt.value === saved)) {
+          select.value = saved;
+          return;
+        }
+        // No saved value — default to tee/fallback if it's a valid option.
+        if (defaultClub && [...select.options].some((opt) => opt.value === defaultClub)) {
+          select.value = defaultClub;
+          nextClubs[idx] = defaultClub;
+          mutatedState = true;
+        }
+      });
+      // Trim to penalty count (drop slots beyond pen).
+      if (nextClubs.length > pen) {
+        nextClubs.length = pen;
+        mutatedState = true;
+      }
+      if (mutatedState) setHolePenaltyClubs(hole, nextClubs);
     });
   }
 
@@ -3124,7 +3232,9 @@
         fairway: fairwayInput.value,
         gir: girInput.checked,
         penalties: Number.isFinite(penaltyValue) ? penaltyValue : 0,
-        penaltyClub: (Number.isFinite(penaltyValue) && penaltyValue > 0) ? getHolePenaltyClub(holeNumber) : "",
+        penaltyClubs: (Number.isFinite(penaltyValue) && penaltyValue > 0)
+          ? getHolePenaltyClubs(holeNumber).slice(0, penaltyValue)
+          : [],
         firstPuttDistance: Number.isFinite(firstPuttValue) && firstPuttValue >= 0 ? firstPuttValue : null,
         bunker: bunkerInput ? bunkerInput.value : "",
         note: getHoleNote(holeNumber),
@@ -4857,18 +4967,33 @@
 
   // Tally penalty strokes by the club blamed for them — surfaces which club
   // is quietly costing you shots (usually the driver, sometimes a wedge).
+  // Iterates per-penalty so a hole with [Driver, 7i] attributes 1 stroke
+  // to each, not 2 strokes to "the" club.
   function computePenaltyClubs(rounds) {
     const map = new Map();
     let totalStrokes = 0;
     rounds.forEach((round) => {
       round.holes.forEach((hole) => {
         const pen = Number(hole.penalties);
-        if (!Number.isFinite(pen) || pen <= 0 || !hole.penaltyClub) return;
-        totalStrokes += pen;
-        if (!map.has(hole.penaltyClub)) map.set(hole.penaltyClub, { club: hole.penaltyClub, strokes: 0, holes: 0 });
-        const entry = map.get(hole.penaltyClub);
-        entry.strokes += pen;
-        entry.holes += 1;
+        if (!Number.isFinite(pen) || pen <= 0) return;
+        const clubs = Array.isArray(hole.penaltyClubs) && hole.penaltyClubs.length
+          ? hole.penaltyClubs
+          : (hole.penaltyClub ? Array(pen).fill(hole.penaltyClub) : []);
+        if (!clubs.length) return;
+        // Track which clubs already counted this hole — same club hit
+        // twice on the same hole shouldn't inflate the per-club hole count.
+        const seenThisHole = new Set();
+        clubs.forEach((club) => {
+          if (!club) return;
+          totalStrokes += 1;
+          if (!map.has(club)) map.set(club, { club, strokes: 0, holes: 0 });
+          const entry = map.get(club);
+          entry.strokes += 1;
+          if (!seenThisHole.has(club)) {
+            entry.holes += 1;
+            seenThisHole.add(club);
+          }
+        });
       });
     });
     return {
@@ -5345,8 +5470,16 @@
     if (totalPen >= 1 && penaltyHoles.length >= 1) {
       const byClub = new Map();
       penaltyHoles.forEach((h) => {
-        const club = h.penaltyClub || "uncertain club";
-        byClub.set(club, (byClub.get(club) || 0) + Number(h.penalties));
+        const pen = Number(h.penalties) || 0;
+        // Iterate per-stroke so a hole with mixed-club penalties attributes
+        // each stroke to the right club, not all to one "primary" club.
+        const clubs = Array.isArray(h.penaltyClubs) && h.penaltyClubs.length
+          ? h.penaltyClubs
+          : (h.penaltyClub ? Array(pen).fill(h.penaltyClub) : Array(pen).fill("uncertain club"));
+        clubs.slice(0, pen).forEach((rawClub) => {
+          const club = rawClub || "uncertain club";
+          byClub.set(club, (byClub.get(club) || 0) + 1);
+        });
       });
       const clubBits = [...byClub.entries()]
         .sort((a, b) => b[1] - a[1])
@@ -7247,7 +7380,12 @@
       if (hole && Array.isArray(hole.clubsHit) && hole.clubsHit.length) {
         setHoleClubs(hole.number, hole.clubsHit);
       }
-      if (hole && hole.penaltyClub) {
+      // Prefer the canonical penaltyClubs array; fall back to the legacy
+      // single penaltyClub string for rounds saved before the multi-club
+      // change. Either way the in-form state ends up as the array shape.
+      if (hole && Array.isArray(hole.penaltyClubs) && hole.penaltyClubs.length) {
+        setHolePenaltyClubs(hole.number, hole.penaltyClubs);
+      } else if (hole && hole.penaltyClub) {
         setHolePenaltyClub(hole.number, hole.penaltyClub);
       }
     });
