@@ -39,17 +39,20 @@
   const BRIEF_COLLAPSED_KEY = "fairwayLedger.briefCollapsed.v1";
   const VIEW_MODE_KEY = "fairwayLedger.viewMode.v1";
   const IN_PROGRESS_KEY = "fairwayLedger.inProgressRound.v1";
-  // Card scorecard sectioning preference. "default" keeps the original
-  // outcome-first layout (Score → Putts → Fairway → Clubs → ...). "narrative"
-  // reorders to match how you experience the hole — tee → approach →
-  // green → score. Off by default to avoid surprising returning users
-  // (Rob suggested this; Jeff wanted to ship it behind a toggle first).
+  // Card scorecard sectioning preference. "narrative" reorders the per-hole
+  // inputs to match how you experience the hole (tee → approach → green →
+  // score). "default" is the original outcome-first layout. As of the
+  // 2026-05-26 flip, narrative is the default for any user who hasn't
+  // explicitly chosen — but if they DID toggle to "default" in Profile,
+  // that pick survives the flip.
   const CARD_FLOW_KEY = "fairwayLedger.cardFlow.v1";
   let cardFlowMode = (() => {
     try {
       const saved = localStorage.getItem(CARD_FLOW_KEY);
-      return saved === "narrative" ? "narrative" : "default";
-    } catch { return "default"; }
+      if (saved === "default") return "default";
+      if (saved === "narrative") return "narrative";
+      return "narrative";
+    } catch { return "narrative"; }
   })();
   const IN_PROGRESS_DEBOUNCE_MS = 500;
   const BACKUP_NAG_THRESHOLD = 3;

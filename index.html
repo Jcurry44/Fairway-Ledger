@@ -15,9 +15,9 @@
     <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
          icon, theme color in the browser chrome, and a standalone display
          mode instead of a tab. -->
-    <link rel="manifest" href="./manifest.json?v=2026-05-26n">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-05-26n">
-    <link rel="apple-touch-icon" href="./icon.svg?v=2026-05-26n">
+    <link rel="manifest" href="./manifest.json?v=2026-05-26o">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-05-26o">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-05-26o">
     <meta name="theme-color" content="#1f7a59">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -32,11 +32,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
 
-    <link rel="stylesheet" href="./styles.css?v=2026-05-26n">
-    <script src="./data/courses.js?v=2026-05-26n" defer></script>
-    <script src="./lib/golf-math.js?v=2026-05-26n" defer></script>
-    <script src="./lib/shapes.js?v=2026-05-26n" defer></script>
-    <script src="./app.js?v=2026-05-26n" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-05-26o">
+    <script src="./data/courses.js?v=2026-05-26o" defer></script>
+    <script src="./lib/golf-math.js?v=2026-05-26o" defer></script>
+    <script src="./lib/shapes.js?v=2026-05-26o" defer></script>
+    <script src="./app.js?v=2026-05-26o" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -591,20 +591,20 @@
             </div>
             <p class="profile-bag-hint">
               Choose how the Card scorecard arranges each hole's inputs.
-              "Default" leads with Score and Putts (outcome-first).
               "Narrative" mirrors how you played the hole — tee shot first,
               then approach, then green, with the final score at the
-              bottom. Switching is non-destructive — any data you've
-              already entered stays intact.
+              bottom. "Outcome-first" leads with Score and Putts (the
+              original layout). Switching is non-destructive — any data
+              you've already entered stays intact.
             </p>
             <div class="card-flow-options">
               <label class="card-flow-option">
-                <input type="radio" name="cardFlowMode" value="default" id="cardFlowDefault">
-                <span><strong>Default</strong> — Score · Putts · Fairway · Clubs · …</span>
+                <input type="radio" name="cardFlowMode" value="narrative" id="cardFlowNarrative">
+                <span><strong>Narrative</strong> (recommended) — Clubs · Fairway · Bunker · 1st putt · Putts · Pen · Score</span>
               </label>
               <label class="card-flow-option">
-                <input type="radio" name="cardFlowMode" value="narrative" id="cardFlowNarrative">
-                <span><strong>Narrative</strong> — Clubs · Fairway · Bunker · 1st putt · Putts · Pen · Score</span>
+                <input type="radio" name="cardFlowMode" value="default" id="cardFlowDefault">
+                <span><strong>Outcome-first</strong> — Score · Putts · Fairway · Clubs · …</span>
               </label>
             </div>
           </article>
