@@ -1784,6 +1784,36 @@ body.floating-card-nav-visible .floating-card-nav {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
+/* "+" affordance for adding another instance of an already-selected club.
+   Only rendered on active pills below the cap. Tap = bump count (does
+   NOT toggle); tap the pill body itself = clear all instances. Sits at
+   the bottom-right so it doesn't collide with TEE (top-right) or
+   count badge (bottom-left). */
+.pill-bump {
+  position: absolute;
+  bottom: -8px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #1f7a59;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  user-select: none;
+  border: 2px solid #ffffff;
+}
+
+.pill-bump:hover {
+  background: #15573c;
+}
+
 .card-pill-sublabel {
   font-size: 0.7rem;
   font-weight: 700;

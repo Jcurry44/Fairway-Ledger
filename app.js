@@ -360,17 +360,28 @@
     });
   }
 
-  // Tap-to-bump semantics: each tap adds another instance of `club`, up to
-  // MAX_CLUB_USES. Tapping past the cap clears every instance back to 0 so
-  // the user has a one-finger way to undo a mis-tap without a separate
-  // remove gesture. The order of insertion still matters — first non-Putter
-  // tap remains the tee shot.
+  // Tap-to-toggle (the original behavior): if the club is currently on the
+  // hole, removing every instance of it (so an accidental tap is fixable
+  // with one more tap, the way it always was). If it's NOT on the hole,
+  // add a single instance. For the multi-use case (Rob's "I hit my wedge
+  // multiple times"), tap the visible "+" badge on an active pill instead
+  // — see bumpHoleClub below.
   function toggleHoleClub(holeNumber, club) {
     const current = getHoleClubs(holeNumber);
-    const count = current.filter((c) => c === club).length;
-    const next = count >= MAX_CLUB_USES
+    const next = current.includes(club)
       ? current.filter((c) => c !== club)
       : [...current, club];
+    setHoleClubs(holeNumber, next);
+    return next;
+  }
+
+  // Add another instance of `club` to the hole — capped at MAX_CLUB_USES.
+  // Wired to the small "+" badge that appears on each active pill.
+  function bumpHoleClub(holeNumber, club) {
+    const current = getHoleClubs(holeNumber);
+    const count = current.filter((c) => c === club).length;
+    if (count >= MAX_CLUB_USES) return current;
+    const next = [...current, club];
     setHoleClubs(holeNumber, next);
     return next;
   }
@@ -2162,7 +2173,13 @@
       const cls = `pill pill-club${isActive ? " active" : ""}${isTee ? " pill-club-tee" : ""}`;
       const teeBadge = isTee ? `<span class="pill-tee-badge" aria-label="tee shot">TEE</span>` : "";
       const countBadge = count >= 2 ? `<span class="pill-count" aria-label="hit ${count} times">×${count}</span>` : "";
-      return `<button type="button" class="${cls}" data-toggle-club="${escapeHtml(club)}" data-hole="${hole.number}">${escapeHtml(club)}${countBadge}${teeBadge}</button>`;
+      // Visible "+" affordance for adding another instance. Only shown
+      // on active pills below the cap; tap the pill body itself still
+      // toggles off (so an accidental tap stays one-tap-fixable).
+      const bumpBadge = isActive && count < MAX_CLUB_USES
+        ? `<span class="pill-bump" data-pill-bump="${escapeHtml(club)}" data-hole="${hole.number}" role="button" tabindex="0" aria-label="Hit ${escapeHtml(club)} another time on this hole">+</span>`
+        : "";
+      return `<button type="button" class="${cls}" data-toggle-club="${escapeHtml(club)}" data-hole="${hole.number}">${escapeHtml(club)}${countBadge}${teeBadge}${bumpBadge}</button>`;
     }).join("");
     // Best-scoring-club recommendation — only on fresh round flows (editing
     // would be circular against the round being edited) and only when the
@@ -2181,7 +2198,7 @@
     }
     return `
       <div class="card-clubs-row" data-hole="${hole.number}">
-        <span class="card-pill-label">Clubs hit <span class="card-pill-sublabel">(first tap = tee shot · tap again to add another)</span></span>
+        <span class="card-pill-label">Clubs hit <span class="card-pill-sublabel">(first tap = tee shot · tap + to add another hit · tap pill to clear)</span></span>
         ${recHtml}
         <div class="card-clubs-grid">${pills}</div>
       </div>`;
@@ -2451,6 +2468,23 @@
         const customField = row.querySelector(".card-pill-custom");
         if (customField) customField.value = "";
         syncPillActiveStateForRow(row);
+        return;
+      }
+      // Multi-use "+" affordance: check FIRST because it's nested inside
+      // the clubPill button. The pill body itself toggles; the "+" badge
+      // increments the count without removing existing instances.
+      const bumpBadge = event.target.closest("[data-pill-bump]");
+      if (bumpBadge) {
+        event.preventDefault();
+        event.stopPropagation();
+        const holeNumber = bumpBadge.dataset.hole;
+        const club = bumpBadge.dataset.pillBump;
+        bumpHoleClub(holeNumber, club);
+        const row = bumpBadge.closest(".card-clubs-row");
+        if (row) {
+          row.outerHTML = renderClubsHitPills({ number: Number(holeNumber) });
+        }
+        scheduleInProgressSave();
         return;
       }
       const clubPill = event.target.closest("[data-toggle-club]");
@@ -7161,7 +7195,22 @@
     resetPendingHoles(); resetReviewState();
     refreshRoundSetup();
   });
-  els.roundHoleCount.addEventListener("change", () => { clearInProgressRound(); resetPendingHoles(); resetReviewState(); refreshRoundSetup(); });
+  // Hole count switch (9 ↔ 18) used to wipe all entered data. That broke
+  // the common "I'm going to play another 9" flow. Now: preserve holes 1-9
+  // across the switch. Going 9 → 18 keeps your front 9 and adds fresh
+  // holes 10-18. Going 18 → 9 keeps the front 9 and drops the back 9
+  // (which is unrecoverable either way — the new layout has no slot for
+  // it). For Deerwood: hole numbers map to whichever nine is active, so
+  // preservation is correct as long as the front-nine selection doesn't
+  // change as a side effect. If it does, the user can re-pick the right
+  // nine — but no data has been silently destroyed.
+  els.roundHoleCount.addEventListener("change", () => {
+    resetReviewState();
+    refreshRoundPreservingHoles([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+  // Layout change (Deerwood 9-hole nine picker: Buck → Doe → Fawn) is a
+  // deliberate "different physical course" action, so still clear. Score
+  // 4 on Buck 1 should NOT silently become "score 4 on Doe 1".
   els.roundLayout.addEventListener("change", () => { clearInProgressRound(); resetPendingHoles(); resetReviewState(); refreshRoundSetup(); });
   // Front 9 change keeps the back 9 (holes 10-18); back 9 change keeps the
   // front 9 (holes 1-9). This means fixing a wrong nine mid-round no longer
