@@ -24,6 +24,7 @@ test("HOLE_FIELDS lists all canonical hole fields", () => {
     "penalties",
     "penaltyClub",
     "penaltyClubs",
+    "fringePutts",
     "firstPuttDistance",
     "bunker",
     "note",
@@ -31,6 +32,11 @@ test("HOLE_FIELDS lists all canonical hole fields", () => {
     "clubsHit",
   ];
   assert.deepEqual([...S.HOLE_FIELDS], expected);
+});
+
+test("makeHole(): fringePutts defaults to 0", () => {
+  const h = S.makeHole();
+  assert.equal(h.fringePutts, 0);
 });
 
 test("makeHole(): legacy penaltyClub string upgrades to penaltyClubs array", () => {

@@ -2138,6 +2138,10 @@
     return `<input class="first-putt-input compact-input" data-hole="${hole.number}" type="number" min="0" max="120" inputmode="numeric" placeholder="ft" aria-label="${escapeHtml(hole.label || `Hole ${hole.number}`)} first putt distance in feet">`;
   }
 
+  function fringePuttsInputCell(hole) {
+    return `<input class="fringe-putts-input compact-input" data-hole="${hole.number}" type="number" min="0" max="3" inputmode="numeric" value="0" aria-label="${escapeHtml(hole.label || `Hole ${hole.number}`)} fringe putts">`;
+  }
+
   // Pills for fast on-course tap entry. Each pill row writes to the hidden
   // typed input (which preserves all existing read/save logic) plus offers
   // a small custom input as an escape hatch for values outside the pill set.
@@ -2222,6 +2226,21 @@
       customMin: 0,
       customMax: 120,
       customPlaceholder: "ft"
+    });
+  }
+
+  // "Did you putt from the fringe?" — captures putter-from-off-green
+  // strokes so the on-green Putts row stays semantically clean. Stored as
+  // a count (0/1/2) for the rare double-fringe case, but defaults to 0
+  // and the pills are minimal.
+  function renderFringePuttsPills(hole) {
+    return renderPillsRow({
+      label: "Fringe putts",
+      holeNumber: hole.number,
+      inputClass: "fringe-putts-input",
+      values: [0, 1, 2],
+      customMin: 0,
+      customMax: 3
     });
   }
 
@@ -2410,6 +2429,7 @@
             ${scoreInputCell(hole)}
             ${puttsInputCell(hole)}
             ${firstPuttInputCell(hole)}
+            ${fringePuttsInputCell(hole)}
             ${fairwayInputCell(hole)}
             ${bunkerInputCell(hole)}
             ${penaltyInputCell(hole)}
@@ -2421,6 +2441,7 @@
               ${renderClubsHitPills(hole)}
               ${renderFairwayPills(hole)}
               ${renderBunkerPills(hole)}
+              ${renderFringePuttsPills(hole)}
               ${renderFirstPuttPills(hole)}
               ${renderPuttsPills(hole)}
               ${renderPenPills(hole)}
@@ -2432,6 +2453,7 @@
               ${renderScorePills(hole)}
             ` : `
               ${renderFirstPuttPills(hole)}
+              ${renderFringePuttsPills(hole)}
               ${renderFairwayPills(hole)}
               ${renderClubsHitPills(hole)}
               ${renderBunkerPills(hole)}
@@ -2941,6 +2963,7 @@
       const girInput = els.scorecardGrid.querySelector(`.gir-input[data-hole="${hole}"]`);
       const penaltyInput = els.scorecardGrid.querySelector(`.penalty-input[data-hole="${hole}"]`);
       const firstPuttInput = els.scorecardGrid.querySelector(`.first-putt-input[data-hole="${hole}"]`);
+      const fringePuttsInput = els.scorecardGrid.querySelector(`.fringe-putts-input[data-hole="${hole}"]`);
       map.set(Number(hole), {
         score: scoreInput.value,
         putts: puttsInput ? puttsInput.value : "",
@@ -2948,7 +2971,8 @@
         bunker: bunkerInput ? bunkerInput.value : "",
         gir: girInput ? girInput.checked : false,
         penalty: penaltyInput ? penaltyInput.value : "",
-        firstPutt: firstPuttInput ? firstPuttInput.value : ""
+        firstPutt: firstPuttInput ? firstPuttInput.value : "",
+        fringePutts: fringePuttsInput ? fringePuttsInput.value : ""
       });
     });
     return map;
@@ -2965,6 +2989,7 @@
       const girInput = els.scorecardGrid.querySelector(`.gir-input[data-hole="${hole}"]`);
       const penaltyInput = els.scorecardGrid.querySelector(`.penalty-input[data-hole="${hole}"]`);
       const firstPuttInput = els.scorecardGrid.querySelector(`.first-putt-input[data-hole="${hole}"]`);
+      const fringePuttsInput = els.scorecardGrid.querySelector(`.fringe-putts-input[data-hole="${hole}"]`);
       if (scoreInput && values.score !== "") scoreInput.value = values.score;
       if (puttsInput && values.putts !== "") puttsInput.value = values.putts;
       if (fairwayInput && values.fairway && [...fairwayInput.options].some((option) => option.value === values.fairway)) {
@@ -2976,6 +3001,7 @@
       if (girInput) girInput.checked = Boolean(values.gir);
       if (penaltyInput && values.penalty !== "") penaltyInput.value = values.penalty;
       if (firstPuttInput && values.firstPutt !== "") firstPuttInput.value = values.firstPutt;
+      if (fringePuttsInput && values.fringePutts !== undefined && values.fringePutts !== "") fringePuttsInput.value = values.fringePutts;
     });
   }
 
@@ -3214,12 +3240,14 @@
       const girInput = els.scorecardGrid.querySelector(`.gir-input[data-hole="${holeNumber}"]`);
       const penaltyInput = els.scorecardGrid.querySelector(`.penalty-input[data-hole="${holeNumber}"]`);
       const firstPuttInput = els.scorecardGrid.querySelector(`.first-putt-input[data-hole="${holeNumber}"]`);
+      const fringePuttsInput = els.scorecardGrid.querySelector(`.fringe-putts-input[data-hole="${holeNumber}"]`);
       const scoreRaw = scoreInput.value.trim();
       const scoreValue = scoreRaw === "" ? null : Number(scoreRaw);
       const puttsValue = Number(puttsInput.value);
       const penaltyValue = Number(penaltyInput.value);
       const firstPuttRaw = firstPuttInput ? firstPuttInput.value.trim() : "";
       const firstPuttValue = firstPuttRaw === "" ? null : Number(firstPuttRaw);
+      const fringePuttsValue = fringePuttsInput ? Number(fringePuttsInput.value || 0) : 0;
       if (requireComplete) {
         if (!scoreValue || scoreValue < 1) {
           throw new Error(`Enter a score on ${scoreInput.dataset.label || `hole ${holeNumber}`} before saving.`);
@@ -3243,6 +3271,7 @@
           ? getHolePenaltyClubs(holeNumber).slice(0, penaltyValue)
           : [],
         firstPuttDistance: Number.isFinite(firstPuttValue) && firstPuttValue >= 0 ? firstPuttValue : null,
+        fringePutts: Number.isFinite(fringePuttsValue) && fringePuttsValue > 0 ? fringePuttsValue : 0,
         bunker: bunkerInput ? bunkerInput.value : "",
         note: getHoleNote(holeNumber),
         clubsHit: getHoleClubs(holeNumber)
@@ -7433,10 +7462,12 @@
       const girInput = els.scorecardGrid.querySelector(`.gir-input[data-hole="${holeKey}"]`);
       const penaltyInput = els.scorecardGrid.querySelector(`.penalty-input[data-hole="${holeKey}"]`);
       const firstPuttInput = els.scorecardGrid.querySelector(`.first-putt-input[data-hole="${holeKey}"]`);
+      const fringePuttsInput = els.scorecardGrid.querySelector(`.fringe-putts-input[data-hole="${holeKey}"]`);
       if (scoreInput && Number.isFinite(hole.score)) scoreInput.value = hole.score;
       if (puttsInput && Number.isFinite(hole.putts)) puttsInput.value = hole.putts;
       if (penaltyInput && Number.isFinite(hole.penalties)) penaltyInput.value = hole.penalties;
       if (firstPuttInput && Number.isFinite(hole.firstPuttDistance)) firstPuttInput.value = hole.firstPuttDistance;
+      if (fringePuttsInput && Number.isFinite(hole.fringePutts)) fringePuttsInput.value = hole.fringePutts;
       if (fairwayInput && hole.fairway) {
         const hasOption = [...fairwayInput.options].some((option) => option.value === hole.fairway);
         if (hasOption) fairwayInput.value = hole.fairway;
