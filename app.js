@@ -340,13 +340,15 @@
     return { best, baseline };
   }
 
-  // Pre-select the likely clubs on every hole so the card shows them ready.
-  // Order of preference for the tee club on a par 4/5/6:
+  // Pre-select the tee club on every hole so the card opens ready. Order
+  // of preference on par 4/5/6:
   //   1. Most-frequently-used at this physical hole (≥3 plays of history)
   //   2. Driver (the catalog default)
-  // Par 3s seed Putter only by default — but if the user has consistent
-  // history with a specific club, pre-seed that too. The TEE badge is
-  // suppressed when only Putter is selected. Skipped in edit mode.
+  // Par 3s with consistent club history pre-seed that club; otherwise
+  // we leave the row empty and let the user pick when they hit the tee.
+  // (Putter is no longer pre-seeded — the Putts row already tracks
+  // putter use; a Putter pill in the clubs row was duplicative.)
+  // Skipped in edit mode so saved rounds keep their captured selections.
   function seedDefaultClubs(course) {
     if (editingRoundId || !course || !Array.isArray(course.holes)) return;
     course.holes.forEach((hole) => {
@@ -354,10 +356,10 @@
       const learned = mostUsedTeeClubForHole(course.id, hole, state.rounds);
       let desired;
       if (hole.par === 3) {
-        desired = learned && isInBag(learned) ? [learned, "Putter"] : ["Putter"];
+        desired = learned && isInBag(learned) ? [learned] : [];
       } else {
         const tee = learned && isInBag(learned) ? learned : "Driver";
-        desired = [tee, "Putter"];
+        desired = [tee];
       }
       const filtered = desired.filter(isInBag);
       if (filtered.length) setHoleClubs(hole.number, filtered);
@@ -2275,7 +2277,9 @@
       || (selected[0] && selected[0] !== "Putter" ? selected[0] : null);
     // Only render pills for clubs in the user's bag (plus any already
     // selected on this hole, even if they're no longer in the bag).
-    const available = clubsForHole(hole.number);
+    // Putter is excluded — putter use is captured by the Putts row
+    // directly, so a Putter pill would be duplicative noise.
+    const available = clubsForHole(hole.number).filter((c) => c !== "Putter");
     const pills = available.map((club) => {
       const count = counts[club] || 0;
       const isActive = count > 0;
@@ -2747,9 +2751,13 @@
 
   // GIR is purely a function of score + putts + par, so the user never needs
   // to tick it. Recompute on every score/putts change and update the hidden
-  // checkbox so save/readScorecard see the right value. Also auto-add Putter
-  // to clubsHit whenever putts > 0 (the user's "if I putted, putter was used"
-  // rule).
+  // checkbox so save/readScorecard see the right value.
+  //
+  // (We used to auto-add Putter to clubsHit when putts > 0, but the Putts
+  // pill row already captures putter use exactly. Tracking Putter twice
+  // was duplicative, and showing a Putter pill the user could tap was
+  // a source of confusion. Putter is no longer in the clubs-hit grid;
+  // see renderClubsHitPills for the filter.)
   function syncDerivedHoleFlags(holeNumber) {
     const hole = Number(holeNumber);
     if (!Number.isFinite(hole)) return;
@@ -2762,11 +2770,6 @@
     const putts = puttsInput && puttsInput.value !== "" ? Number(puttsInput.value) : NaN;
     if (girInput) {
       girInput.checked = derivedGir(score, putts, par);
-    }
-    if (Number.isFinite(putts) && putts > 0 && isInBag("Putter") && !getHoleClubs(hole).includes("Putter")) {
-      setHoleClubs(hole, [...getHoleClubs(hole), "Putter"]);
-      const row = els.scorecardGrid.querySelector(`.card-clubs-row[data-hole="${hole}"]`);
-      if (row) row.outerHTML = renderClubsHitPills({ number: hole });
     }
   }
 
