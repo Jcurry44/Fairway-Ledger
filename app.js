@@ -2654,23 +2654,27 @@
           obToggle.classList.remove("active");
           obToggle.textContent = "OB";
         } else {
-          // Apply: pick the tee club (first non-Putter on the hole) and
-          // append it again to represent the re-tee swing. Fall back to
-          // Driver (or first non-Putter in the bag) if no tee logged yet.
+          // Apply: re-add the LAST non-Putter club logged on the hole —
+          // that's the swing that went OB, and the re-shot from where you
+          // hit it is almost always with the same club. Handles both the
+          // "drive OB" case (last club = the only club = Driver) and the
+          // "drove in play, then 7i OB" case (last club = 7i). Fallback to
+          // Driver if no clubs logged yet (user tapping OB before any
+          // club, which still implies a tee swing).
           const onHole = getHoleClubs(holeNumber);
-          const teeFromHole = onHole.find((c) => c !== "Putter");
+          const lastNonPutter = [...onHole].reverse().find((c) => c !== "Putter");
           const bag = getBag();
-          const teeClub = teeFromHole
+          const clubToRepeat = lastNonPutter
             || (bag.includes("Driver") ? "Driver" : (bag.find((c) => c !== "Putter") || "Driver"));
-          if (teeClub && isInBag(teeClub)) {
-            setHoleClubs(holeNumber, [...onHole, teeClub]);
+          if (clubToRepeat && isInBag(clubToRepeat)) {
+            setHoleClubs(holeNumber, [...onHole, clubToRepeat]);
           }
           if (penaltyInput) {
             penaltyInput.value = String(currentPen + 1);
             penaltyInput.dispatchEvent(new Event("input", { bubbles: true }));
             penaltyInput.dispatchEvent(new Event("change", { bubbles: true }));
           }
-          obToggle.dataset.addedClub = teeClub;
+          obToggle.dataset.addedClub = clubToRepeat;
           obToggle.classList.add("active");
           obToggle.textContent = "OB ✓";
         }
