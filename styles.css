@@ -1768,6 +1768,31 @@ body.floating-card-nav-visible .floating-card-nav {
   font-weight: 700;
 }
 
+/* Inline "Fringe" toggle on the Putts row. Visually distinct from the
+   numeric putts pills so the user can tell the two affordances apart
+   even at a glance — separator margin, italic label, gold-tinted
+   accent when active. */
+.pill-fringe-toggle {
+  margin-left: 12px;
+  font-style: italic;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  border-color: #d8c79a;
+  color: #6b4a14;
+  background: #fffaee;
+}
+
+.pill-fringe-toggle:hover {
+  border-color: #c58b2e;
+}
+
+.pill-fringe-toggle.active {
+  background: #c58b2e;
+  color: #fff;
+  border-color: #a3711d;
+  box-shadow: 0 4px 10px rgba(197, 139, 46, 0.2);
+}
+
 .pill-club.active {
   background: var(--green-dark, #15573c);
   border-color: var(--green-dark, #15573c);

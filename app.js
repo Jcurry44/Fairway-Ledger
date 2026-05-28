@@ -2190,14 +2190,22 @@
   }
 
   function renderPuttsPills(hole) {
-    return renderPillsRow({
-      label: "Putts",
-      holeNumber: hole.number,
-      inputClass: "putts-input",
-      values: [0, 1, 2, 3, 4, 5],
-      customMin: 0,
-      customMax: 8
-    });
+    // Inline "Fringe" toggle appended to the Putts row. Tap cycles
+    // fringePutts 0 → 1 → 2 → 0. Putts (the count chip) stays semantically
+    // "on-green strokes only" — Score auto-calc and GIR derivation depend
+    // on that. The fringe count adds to the total stroke count separately.
+    const valuesHtml = [0, 1, 2, 3, 4, 5].map((v) =>
+      `<button type="button" class="pill" data-pill-value="${v}">${v}</button>`
+    ).join("");
+    return `
+      <div class="card-pill-row" data-pill-group="putts-input" data-hole="${hole.number}">
+        <span class="card-pill-label">Putts</span>
+        <div class="card-pill-options">
+          ${valuesHtml}
+          <input type="number" class="card-pill-custom" data-pill-custom-for="putts-input" data-hole="${hole.number}" min="0" max="8" inputmode="numeric" placeholder="…" aria-label="Custom Putts value">
+          <button type="button" class="pill pill-fringe-toggle" data-fringe-toggle="${hole.number}" aria-label="Toggle fringe putt count for this hole">Fringe</button>
+        </div>
+      </div>`;
   }
 
   function renderPenPills(hole) {
@@ -2441,9 +2449,8 @@
               ${renderClubsHitPills(hole)}
               ${renderFairwayPills(hole)}
               ${renderBunkerPills(hole)}
-              ${renderFringePuttsPills(hole)}
-              ${renderFirstPuttPills(hole)}
               ${renderPuttsPills(hole)}
+              ${renderFirstPuttPills(hole)}
               ${renderPenPills(hole)}
               ${renderPenaltyClubRow(hole)}
               <label class="card-note-field">
@@ -2453,7 +2460,6 @@
               ${renderScorePills(hole)}
             ` : `
               ${renderFirstPuttPills(hole)}
-              ${renderFringePuttsPills(hole)}
               ${renderFairwayPills(hole)}
               ${renderClubsHitPills(hole)}
               ${renderBunkerPills(hole)}
@@ -2582,6 +2588,28 @@
         openHolePicker();
         return;
       }
+      // Inline "Fringe" toggle on the Putts row — cycles fringePutts
+      // 0 → 1 → 2 → 0 via repeated taps. Handled here before the generic
+      // pill handler because the chip is a .pill element without a
+      // data-pill-value (the value lives on a separate hidden input).
+      const fringeToggle = event.target.closest("[data-fringe-toggle]");
+      if (fringeToggle) {
+        event.preventDefault();
+        const holeNumber = fringeToggle.dataset.fringeToggle;
+        const fringeInput = stack.querySelector(`.fringe-putts-input[data-hole="${holeNumber}"]`);
+        if (fringeInput) {
+          const current = Number(fringeInput.value || 0);
+          const next = (current + 1) % 3; // 0 → 1 → 2 → 0
+          fringeInput.value = String(next);
+          fringeInput.dispatchEvent(new Event("input", { bubbles: true }));
+          fringeInput.dispatchEvent(new Event("change", { bubbles: true }));
+          // Visual state: chip is "active" when count > 0; suffix shows ×N.
+          syncFringeToggleVisual(fringeToggle, next);
+          recalculateScoreForHole(holeNumber);
+          scheduleInProgressSave();
+        }
+        return;
+      }
       const pill = event.target.closest(".pill[data-pill-value]");
       if (pill) {
         event.preventDefault();
@@ -2600,6 +2628,16 @@
         const customField = row.querySelector(".card-pill-custom");
         if (customField) customField.value = "";
         syncPillActiveStateForRow(row);
+        // The Score row's active pill is driven by the score input value;
+        // for OTHER pill rows, an entry implies a stroke total update.
+        if (inputClass !== "score-input") {
+          recalculateScoreForHole(holeNumber);
+        } else {
+          // User manually picked a score — mark as overridden so
+          // subsequent auto-recalcs don't blow it away.
+          const scoreInput = stack.querySelector(`.score-input[data-hole="${holeNumber}"]`);
+          if (scoreInput) delete scoreInput.dataset.autoScore;
+        }
         return;
       }
       // × clear badge: check FIRST because it's nested inside the
@@ -2611,12 +2649,15 @@
         event.stopPropagation();
         const holeNumber = clearBadge.dataset.hole;
         const club = clearBadge.dataset.pillClear;
+        // Recalc score after the next click clears the club (the call
+        // below already triggers a re-render of the clubs row).
         clearHoleClub(holeNumber, club);
         const row = clearBadge.closest(".card-clubs-row");
         if (row) {
           row.outerHTML = renderClubsHitPills({ number: Number(holeNumber) });
         }
         scheduleInProgressSave();
+        recalculateScoreForHole(holeNumber);
         return;
       }
       const clubPill = event.target.closest("[data-toggle-club]");
@@ -2633,6 +2674,7 @@
           row.outerHTML = renderClubsHitPills({ number: Number(holeNumber) });
         }
         scheduleInProgressSave();
+        recalculateScoreForHole(holeNumber);
         return;
       }
       const shortcut = event.target.closest(".card-score-shortcut");
@@ -2682,9 +2724,80 @@
     const input = els.scorecardGrid.querySelector(`.${inputClass}[data-hole="${holeNumber}"]`);
     if (!input) return;
     const value = input.value;
-    row.querySelectorAll(".pill").forEach((p) => {
+    row.querySelectorAll(".pill[data-pill-value]").forEach((p) => {
       p.classList.toggle("active", p.dataset.pillValue !== undefined && String(p.dataset.pillValue) === String(value));
     });
+    // Fringe toggle (special-case chip on the Putts row): syncs from the
+    // separate fringe-putts-input.
+    const fringeToggle = row.querySelector("[data-fringe-toggle]");
+    if (fringeToggle) {
+      const fringeInput = els.scorecardGrid.querySelector(`.fringe-putts-input[data-hole="${holeNumber}"]`);
+      const fringeCount = fringeInput ? Number(fringeInput.value || 0) : 0;
+      syncFringeToggleVisual(fringeToggle, fringeCount);
+    }
+  }
+
+  function syncFringeToggleVisual(toggle, count) {
+    if (!toggle) return;
+    const safeCount = Number.isFinite(count) && count > 0 ? count : 0;
+    toggle.classList.toggle("active", safeCount > 0);
+    toggle.textContent = safeCount === 0
+      ? "Fringe"
+      : safeCount === 1 ? "Fringe ✓"
+      : `Fringe ×${safeCount}`;
+  }
+
+  // Strokes implied by the per-hole inputs. Drives auto-fill of the
+  // Score row so the user doesn't have to re-add it manually after
+  // entering every other stat. Manual override via tapping a score pill
+  // sets a "user picked this" flag (we clear data-autoScore) and that
+  // value sticks until the user clears it.
+  function recalculateScoreForHole(holeKey) {
+    if (!els.scorecardGrid) return;
+    const scoreInput = els.scorecardGrid.querySelector(`.score-input[data-hole="${holeKey}"]`);
+    if (!scoreInput) return;
+
+    const clubsCount = getHoleClubs(holeKey).length;
+    const puttsInput = els.scorecardGrid.querySelector(`.putts-input[data-hole="${holeKey}"]`);
+    const fringeInput = els.scorecardGrid.querySelector(`.fringe-putts-input[data-hole="${holeKey}"]`);
+    const penaltyInput = els.scorecardGrid.querySelector(`.penalty-input[data-hole="${holeKey}"]`);
+
+    const puttsValue = puttsInput && puttsInput.value !== "" ? Number(puttsInput.value) : 0;
+    const fringeValue = fringeInput && fringeInput.value !== "" ? Number(fringeInput.value) : 0;
+    const penaltyValue = penaltyInput && penaltyInput.value !== "" ? Number(penaltyInput.value) : 0;
+
+    const total =
+      (Number.isFinite(clubsCount) ? clubsCount : 0)
+      + (Number.isFinite(puttsValue) ? puttsValue : 0)
+      + (Number.isFinite(fringeValue) ? fringeValue : 0)
+      + (Number.isFinite(penaltyValue) ? penaltyValue : 0);
+
+    // Nothing real to compute yet — wait for the user to log something.
+    if (total <= 0) return;
+
+    const currentValue = scoreInput.value;
+    const lastAuto = scoreInput.dataset.autoScore || "";
+
+    // Only auto-update when the user hasn't manually overridden. Empty
+    // input or value matching the previously-auto-filled total both
+    // count as "still being driven by auto-calc."
+    if (currentValue === "" || currentValue === lastAuto) {
+      const next = String(total);
+      if (currentValue !== next) {
+        scoreInput.value = next;
+        scoreInput.dataset.autoScore = next;
+        scoreInput.dispatchEvent(new Event("input", { bubbles: true }));
+        scoreInput.dispatchEvent(new Event("change", { bubbles: true }));
+        // Sync the visible Score pill row's active chip.
+        const scoreRow = els.scorecardGrid.querySelector(`.card-pill-row[data-pill-group="score-input"][data-hole="${holeKey}"]`);
+        if (scoreRow) syncPillActiveStateForRow(scoreRow);
+        syncCardScoreMarks();
+        updateRoundPreview();
+      } else {
+        // Value already correct — still keep dataset.autoScore in sync.
+        scoreInput.dataset.autoScore = next;
+      }
+    }
   }
 
   function syncAllPillActiveStates() {
