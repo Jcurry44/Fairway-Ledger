@@ -364,30 +364,35 @@
     });
   }
 
-  // Tap-to-toggle (the original behavior): if the club is currently on the
-  // hole, removing every instance of it (so an accidental tap is fixable
-  // with one more tap, the way it always was). If it's NOT on the hole,
-  // add a single instance. For the multi-use case (Rob's "I hit my wedge
-  // multiple times"), tap the visible "+" badge on an active pill instead
-  // — see bumpHoleClub below.
+  // Tap-to-add (post-2026-05-26-r model): every tap logs one more hit of
+  // the club, capped at MAX_CLUB_USES. This matches how golfers naturally
+  // think about it — "I hit my 58° twice" = tap 58° twice. The earlier
+  // tap-to-toggle model required hunting for a tiny + badge which Rob
+  // (via Jeff) found unworkable on mobile. Clearing happens via a
+  // separate visible × button on active pills (see clearHoleClub).
   function toggleHoleClub(holeNumber, club) {
     const current = getHoleClubs(holeNumber);
-    const next = current.includes(club)
-      ? current.filter((c) => c !== club)
-      : [...current, club];
+    const count = current.filter((c) => c === club).length;
+    if (count >= MAX_CLUB_USES) return current;  // tap at cap is a no-op
+    const next = [...current, club];
     setHoleClubs(holeNumber, next);
     return next;
   }
 
-  // Add another instance of `club` to the hole — capped at MAX_CLUB_USES.
-  // Wired to the small "+" badge that appears on each active pill.
-  function bumpHoleClub(holeNumber, club) {
+  // Remove every instance of `club` from the hole. Wired to the visible ×
+  // badge on active pills — explicit "undo this club" affordance.
+  function clearHoleClub(holeNumber, club) {
     const current = getHoleClubs(holeNumber);
-    const count = current.filter((c) => c === club).length;
-    if (count >= MAX_CLUB_USES) return current;
-    const next = [...current, club];
+    if (!current.includes(club)) return current;
+    const next = current.filter((c) => c !== club);
     setHoleClubs(holeNumber, next);
     return next;
+  }
+
+  // Kept for back-compat with any caller (none currently outside the
+  // click handler). Same semantics as toggleHoleClub now.
+  function bumpHoleClub(holeNumber, club) {
+    return toggleHoleClub(holeNumber, club);
   }
 
   // ---- Penalty clubs ----------------------------------------------------
@@ -2278,13 +2283,12 @@
       const cls = `pill pill-club${isActive ? " active" : ""}${isTee ? " pill-club-tee" : ""}`;
       const teeBadge = isTee ? `<span class="pill-tee-badge" aria-label="tee shot">TEE</span>` : "";
       const countBadge = count >= 2 ? `<span class="pill-count" aria-label="hit ${count} times">×${count}</span>` : "";
-      // Visible "+" affordance for adding another instance. Only shown
-      // on active pills below the cap; tap the pill body itself still
-      // toggles off (so an accidental tap stays one-tap-fixable).
-      const bumpBadge = isActive && count < MAX_CLUB_USES
-        ? `<span class="pill-bump" data-pill-bump="${escapeHtml(club)}" data-hole="${hole.number}" role="button" tabindex="0" aria-label="Hit ${escapeHtml(club)} another time on this hole">+</span>`
+      // Visible × clear badge on every active pill — explicit "undo this
+      // club" affordance now that tap-to-add is the primary gesture.
+      const clearBadge = isActive
+        ? `<span class="pill-clear" data-pill-clear="${escapeHtml(club)}" data-hole="${hole.number}" role="button" tabindex="0" aria-label="Remove ${escapeHtml(club)} from this hole">×</span>`
         : "";
-      return `<button type="button" class="${cls}" data-toggle-club="${escapeHtml(club)}" data-hole="${hole.number}">${escapeHtml(club)}${countBadge}${teeBadge}${bumpBadge}</button>`;
+      return `<button type="button" class="${cls}" data-toggle-club="${escapeHtml(club)}" data-hole="${hole.number}">${escapeHtml(club)}${countBadge}${teeBadge}${clearBadge}</button>`;
     }).join("");
     // Best-scoring-club recommendation — only on fresh round flows (editing
     // would be circular against the round being edited) and only when the
@@ -2303,7 +2307,7 @@
     }
     return `
       <div class="card-clubs-row" data-hole="${hole.number}">
-        <span class="card-pill-label">Clubs hit <span class="card-pill-sublabel">(first tap = tee shot · tap + to add another hit · tap pill to clear)</span></span>
+        <span class="card-pill-label">Clubs hit <span class="card-pill-sublabel">(first tap = tee shot · tap again to add another hit · tap × to remove)</span></span>
         ${recHtml}
         <div class="card-clubs-grid">${pills}</div>
       </div>`;
@@ -2572,17 +2576,17 @@
         syncPillActiveStateForRow(row);
         return;
       }
-      // Multi-use "+" affordance: check FIRST because it's nested inside
-      // the clubPill button. The pill body itself toggles; the "+" badge
-      // increments the count without removing existing instances.
-      const bumpBadge = event.target.closest("[data-pill-bump]");
-      if (bumpBadge) {
+      // × clear badge: check FIRST because it's nested inside the
+      // clubPill button. The pill body itself ADDS another instance;
+      // the × badge removes all instances of that club.
+      const clearBadge = event.target.closest("[data-pill-clear]");
+      if (clearBadge) {
         event.preventDefault();
         event.stopPropagation();
-        const holeNumber = bumpBadge.dataset.hole;
-        const club = bumpBadge.dataset.pillBump;
-        bumpHoleClub(holeNumber, club);
-        const row = bumpBadge.closest(".card-clubs-row");
+        const holeNumber = clearBadge.dataset.hole;
+        const club = clearBadge.dataset.pillClear;
+        clearHoleClub(holeNumber, club);
+        const row = clearBadge.closest(".card-clubs-row");
         if (row) {
           row.outerHTML = renderClubsHitPills({ number: Number(holeNumber) });
         }

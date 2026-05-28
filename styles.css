@@ -1583,6 +1583,13 @@ body.floating-card-nav-visible .floating-card-nav {
 }
 
 .pill {
+  /* position: relative is REQUIRED — child badges (TEE, ×N count, clear ×)
+     all use position: absolute and need the pill as their containing
+     block. Without it the badges fall back to the viewport, which is why
+     for months only the FIRST pill's badge appeared visible (it happened
+     to be near the viewport's bottom-right corner). All other pills'
+     badges were stacked off-screen on top of each other. */
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1811,19 +1818,24 @@ body.floating-card-nav-visible .floating-card-nav {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
-/* "+" affordance for adding another instance of an already-selected club.
-   Only rendered on active pills below the cap. Tap = bump count (does
-   NOT toggle); tap the pill body itself = clear all instances. Sits at
-   the bottom-right so it doesn't collide with TEE (top-right) or
-   count badge (bottom-left). */
-.pill-bump {
+/* × clear badge — visible on every ACTIVE club pill. Tapping it removes
+   every instance of that club from the hole (explicit "undo this club"
+   affordance). The primary tap on the pill BODY now adds another
+   instance — Rob's "I hit my 58° twice" scenario should be one tap
+   per hit, no hunting for a small + button required.
+
+   Sized at 26px with an invisible 10px pad zone via ::before so the
+   touch target is ~46px (above Apple HIG's 44pt minimum) without
+   visually overwhelming the pill. Positioned bottom-right, warm red
+   so it reads clearly as the "remove" action. */
+.pill-clear {
   position: absolute;
-  bottom: -8px;
-  right: -6px;
-  width: 22px;
-  height: 22px;
+  bottom: -10px;
+  right: -8px;
+  width: 26px;
+  height: 26px;
   border-radius: 999px;
-  background: #1f7a59;
+  background: #b03a2e;
   color: #fff;
   font-size: 1rem;
   font-weight: 900;
@@ -1831,14 +1843,26 @@ body.floating-card-nav-visible .floating-card-nav {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
   cursor: pointer;
   user-select: none;
-  border: 2px solid #ffffff;
+  border: 2.5px solid #ffffff;
+  z-index: 2;
 }
 
-.pill-bump:hover {
-  background: #15573c;
+.pill-clear::before {
+  content: "";
+  position: absolute;
+  inset: -10px;
+  border-radius: 999px;
+}
+
+.pill-clear:hover {
+  background: #8a2d23;
+}
+
+.pill-clear:active {
+  transform: scale(0.92);
 }
 
 .card-pill-sublabel {
