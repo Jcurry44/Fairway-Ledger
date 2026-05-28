@@ -2209,14 +2209,23 @@
   }
 
   function renderPenPills(hole) {
-    return renderPillsRow({
-      label: "Pen",
-      holeNumber: hole.number,
-      inputClass: "penalty-input",
-      values: [0, 1, 2, 3],
-      customMin: 0,
-      customMax: 8
-    });
+    // Inline "OB" toggle appended to the Pen row. Tap = +1 to penalties
+    // AND +1 instance of the tee club to clubsHit (the implicit re-tee
+    // swing) = +2 strokes auto-added. Tap again to undo (removes both).
+    // Modeled on the Fringe toggle pattern on the Putts row, with
+    // red tinting so the user reads it as a "this hurt" affordance.
+    const valuesHtml = [0, 1, 2, 3].map((v) =>
+      `<button type="button" class="pill" data-pill-value="${v}">${v}</button>`
+    ).join("");
+    return `
+      <div class="card-pill-row" data-pill-group="penalty-input" data-hole="${hole.number}">
+        <span class="card-pill-label">Pen</span>
+        <div class="card-pill-options">
+          ${valuesHtml}
+          <input type="number" class="card-pill-custom" data-pill-custom-for="penalty-input" data-hole="${hole.number}" min="0" max="8" inputmode="numeric" placeholder="…" aria-label="Custom Penalty value">
+          <button type="button" class="pill pill-ob-toggle" data-ob-toggle="${hole.number}" aria-label="OB / lost ball — adds 2 strokes (penalty + re-tee swing)">OB</button>
+        </div>
+      </div>`;
   }
 
   function renderFirstPuttPills(hole) {
@@ -2608,6 +2617,76 @@
           recalculateScoreForHole(holeNumber);
           scheduleInProgressSave();
         }
+        return;
+      }
+      // OB sub-chip on the Pen row. Each tap adds (or undoes) +1 penalty
+      // stroke AND +1 instance of the tee club to clubsHit — modeling
+      // OB / lost-ball as "stroke + distance" so the user logs both in
+      // one tap. dataset.addedClub remembers what we added so a second
+      // tap can cleanly undo.
+      const obToggle = event.target.closest("[data-ob-toggle]");
+      if (obToggle) {
+        event.preventDefault();
+        const holeNumber = obToggle.dataset.obToggle;
+        const penaltyInput = stack.querySelector(`.penalty-input[data-hole="${holeNumber}"]`);
+        const currentPen = penaltyInput && penaltyInput.value !== ""
+          ? Number(penaltyInput.value)
+          : 0;
+        const isActive = obToggle.classList.contains("active");
+
+        if (isActive) {
+          // Undo: remove the previously-added club instance + decrement penalty.
+          const addedClub = obToggle.dataset.addedClub || "";
+          if (addedClub) {
+            const current = getHoleClubs(holeNumber);
+            const idx = current.lastIndexOf(addedClub);
+            if (idx >= 0) {
+              const next = [...current.slice(0, idx), ...current.slice(idx + 1)];
+              setHoleClubs(holeNumber, next);
+            }
+          }
+          if (penaltyInput) {
+            penaltyInput.value = String(Math.max(0, currentPen - 1));
+            penaltyInput.dispatchEvent(new Event("input", { bubbles: true }));
+            penaltyInput.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          delete obToggle.dataset.addedClub;
+          obToggle.classList.remove("active");
+          obToggle.textContent = "OB";
+        } else {
+          // Apply: pick the tee club (first non-Putter on the hole) and
+          // append it again to represent the re-tee swing. Fall back to
+          // Driver (or first non-Putter in the bag) if no tee logged yet.
+          const onHole = getHoleClubs(holeNumber);
+          const teeFromHole = onHole.find((c) => c !== "Putter");
+          const bag = getBag();
+          const teeClub = teeFromHole
+            || (bag.includes("Driver") ? "Driver" : (bag.find((c) => c !== "Putter") || "Driver"));
+          if (teeClub && isInBag(teeClub)) {
+            setHoleClubs(holeNumber, [...onHole, teeClub]);
+          }
+          if (penaltyInput) {
+            penaltyInput.value = String(currentPen + 1);
+            penaltyInput.dispatchEvent(new Event("input", { bubbles: true }));
+            penaltyInput.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          obToggle.dataset.addedClub = teeClub;
+          obToggle.classList.add("active");
+          obToggle.textContent = "OB ✓";
+        }
+
+        // Re-render the clubs row so the new/removed instance shows up
+        // visually (count badge, × clear button, tee badge re-positioning).
+        const clubsRow = els.scorecardGrid.querySelector(`.card-clubs-row[data-hole="${holeNumber}"]`);
+        if (clubsRow) clubsRow.outerHTML = renderClubsHitPills({ number: Number(holeNumber) });
+        // Re-sync the Pen row's active chip to match the new penalty value.
+        const penRow = penaltyInput ? penaltyInput.closest(".card-pill-row")
+          || els.scorecardGrid.querySelector(`.card-pill-row[data-pill-group="penalty-input"][data-hole="${holeNumber}"]`)
+          : null;
+        if (penRow) syncPillActiveStateForRow(penRow);
+
+        recalculateScoreForHole(holeNumber);
+        scheduleInProgressSave();
         return;
       }
       const pill = event.target.closest(".pill[data-pill-value]");

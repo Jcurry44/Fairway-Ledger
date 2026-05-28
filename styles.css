@@ -1793,6 +1793,31 @@ body.floating-card-nav-visible .floating-card-nav {
   box-shadow: 0 4px 10px rgba(197, 139, 46, 0.2);
 }
 
+/* Inline "OB" toggle on the Pen row. Red-tinted because OB = bad
+   thing happened; same affordance pattern as Fringe (sibling chip
+   sitting after the count pills + custom input). Tap = +1 penalty
+   + 1 re-tee swing logged into clubsHit. Tap again to undo both. */
+.pill-ob-toggle {
+  margin-left: 12px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  border-color: #efccc6;
+  color: #b03a2e;
+  background: #fff4f1;
+}
+
+.pill-ob-toggle:hover {
+  border-color: #b03a2e;
+}
+
+.pill-ob-toggle.active {
+  background: #b03a2e;
+  color: #fff;
+  border-color: #8a2d23;
+  box-shadow: 0 4px 10px rgba(176, 58, 46, 0.2);
+}
+
 .pill-club.active {
   background: var(--green-dark, #15573c);
   border-color: var(--green-dark, #15573c);
