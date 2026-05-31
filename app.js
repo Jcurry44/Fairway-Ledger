@@ -2508,6 +2508,11 @@
     if (!(scoreInput instanceof HTMLInputElement) || scoreInput.value.trim() !== "") return;
     const par = Number(scoreInput.dataset.par) || 4;
     scoreInput.value = String(par);
+    // Mark the prefilled value as auto-set so recalculateScoreForHole
+    // can override it once the user starts logging real strokes.
+    // Without this, the par value sat as a "manual" entry that blocked
+    // every subsequent auto-calc.
+    scoreInput.dataset.autoScore = String(par);
     // Programmatic event (isTrusted = false) — drives the pills/preview but
     // does NOT count as the user touching the round.
     scoreInput.dispatchEvent(new Event("input", { bubbles: true }));
