@@ -2457,11 +2457,11 @@
             ${cardFlowMode === "narrative" ? `
               ${renderClubsHitPills(hole)}
               ${renderFairwayPills(hole)}
-              ${renderBunkerPills(hole)}
               ${renderPuttsPills(hole)}
               ${renderFirstPuttPills(hole)}
               ${renderPenPills(hole)}
               ${renderPenaltyClubRow(hole)}
+              ${renderBunkerPills(hole)}
               <label class="card-note-field">
                 <span>What happened on this hole?</span>
                 <textarea class="card-note-input" data-hole="${hole.number}" rows="2" placeholder="Drove left, chipped twice, 2-putt from 12ft… (tap the mic on your keyboard for voice)">${escapeHtml(getHoleNote(hole.number))}</textarea>
@@ -2471,9 +2471,9 @@
               ${renderFirstPuttPills(hole)}
               ${renderFairwayPills(hole)}
               ${renderClubsHitPills(hole)}
-              ${renderBunkerPills(hole)}
               ${renderPenPills(hole)}
               ${renderPenaltyClubRow(hole)}
+              ${renderBunkerPills(hole)}
               <label class="card-note-field">
                 <span>What happened on this hole?</span>
                 <textarea class="card-note-input" data-hole="${hole.number}" rows="2" placeholder="Drove left, chipped twice, 2-putt from 12ft… (tap the mic on your keyboard for voice)">${escapeHtml(getHoleNote(hole.number))}</textarea>
