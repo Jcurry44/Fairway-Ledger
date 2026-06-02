@@ -1949,11 +1949,26 @@
 
     if (isNineHole) {
       const nines = deerwoodLayoutOptions["9"];
-      const currentNine = els.roundLayout.value;
+      // Capture before innerHTML rebuild — both the explicit 9-hole pick
+      // (if previously set) AND the front-9 of the prior 18-hole layout.
+      // Switching 18 → 9 should default the single-nine pick to whichever
+      // nine you had as the front, so the holes 1-9 worth of data you
+      // entered map to the SAME physical holes after the switch (instead
+      // of silently shifting Doe scores onto Buck holes).
+      const previousLayout = els.roundLayout.value;
+      const previousFrontNine = els.roundFrontNine.value;
       els.roundLayout.innerHTML = nines
         .map((nine) => `<option value="${nine.id}">${nine.label}</option>`)
         .join("");
-      els.roundLayout.value = nines.some((n) => n.id === currentNine) ? currentNine : nines[0].id;
+      let resolvedNine;
+      if (nines.some((n) => n.id === previousLayout)) {
+        resolvedNine = previousLayout;
+      } else if (nines.some((n) => n.id === previousFrontNine)) {
+        resolvedNine = previousFrontNine;
+      } else {
+        resolvedNine = nines[0].id;
+      }
+      els.roundLayout.value = resolvedNine;
     } else {
       if (!DEERWOOD_NINE_IDS.includes(els.roundFrontNine.value)) els.roundFrontNine.value = "buck";
       if (!DEERWOOD_NINE_IDS.includes(els.roundBackNine.value)) els.roundBackNine.value = "doe";
