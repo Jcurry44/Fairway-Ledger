@@ -5546,7 +5546,9 @@
     if (!valid.length) return "";
     const paragraphs = [
       buildNarrativeHeadline(round, valid, allRounds),
-      buildNarrativeStory(valid),
+      buildNarrativeParTypes(round, valid, allRounds),
+      buildNarrativeStory(round, valid, allRounds),
+      buildNarrativeBestStretch(round, valid, allRounds),
       buildNarrativeCost(round, valid),
       buildNarrativeHighlights(round, valid),
       buildNarrativeNotes(round, valid),
@@ -5556,6 +5558,118 @@
     return paragraphs.join("\n\n");
   }
 
+  // Compute the user's typical to-par per par type, across same-length rounds
+  // (so 9-hole and 18-hole averages don't poison each other). Returns a map
+  // {3: <avg toPar per par-3 hole>, 4: ..., 5: ...} along with the sample
+  // sizes. Empty map if there aren't enough rounds to make a baseline.
+  function computeTypicalParTypeScoring(currentRound, allRounds) {
+    const others = allRounds.filter((r) =>
+      r && r.id !== currentRound.id
+      && Array.isArray(r.holes)
+      && r.holes.length === currentRound.holes.length
+      && r.holes.some((h) => Number.isFinite(h.score) && h.score > 0)
+    );
+    // Need ≥3 prior rounds for a stable baseline; otherwise the "typical"
+    // value is just one round's noise.
+    if (others.length < 3) return null;
+    const buckets = { 3: [], 4: [], 5: [] };
+    others.forEach((r) => {
+      r.holes.forEach((h) => {
+        if (!Number.isFinite(h.score) || h.score <= 0) return;
+        if (!Number.isFinite(h.par) || h.par < 3 || h.par > 5) return;
+        buckets[h.par].push(h.score - h.par);
+      });
+    });
+    const result = {};
+    [3, 4, 5].forEach((par) => {
+      const arr = buckets[par];
+      if (arr.length >= 6) {
+        result[par] = { avg: average(arr), n: arr.length, roundCount: others.length };
+      }
+    });
+    return Object.keys(result).length ? result : null;
+  }
+
+  // Paragraph 2 (NEW) — Par-type breakdown. The thing Jeff called out:
+  // when the par 5s went -3 in a round, the narrative should LEAD with that,
+  // not bury it. Compares each par type's to-par this round against the
+  // user's typical, only surfacing observations that beat (or trail) typical
+  // by enough strokes to matter. Up to two highlights (best + worst) per
+  // paragraph, ranked by absolute delta.
+  function buildNarrativeParTypes(round, valid, allRounds) {
+    const buckets = { 3: [], 4: [], 5: [] };
+    valid.forEach((h) => {
+      if (!Number.isFinite(h.par) || h.par < 3 || h.par > 5) return;
+      buckets[h.par].push(h.score - h.par);
+    });
+    const typical = computeTypicalParTypeScoring(round, allRounds);
+    const entries = [];
+    [3, 4, 5].forEach((par) => {
+      const holes = buckets[par];
+      if (!holes.length) return;
+      const total = holes.reduce((s, v) => s + v, 0);
+      const avgPerHole = total / holes.length;
+      const typ = typical && typical[par];
+      // Significance threshold scales by sample count — a single par-3
+      // birdie matters less than a four-hole sweep of par 5s.
+      const totalDelta = typ ? (avgPerHole - typ.avg) * holes.length : null;
+      entries.push({
+        par,
+        holes: holes.length,
+        total,
+        avgPerHole,
+        typicalAvg: typ ? typ.avg : null,
+        totalDelta // negative means better than typical
+      });
+    });
+    if (!entries.length) return "";
+
+    const named = { 3: "par 3s", 4: "par 4s", 5: "par 5s" };
+    const phrases = [];
+
+    // Absolute first: surface any par type with a strong total (≥3 strokes
+    // under par across the round) — that's "your par 5s went -3" energy.
+    entries.forEach((e) => {
+      if (e.total <= -3 && e.holes >= 2) {
+        phrases.push({
+          priority: 4 - e.total, // -3 → 7, -5 → 9, etc
+          text: `Par 5s` === named[e.par] ? "" : "",
+          phrase: `${named[e.par]} carried the round — ${formatSigned(e.total, 0)} across the ${e.holes}`,
+          kind: "good"
+        });
+      }
+    });
+
+    // Relative-to-typical highlights. Up to 1 best and 1 worst by delta.
+    if (typical) {
+      const ranked = [...entries]
+        .filter((e) => Number.isFinite(e.totalDelta) && e.holes >= 2)
+        .sort((a, b) => Math.abs(b.totalDelta) - Math.abs(a.totalDelta));
+      const best = ranked.find((e) => e.totalDelta <= -1.5);
+      const worst = ranked.find((e) => e.totalDelta >= 2);
+      if (best && !phrases.some((p) => p.phrase.startsWith(named[best.par]))) {
+        const typTotal = (best.typicalAvg * best.holes);
+        phrases.push({
+          priority: 3 + Math.abs(best.totalDelta),
+          phrase: `${named[best.par]} were ${Math.abs(best.totalDelta).toFixed(1)} strokes better than your typical (${formatSigned(best.total, 0)} vs ${formatSigned(typTotal, 1)})`,
+          kind: "good"
+        });
+      }
+      if (worst) {
+        phrases.push({
+          priority: 2 + worst.totalDelta,
+          phrase: `${named[worst.par]} cost you — ${formatSigned(worst.total, 0)} across ${worst.holes} (you usually score ${formatSigned(worst.typicalAvg * worst.holes, 1)} on the par ${worst.par}s here)`,
+          kind: "bad"
+        });
+      }
+    }
+
+    if (!phrases.length) return "";
+    // Take up to 2 phrases, highest-priority first. Format as sentences.
+    const top = phrases.sort((a, b) => b.priority - a.priority).slice(0, 2);
+    return top.map((p) => p.phrase.charAt(0).toUpperCase() + p.phrase.slice(1) + ".").join(" ");
+  }
+
   // Paragraph 1 — Headline. Score + course + how it compares to your recent
   // form + (for 18-hole rounds) front/back split + scoring shape.
   function buildNarrativeHeadline(round, valid, allRounds) {
@@ -5563,18 +5677,58 @@
     const totals = roundTotals(round);
     const parts = [`Shot ${totals.gross} (${formatSigned(totals.toPar, 0)}) at ${courseName}`];
 
-    // Recent form: only compare against same-length rounds (9 vs 18 mixing
-    // is meaningless). And only mention if we have at least 2 prior data points.
-    const others = allRounds
+    // Course-specific context wins over generic recent-form when we have it.
+    // Compare against same-length rounds AT THIS PHYSICAL COURSE (pooling
+    // tee variants — your Ridgeview Blue 87 and Ridgeview White 89 both
+    // count toward "your Ridgeview average"). Falls through to the generic
+    // recent-form comparison when course history is too thin.
+    const sameCourseSameLen = allRounds.filter((r) =>
+      r.id !== round.id
+      && r.holes.length === round.holes.length
+      && physicalCourseName(r.courseId) === courseName
+      && r.holes.some((h) => Number.isFinite(h.score) && h.score > 0)
+    );
+    const recentSameLen = allRounds
       .filter((r) => r.id !== round.id && r.holes.length === round.holes.length)
       .filter((r) => r.holes.some((h) => Number.isFinite(h.score) && h.score > 0))
       .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
       .slice(0, 5)
       .map(roundTotals);
-    if (others.length >= 2) {
-      const recentAvg = average(others.map((t) => t.toPar));
+
+    let comparedToCourse = false;
+    if (sameCourseSameLen.length >= 3) {
+      const courseTotals = sameCourseSameLen.map(roundTotals);
+      const courseAvgToPar = average(courseTotals.map((t) => t.toPar));
+      const delta = totals.toPar - courseAvgToPar;
+      if (delta <= -4) {
+        // Check if this is the best-ever at this course.
+        const bestSoFar = courseTotals.reduce((b, t) => t.gross < b ? t.gross : b, Infinity);
+        const isBest = totals.gross < bestSoFar;
+        parts.push(isBest
+          ? `your best ever at ${courseName} (previous best ${bestSoFar})`
+          : `${Math.abs(delta).toFixed(1)} better than your ${courseName} average (${formatSigned(courseAvgToPar, 1)})`);
+        comparedToCourse = true;
+      } else if (delta <= -1.5) {
+        parts.push(`${Math.abs(delta).toFixed(1)} better than your ${courseName} average (${formatSigned(courseAvgToPar, 1)})`);
+        comparedToCourse = true;
+      } else if (delta >= 4) {
+        parts.push(`a tough one for you here (${courseName} avg ${formatSigned(courseAvgToPar, 1)})`);
+        comparedToCourse = true;
+      } else if (delta >= 1.5) {
+        parts.push(`a tick above your ${courseName} average (${formatSigned(courseAvgToPar, 1)})`);
+        comparedToCourse = true;
+      } else {
+        parts.push(`right around your ${courseName} average`);
+        comparedToCourse = true;
+      }
+    }
+
+    // Generic recent-form comparison only when we DIDN'T already say
+    // course-specific (avoid double comparison).
+    if (!comparedToCourse && recentSameLen.length >= 2) {
+      const recentAvg = average(recentSameLen.map((t) => t.toPar));
       const delta = totals.toPar - recentAvg;
-      if (delta <= -4) parts.push(`well below your recent ${others.length}-round average (${formatSigned(recentAvg, 1)})`);
+      if (delta <= -4) parts.push(`well below your recent ${recentSameLen.length}-round average (${formatSigned(recentAvg, 1)})`);
       else if (delta <= -1.5) parts.push(`better than your recent average (${formatSigned(recentAvg, 1)})`);
       else if (delta >= 4) parts.push(`a tougher day than usual (recent avg ${formatSigned(recentAvg, 1)})`);
       else if (delta >= 1.5) parts.push(`a touch above your recent average (${formatSigned(recentAvg, 1)})`);
@@ -5642,11 +5796,45 @@
     return bits.join(", ") + ".";
   }
 
+  // Best 3-hole stretch (and worst, if it's dramatic). Surfaces "your
+  // hottest run of the round" so the user sees the moment that worked.
+  // Skips if no stretch is meaningfully under par.
+  function buildNarrativeBestStretch(round, valid, allRounds) {
+    if (valid.length < 5) return "";
+    // Walk valid holes in saved order. For each window of 3, compute
+    // cumulative to-par. We need the holes to be CONSECUTIVE in the
+    // original card — so go off round.holes, but require all 3 to be
+    // scored.
+    let bestStart = -1, bestSum = 99;
+    let worstStart = -1, worstSum = -99;
+    for (let i = 0; i <= round.holes.length - 3; i++) {
+      const window = round.holes.slice(i, i + 3);
+      if (!window.every((h) => Number.isFinite(h.score) && h.score > 0 && Number.isFinite(h.par))) continue;
+      const sum = window.reduce((s, h) => s + (h.score - h.par), 0);
+      if (sum < bestSum) { bestSum = sum; bestStart = i; }
+      if (sum > worstSum) { worstSum = sum; worstStart = i; }
+    }
+    const phrases = [];
+    if (bestStart >= 0 && bestSum <= -2) {
+      const holes = round.holes.slice(bestStart, bestStart + 3);
+      const startLabel = holeDisplayId(round.courseId, holes[0].label, holes[0].number);
+      const endLabel = holeDisplayId(round.courseId, holes[2].label, holes[2].number);
+      phrases.push(`Hottest stretch: ${startLabel}–${endLabel} went ${formatSigned(bestSum, 0)}`);
+    }
+    if (worstStart >= 0 && worstSum >= 5) {
+      const holes = round.holes.slice(worstStart, worstStart + 3);
+      const startLabel = holeDisplayId(round.courseId, holes[0].label, holes[0].number);
+      const endLabel = holeDisplayId(round.courseId, holes[2].label, holes[2].number);
+      phrases.push(`Tough patch: ${startLabel}–${endLabel} cost ${formatSigned(worstSum, 0)}`);
+    }
+    return phrases.length ? phrases.join(". ") + "." : "";
+  }
+
   // Paragraph 2 — Story. The "what worked / what didn't" paragraph. We
   // generate every observation that meets a threshold, then take the top 3
   // most interesting (extremes first — really good or really bad) so the
   // paragraph stays a tight 2-3 sentences.
-  function buildNarrativeStory(valid) {
+  function buildNarrativeStory(round, valid, allRounds) {
     const lines = [];
 
     // Tee game — fairway rate.
