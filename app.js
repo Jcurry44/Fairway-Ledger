@@ -5244,8 +5244,23 @@
     if (els.bucketSheetClose) els.bucketSheetClose.focus();
   }
 
+  // Pluralize a scoring-tier label for use as a noun ("Birdie" → "birdies",
+  // "Par" → "pars", "Eagle+" → "eagles", "Triple+" → "triples"). Strip any
+  // trailing "+" — it's a UI ornament, not part of the word.
+  function pluralizeTierLabel(label) {
+    const stripped = (label || "").replace(/\+$/, "").trim();
+    if (!stripped) return "holes";
+    return stripped.toLowerCase() + "s";
+  }
+
+  // Singular verb form for "Holes you ___ the most" — strip the trailing s
+  // off the pluralized noun. "birdies" → "birdie", "pars" → "par".
+  function singularTierVerb(pluralLabel) {
+    return (pluralLabel || "holes").replace(/s$/, "");
+  }
+
   function renderBucketBreakdown(bucket, breakdown) {
-    const lowerLabel = (bucket.label || "holes").toLowerCase();
+    const lowerLabel = pluralizeTierLabel(bucket.label);
     const totalHolesPlayed = computeTotalHolesPlayedAcrossRounds();
     const pctOverall = totalHolesPlayed > 0
       ? ((breakdown.total / totalHolesPlayed) * 100).toFixed(1)
@@ -5304,7 +5319,7 @@
       }).join("");
       return `
         <li class="bucket-breakdown-section">
-          <h4 class="bucket-breakdown-header">Holes you ${lowerLabel.replace(/s$/, "")} the most</h4>
+          <h4 class="bucket-breakdown-header">Holes you ${singularTierVerb(lowerLabel)} the most</h4>
           <ul class="bucket-breakdown-list">${lines}</ul>
         </li>`;
     })();
