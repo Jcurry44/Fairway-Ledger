@@ -2760,6 +2760,69 @@ body.floating-card-nav-visible .floating-card-nav {
   display: none;
 }
 
+/* Review-and-save preview panel — Summary + Scorecard collapsible blocks
+   so the user can see exactly what's about to be saved without leaving
+   the entry flow. */
+.review-preview {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.review-preview[hidden] {
+  display: none;
+}
+
+.review-preview-block {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfdfa;
+  overflow: hidden;
+}
+
+.review-preview-block > summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-weight: 800;
+  color: var(--ink);
+  font-size: 0.9rem;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.review-preview-block > summary::-webkit-details-marker {
+  display: none;
+}
+
+.review-preview-block > summary::after {
+  content: "▾";
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-left: 8px;
+}
+
+.review-preview-block[open] > summary::after {
+  content: "▴";
+}
+
+.review-preview-body {
+  padding: 4px 14px 14px;
+}
+
+.review-preview-body p {
+  margin: 0 0 8px;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.review-preview-body p:last-child {
+  margin-bottom: 0;
+}
+
 .completion-banner {
   display: flex;
   align-items: flex-start;
@@ -4480,9 +4543,15 @@ body.floating-card-nav-visible .floating-card-nav {
   font-weight: 700;
 }
 
+/* CSS grid with exactly 9 columns guarantees a 9-hole nine stays on one
+   row at any viewport width — the previous flex-wrap layout would push
+   the 9th cell to its own row whenever min-width × 9 exceeded the
+   container, which made every 18-hole round show as 4 ragged rows on
+   phones. minmax(0, 1fr) lets cells shrink below their content width
+   so the layout never overflows. */
 .rsc-holes {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
   gap: 2px;
 }
 
@@ -4491,10 +4560,8 @@ body.floating-card-nav-visible .floating-card-nav {
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  flex: 1 0 auto;
-  width: calc((100% - 16px) / 9);
-  min-width: 38px;
   padding: 4px 0;
+  min-width: 0;
 }
 
 .rsc-cell-label {

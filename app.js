@@ -561,6 +561,7 @@
     roundLiveSummary: document.getElementById("roundLiveSummary"),
     completionCheck: document.getElementById("completionCheck"),
     reviewSection: document.getElementById("reviewSection"),
+    reviewPreview: document.getElementById("reviewPreview"),
     roundForm: document.getElementById("roundForm"),
     resetRoundButton: document.getElementById("resetRoundButton"),
     viewToggleButton: document.getElementById("viewToggleButton"),
@@ -3112,6 +3113,87 @@
     document.body.classList.remove("hole-picker-open");
   }
 
+  // Build a Round-shaped object from the in-progress scorecard state so the
+  // review panel can preview what the saved round will look like. Uses the
+  // canonical makeRound / makeHole builders so future-added fields don't
+  // silently fall through. The id is a stable but recognizable sentinel —
+  // it has to be unique so generateRoundNarrative's "vs your other rounds"
+  // filter doesn't see the round comparing against itself.
+  function buildInProgressRoundShape(allHoles) {
+    const holes = allHoles.map((h) => makeHole({
+      number: h.number,
+      label: h.label,
+      par: h.par,
+      yards: h.yards,
+      score: h.score,
+      putts: h.putts,
+      firstPuttDistance: h.firstPuttDistance,
+      fringePutts: h.fringePutts,
+      fairwayHit: h.fairwayHit,
+      greenInRegulation: h.greenInRegulation,
+      clubsHit: h.clubsHit,
+      penaltyClubs: h.penaltyClubs,
+      penalties: h.penalties,
+      bunker: h.bunker,
+      note: h.note
+    }));
+    return makeRound({
+      id: "__in_progress_review_preview__",
+      courseId: els.roundCourse ? els.roundCourse.value : "",
+      date: els.roundDate ? els.roundDate.value : today,
+      holes,
+      wind: els.roundWind ? els.roundWind.value : "",
+      tag: els.roundTag ? els.roundTag.value : "",
+      note: els.roundNote ? els.roundNote.value : ""
+    });
+  }
+
+  // Render Summary + Scorecard previews inside the Review & Save panel so
+  // the user can see what they're about to save without leaving the entry
+  // flow. Both blocks are <details> collapsed by default — Jeff didn't
+  // want them to crowd the reflection inputs.
+  function renderReviewPreview(allHoles) {
+    if (!els.reviewPreview) return;
+    const scored = allHoles.filter((h) => Number.isFinite(h.score) && h.score > 0);
+    // Nothing entered yet → hide the section entirely; the completion check
+    // will say "missing scores" and that's enough on its own.
+    if (!scored.length) {
+      els.reviewPreview.innerHTML = "";
+      els.reviewPreview.hidden = true;
+      return;
+    }
+    const previewRound = buildInProgressRoundShape(allHoles);
+    // Narrative uses `state.rounds` to compute "vs your typical" baselines
+    // and personal-best detection. The in-progress round's sentinel id keeps
+    // it from comparing against itself.
+    let narrativeHtml = "";
+    try {
+      const narrative = generateRoundNarrative(previewRound, state.rounds);
+      if (narrative) {
+        const paragraphs = narrative.split("\n\n")
+          .map((p) => `<p>${escapeHtml(p)}</p>`)
+          .join("");
+        narrativeHtml = `
+          <details class="review-preview-block">
+            <summary>Summary</summary>
+            <div class="review-preview-body">${paragraphs}</div>
+          </details>`;
+      }
+    } catch (err) {
+      // Defensive: a partially-filled round shouldn't crash the review panel.
+      // If narrative generation throws, just skip it and still show the
+      // scorecard.
+      console.warn("review preview narrative failed", err);
+    }
+    const scorecardHtml = `
+      <details class="review-preview-block">
+        <summary>Scorecard</summary>
+        <div class="review-preview-body">${renderRoundScorecard(previewRound)}</div>
+      </details>`;
+    els.reviewPreview.innerHTML = narrativeHtml + scorecardHtml;
+    els.reviewPreview.hidden = false;
+  }
+
   function renderCompletionCheck(allHoles, enteredHoles) {
     if (!els.completionCheck) return;
     if (!allHoles.length) {
@@ -3402,6 +3484,7 @@
     const allHoles = readScorecard(false);
     const entered = allHoles.filter((hole) => Number.isFinite(hole.score) && hole.score > 0);
     renderCompletionCheck(allHoles, entered);
+    renderReviewPreview(allHoles);
     // Collapse the setup section the first time a score lands — the round is
     // underway, so get the fields out of the way and focus on the scorecard.
     if (entered.length >= 1 && !roundChromeAutoCollapsed) {
