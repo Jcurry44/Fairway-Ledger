@@ -4,8 +4,9 @@
 survive context resets. Each entry has the original prompt/thought + my
 take + a rough effort estimate.*
 
-Last updated: 2026-05-26 (autonomous batch + bugfix passes shipped to main;
-Garmin integration captured below pending sample data from Jeff's brother)
+Last updated: 2026-06-05 (insights batch — smarter narrative + tier
+multi-dim summary + architecture roadmap — sitting on branch
+`narrative-and-insights` pending Jeff's review; nothing pushed)
 
 ---
 
@@ -13,8 +14,100 @@ Garmin integration captured below pending sample data from Jeff's brother)
 
 The autonomous batch (items 1–8) and three bugfix passes are live on
 `main` and deployed to https://jcurry44.github.io/Fairway-Ledger/. Last
-commit: `fd7bcad`. See `git log` for the per-feature breakdown — each
-commit message includes the originating user quote and the change scope.
+commit on main: `fd7bcad`. See `git log` for the per-feature breakdown —
+each commit message includes the originating user quote and the change
+scope.
+
+---
+
+## On branch `narrative-and-insights` (NOT yet pushed — review first)
+
+Pre-modular backup tag: `pre-modular-snapshot` (points at the commit just
+before any modular work started — `git reset --hard pre-modular-snapshot`
+puts us back to that exact tree if anything goes wrong).
+
+### Smarter round narrative
+
+**User quote**: "I feel like the summary should be smarter. Like the one
+round I played the par 5's -3. Thats something that should have definitely
+been shouted out."
+
+**Shipped on branch (commit `7290b57`)**:
+- New `computeTypicalParTypeScoring(currentRound, allRounds)` — establishes
+  a per-par-type baseline from ≥3 prior same-length rounds with ≥6 holes
+  per par bucket
+- New `buildNarrativeParTypes` — surfaces par-type wins/losses, leads with
+  any par type that went ≥-3 across the round (the "par 5s carried it"
+  insight), then adds 1 best + 1 worst vs typical (threshold ±1.5 strokes
+  to avoid noise)
+- New `buildNarrativeBestStretch` — walks consecutive 3-hole windows for
+  best/worst stretches
+- `buildNarrativeHeadline` now does course-specific personal-best
+  detection ("your best ever at Ridgeview Golf Club, previous best 83")
+  before falling back to recent-form comparison
+
+### Tier drill-down: multi-dimensional summary
+
+**User quote**: "The distribution in holes is super cool, but I feel like
+when you click into like birdies or pars it should be more of a heatmap
+then show you every single hole that you have pard. There should be like
+a heatmap, summary view that shows like birdies on par 5's, 4's, 3s. By
+course maybe, which holes you have birdied the most."
+
+**Shipped on branch (commit `04ced5d`)**:
+- Tapping a scoring tier (Birdies, Pars, Doubles, etc) now opens a
+  breakdown view, not a flat hole list
+- Top line: overall rate ("12 birdies across 247 tracked holes, 4.9%")
+- By par type: count + how many distinct holes ("8 birdies on 5 different
+  par 5s")
+- By course (pooled via `physicalCourseName` so tee variants merge)
+- Holes you tier'd the most — top 5, with play-counts when available
+  ("Ridgeview · #7 · Par 5 — 3 birdies in 11 plays"), only shown if at
+  least one hole has ≥2 entries
+- Recent trend: last 5 rounds count vs prior 5, with ↗/↘/→ arrow
+- The original flat hole list still exists at the bottom inside a
+  collapsed `<details>` so you can drill into every single hole
+
+### Architecture roadmap (Task #37 — modular split groundwork)
+
+**User quote**: "if you have time which you should as I will be gone quite
+a while maybe start working on making this modular?"
+
+**Shipped on branch**:
+- `pre-modular-snapshot` git tag captures the exact pre-modular state for
+  a one-command rollback if needed
+- TOC comment block added to the top of `app.js` listing every major
+  section with approximate line ranges
+- New `ARCHITECTURE.md` documents:
+  - The no-build PWA model and the working modular pattern
+    (`lib/golf-math.js`, `lib/shapes.js`)
+  - Why we haven't split `app.js` yet (data-safety risk, no UI tests)
+  - Section map with per-seam purity + extraction blockers
+  - Suggested extraction order (narrative → insights → course-pooling →
+    snapshots → heatmap aggregator)
+  - Constraints to preserve (IIFE, sw.js core assets, cache-buster
+    discipline, snapshot path is P0)
+  - Step-by-step playbook for the first real extraction (narrative.js)
+
+**Deliberately NOT shipped on this branch**: any actual code extraction.
+Doing it without browser-verification would risk the snapshot/auto-export
+path, which is P0 per the data-safety memory. The roadmap is set up so
+the next session can do step 1 (narrative.js) cleanly and incrementally.
+
+### Verification checklist (do these before pushing the branch)
+
+- [ ] All 86 Node tests pass: `node --test tests/golf-math.test.js tests/shapes.test.js`
+- [ ] Boot the app locally, open a round with ≥3 prior same-length rounds,
+      confirm the narrative still renders and now mentions par-type
+      performance when relevant
+- [ ] Tap a tier on Scoring Distribution (Birdies if you have ≥1), confirm
+      the new breakdown view renders and the disclosure for the flat list
+      works
+- [ ] Cache buster bumped to `v=2026-06-05a` (verified in `index.html` +
+      `sw.js` CACHE_VERSION = `fairway-ledger-v64-2026-06-05a`)
+- [ ] No console errors in the browser
+- [ ] `git diff main..narrative-and-insights` looks like only the changes
+      above — no surprise edits
 
 ---
 

@@ -1,3 +1,46 @@
+// ============================================================================
+// Fairway Ledger — main app IIFE.
+//
+// This file is the single entry point for everything that isn't pure math. It
+// is intentionally one big closure (`(function () { ... })()`) so internal
+// state stays private — no globals leak except the small `window.GolfMath`
+// and `window.GolfShapes` namespaces that the lib/ modules expose for it.
+//
+// Pure math + shape helpers already live in lib/ (loaded as plain <script>s
+// before this one and unit-tested in Node):
+//   • lib/golf-math.js  → strokes-gained, hole math, handicap, physicalHoleId
+//   • lib/shapes.js     → canonical Round/Hole builders + normalizers
+//
+// MAP OF THIS FILE (approximate line ranges — search by section header to
+// jump). The `// ---- Title --------` comments below mark real seams used
+// for the future modular split (see ARCHITECTURE.md):
+//
+//   ~70   Per-hole pending state + small in-progress getters
+//   ~109  Optional post-round survey
+//   ~210  Notes
+//   ~225  Clubs hit (selector, multi-use logic, penalty-aware filtering)
+//   ~400  Penalty clubs (multi-penalty, OB sub-chip)
+//   ~976  Snapshot system: rolling localStorage backups
+//   ~1532 Physical course grouping (pooling tee variants)
+//   ~1602 Chip-style form selectors (generic UI helper)
+//   ~1691 Start Round flow (course pick, hole-count switch, Deerwood logic)
+//   ~3913 Par-type drill-down sheet + scoring summary tiles
+//   ~4179 Heatmap (Holes tab)
+//   ~4598 Drill-down sheet (stat → holes)
+//   ~5042 Scoring distribution + bucket sheet (multi-dim summary)
+//   ~5781 Narrative builders (par-type, headline, best-stretch, story)
+//   ~6209 Optional reflection survey paragraph
+//   ~6503 Trophy Room (records)
+//   ~6682 Stats Explorer (currently hidden from Home)
+//   ~7525 Destructive-action typed-confirmation modal
+//   ~7618 Snapshot restore panel (Profile)
+//   ~7707 Round detail sheet
+//
+// Adding a new feature? Find the seam closest to what you're touching and
+// keep the new code there — that's what makes ARCHITECTURE.md's eventual
+// per-seam extraction safe.
+// ============================================================================
+
 (function () {
   "use strict";
 
