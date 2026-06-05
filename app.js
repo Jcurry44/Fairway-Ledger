@@ -1212,13 +1212,23 @@
     snapshot.forEach((values, holeNumber) => {
       holes.push({ number: holeNumber, ...values });
     });
+    // For Deerwood 18-hole rounds the layout is NOT stored in roundLayout —
+    // it's composed from roundFrontNine + roundBackNine ("doe-buck", etc).
+    // Saving the bare roundLayout.value here meant 18-hole Deerwood drafts
+    // serialized an empty/stale layoutId, and on resume the restore block
+    // saw no layoutId → kept the default Buck-Doe order → the user's saved
+    // hole scores reattached to the wrong physical holes. Always go through
+    // getSelectedRoundLayoutId() so 9-hole and 18-hole both serialize the
+    // canonical id that restore expects ("buck", "doe-buck", etc).
+    const isDeerwood = els.roundCourse && els.roundCourse.value === DEERWOOD_COURSE_ID;
+    const layoutId = isDeerwood ? getSelectedRoundLayoutId() : (els.roundLayout ? els.roundLayout.value || "" : "");
     return {
       v: 1,
       savedAt: Date.now(),
       date: els.roundDate ? els.roundDate.value || "" : "",
       course: els.roundCourse ? els.roundCourse.value || "" : "",
       holeCount: els.roundHoleCount ? els.roundHoleCount.value || "" : "",
-      layoutId: els.roundLayout ? els.roundLayout.value || "" : "",
+      layoutId,
       tee: els.roundTee ? els.roundTee.value || "" : "",
       wind: els.roundWind ? els.roundWind.value || "" : "",
       note: els.roundNote ? els.roundNote.value || "" : "",
@@ -3360,7 +3370,20 @@
       const penaltyInput = els.scorecardGrid.querySelector(`.penalty-input[data-hole="${hole}"]`);
       const firstPuttInput = els.scorecardGrid.querySelector(`.first-putt-input[data-hole="${hole}"]`);
       const fringePuttsInput = els.scorecardGrid.querySelector(`.fringe-putts-input[data-hole="${hole}"]`);
-      if (scoreInput && values.score !== "") scoreInput.value = values.score;
+      if (scoreInput && values.score !== "") {
+        scoreInput.value = values.score;
+        // Stamp dataset.autoScore so recalculateScoreForHole treats the
+        // loaded value as "still being driven by auto-calc" rather than a
+        // manual override. Without this, editing a saved round and then
+        // changing any input (clubs / putts / penalties) leaves the score
+        // frozen on its loaded value because the recalc bail-out
+        // (currentValue !== lastAuto) fires every time. A real manual
+        // override gets re-asserted as soon as the user taps a score pill
+        // — the pill handler clears dataset.autoScore. This is the
+        // "least-surprise" choice in edit mode: tweaking clubs after the
+        // fact updates the score; explicit score taps win.
+        scoreInput.dataset.autoScore = String(values.score);
+      }
       if (puttsInput && values.putts !== "") puttsInput.value = values.putts;
       if (fairwayInput && values.fairway && [...fairwayInput.options].some((option) => option.value === values.fairway)) {
         fairwayInput.value = values.fairway;
@@ -8260,7 +8283,18 @@
       const penaltyInput = els.scorecardGrid.querySelector(`.penalty-input[data-hole="${holeKey}"]`);
       const firstPuttInput = els.scorecardGrid.querySelector(`.first-putt-input[data-hole="${holeKey}"]`);
       const fringePuttsInput = els.scorecardGrid.querySelector(`.fringe-putts-input[data-hole="${holeKey}"]`);
-      if (scoreInput && Number.isFinite(hole.score)) scoreInput.value = hole.score;
+      if (scoreInput && Number.isFinite(hole.score)) {
+        scoreInput.value = hole.score;
+        // Treat the loaded score as the "current auto-fill" so editing
+        // any other input (clubs / putts / penalties) on the hole
+        // updates the score. Without this, dataset.autoScore is empty
+        // and recalculateScoreForHole's "is this still auto-driven?"
+        // gate (currentValue === lastAuto) fails — every loaded score
+        // looks like a manual override and the recalc skips it.
+        // Manual overrides re-stick the moment the user taps a score
+        // pill (the pill handler clears dataset.autoScore).
+        scoreInput.dataset.autoScore = String(hole.score);
+      }
       if (puttsInput && Number.isFinite(hole.putts)) puttsInput.value = hole.putts;
       if (penaltyInput && Number.isFinite(hole.penalties)) penaltyInput.value = hole.penalties;
       if (firstPuttInput && Number.isFinite(hole.firstPuttDistance)) firstPuttInput.value = hole.firstPuttDistance;
