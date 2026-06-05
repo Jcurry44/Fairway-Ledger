@@ -58,8 +58,24 @@ test("makeHole(): blank penalty fields stay blank arrays/strings", () => {
 });
 
 test("ROUND_FIELDS lists all canonical round fields", () => {
-  const expected = ["id", "date", "courseId", "tee", "wind", "note", "narrative", "tag", "survey", "holes"];
+  const expected = ["id", "date", "courseId", "tee", "wind", "note", "narrative", "tag", "entryMode", "survey", "holes"];
   assert.deepEqual([...S.ROUND_FIELDS], expected);
+});
+
+test("makeRound(): entryMode defaults to 'detailed'", () => {
+  const r = S.makeRound();
+  assert.equal(r.entryMode, "detailed");
+});
+
+test("makeRound(): entryMode 'speed' override is preserved", () => {
+  const r = S.makeRound({ entryMode: "speed" });
+  assert.equal(r.entryMode, "speed");
+});
+
+test("normalizeRound(): legacy round without entryMode picks up 'detailed' default", () => {
+  const legacy = { id: "r1", date: "2026-01-01", courseId: "c", holes: [] };
+  const r = S.normalizeRound(legacy);
+  assert.equal(r.entryMode, "detailed");
 });
 
 test("makeRound(): tag defaults to empty string", () => {

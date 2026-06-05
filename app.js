@@ -97,6 +97,26 @@
       return "narrative";
     } catch { return "narrative"; }
   })();
+
+  // Per-installation default for round entry mode. "detailed" surfaces every
+  // per-hole input (clubs, FIR, GIR, putts, penalties, note). "speed" hides
+  // them all and leaves only the score input — useful for players who just
+  // want a final gross without the data-entry overhead (Jeff's wife, higher
+  // handicap rounds, casual play). Per-round override lives in the round
+  // setup banner. Default to "detailed" so anyone who already had the app
+  // before this feature sees no behavior change.
+  const ENTRY_MODE_DEFAULT_KEY = "fairwayLedger.entryModeDefault.v1";
+  let entryModeDefault = (() => {
+    try {
+      const saved = localStorage.getItem(ENTRY_MODE_DEFAULT_KEY);
+      if (saved === "speed") return "speed";
+      return "detailed";
+    } catch { return "detailed"; }
+  })();
+  // Entry mode for the round currently being entered / edited. Seeded from
+  // the per-installation default on start, swappable in the setup banner
+  // mid-round, persisted onto the round on save (round.entryMode).
+  let currentEntryMode = entryModeDefault;
   const IN_PROGRESS_DEBOUNCE_MS = 500;
   const BACKUP_NAG_THRESHOLD = 3;
   // Auto-export an off-device JSON backup once you've added this many rounds
@@ -548,6 +568,10 @@
     roundWind: document.getElementById("roundWind"),
     roundTag: document.getElementById("roundTag"),
     roundTagField: document.getElementById("roundTagField"),
+    roundEntryMode: document.getElementById("roundEntryMode"),
+    roundEntryModeField: document.getElementById("roundEntryModeField"),
+    entryModeDetailedDefault: document.getElementById("entryModeDetailedDefault"),
+    entryModeSpeedDefault: document.getElementById("entryModeSpeedDefault"),
     filterTag: document.getElementById("filterTag"),
     roundSetup: document.getElementById("roundSetup"),
     roundSetupBanner: document.getElementById("roundSetupBanner"),
@@ -2056,6 +2080,7 @@
 
     seedDefaultClubs(course);
     els.scorecardGrid.className = `scorecard mode-${viewMode}`;
+    els.scorecardGrid.dataset.entryMode = currentEntryMode;
     els.scorecardGrid.innerHTML = viewMode === "card"
       ? renderScorecardCardMode(course)
       : renderScorecardGridMode(course);
@@ -2543,7 +2568,7 @@
     }).join("");
 
     return `
-      <div class="scorecard-cards" data-active-index="0">${cards}</div>
+      <div class="scorecard-cards" data-active-index="0" data-entry-mode="${escapeHtml(currentEntryMode)}">${cards}</div>
       <div class="scorecard-card-nav">
         <button type="button" class="card-nav-button" data-card-nav="prev">← Prev</button>
         <button type="button" class="card-nav-button card-nav-button-primary" data-card-nav="next">Next →</button>
@@ -3203,6 +3228,9 @@
     }
     // Identify what's missing: score is required; flag empty putts (user
     // cleared) or empty first-putt-distance (truly null) as soft warnings.
+    // In speed mode, the only required field is score — the putts row is
+    // hidden, so it makes no sense to flag every hole as "missing putts."
+    const speedMode = currentEntryMode === "speed";
     const missingScore = [];
     const missingPutts = [];
     const missingFirstPutt = [];
@@ -3212,6 +3240,7 @@
         missingScore.push(hole);
         return; // Other fields aren't worth flagging on a hole with no score
       }
+      if (speedMode) return; // Score is the only required field
       const puttsInput = els.scorecardGrid.querySelector(`.putts-input[data-hole="${hole.number}"]`);
       if (puttsInput && puttsInput.value.trim() === "") missingPutts.push(hole);
       if (hole.firstPuttDistance === null || hole.firstPuttDistance === undefined) {
@@ -8136,8 +8165,11 @@
     resetPendingHoles(); resetReviewState();
     resetPendingSurvey(); syncSurveyUiFromState();
     if (els.surveyDetails) els.surveyDetails.open = false;
-    // Cancelling an edit returns the form to fresh-setup state.
+    // Cancelling an edit returns the form to fresh-setup state. Reset entry
+    // mode back to the per-installation default so the next fresh round
+    // doesn't inherit whatever mode the edited round was in.
     resetRoundSetupState();
+    setCurrentEntryMode(entryModeDefault);
     updateEditModeUi();
     resetRoundChrome();
     if (rerender) renderScorecard(getSelectedRoundCourse());
@@ -8154,6 +8186,10 @@
     els.roundNote.value = round.note || "";
     if (els.roundWind) els.roundWind.value = round.wind || "";
     if (els.roundTag) els.roundTag.value = round.tag || "";
+    // Restore the entry mode this round was originally saved with so the
+    // edited card layout matches what's on file. Legacy rounds (no
+    // entryMode field) default to "detailed" via the shape normalizer.
+    setCurrentEntryMode(round.entryMode === "speed" ? "speed" : "detailed");
 
     // Hydrate the optional reflection survey from the saved round (if any).
     resetPendingSurvey();
@@ -8511,6 +8547,60 @@
     if (els.cardFlowNarrative.checked) setCardFlowMode("narrative");
   });
 
+  // Entry mode — per-installation default (Profile radio) and per-round
+  // override (round-setup banner chip). The default seeds currentEntryMode
+  // on app load; the per-round chip flips currentEntryMode in place. When
+  // currentEntryMode flips mid-round, the scorecard re-renders so the new
+  // mode's chrome shows up immediately — and because pending hole state
+  // lives in the hidden inputs / pendingHole map, nothing already entered
+  // is lost in the switch.
+  function setEntryModeDefault(next) {
+    if (next !== "detailed" && next !== "speed") return;
+    if (entryModeDefault === next) return;
+    entryModeDefault = next;
+    try { localStorage.setItem(ENTRY_MODE_DEFAULT_KEY, next); } catch {}
+    syncEntryModeDefaultRadios();
+  }
+
+  function setCurrentEntryMode(next) {
+    if (next !== "detailed" && next !== "speed") return;
+    if (currentEntryMode === next) return;
+    currentEntryMode = next;
+    if (els.roundEntryMode && els.roundEntryMode.value !== next) {
+      els.roundEntryMode.value = next;
+      // Repaint the chip-style picker so the new selection is reflected.
+      els.roundEntryMode.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    applyEntryModeToScorecard();
+  }
+
+  function applyEntryModeToScorecard() {
+    if (!els.scorecardGrid) return;
+    const cards = els.scorecardGrid.querySelector(".scorecard-cards");
+    if (cards) cards.dataset.entryMode = currentEntryMode;
+    els.scorecardGrid.dataset.entryMode = currentEntryMode;
+  }
+
+  function syncEntryModeDefaultRadios() {
+    if (els.entryModeDetailedDefault) els.entryModeDetailedDefault.checked = entryModeDefault === "detailed";
+    if (els.entryModeSpeedDefault) els.entryModeSpeedDefault.checked = entryModeDefault === "speed";
+  }
+  syncEntryModeDefaultRadios();
+  if (els.entryModeDetailedDefault) els.entryModeDetailedDefault.addEventListener("change", () => {
+    if (els.entryModeDetailedDefault.checked) setEntryModeDefault("detailed");
+  });
+  if (els.entryModeSpeedDefault) els.entryModeSpeedDefault.addEventListener("change", () => {
+    if (els.entryModeSpeedDefault.checked) setEntryModeDefault("speed");
+  });
+  if (els.roundEntryMode) {
+    // Seed the in-banner control with the per-installation default so a
+    // fresh page load shows the right option highlighted.
+    els.roundEntryMode.value = currentEntryMode;
+    els.roundEntryMode.addEventListener("change", () => {
+      setCurrentEntryMode(els.roundEntryMode.value || "detailed");
+    });
+  }
+
   if (els.holePickerBackdrop) els.holePickerBackdrop.addEventListener("click", closeHolePicker);
   if (els.holePickerClose) els.holePickerClose.addEventListener("click", closeHolePicker);
   if (els.bucketSheetBackdrop) els.bucketSheetBackdrop.addEventListener("click", closeScoringBucketSheet);
@@ -8674,6 +8764,7 @@
           tee: course.tee,
           wind: els.roundWind ? els.roundWind.value || "" : "",
           tag: els.roundTag ? els.roundTag.value || "" : "",
+          entryMode: currentEntryMode,
           note,
           survey: surveyForSave,
           holes
@@ -8703,6 +8794,7 @@
           tee: course.tee,
           wind: els.roundWind ? els.roundWind.value || "" : "",
           tag: els.roundTag ? els.roundTag.value || "" : "",
+          entryMode: currentEntryMode,
           note,
           survey: surveyForSave,
           holes

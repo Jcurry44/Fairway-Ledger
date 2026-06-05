@@ -15,9 +15,9 @@
     <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
          icon, theme color in the browser chrome, and a standalone display
          mode instead of a tab. -->
-    <link rel="manifest" href="./manifest.json?v=2026-06-05b">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-06-05b">
-    <link rel="apple-touch-icon" href="./icon.svg?v=2026-06-05b">
+    <link rel="manifest" href="./manifest.json?v=2026-06-05c">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-06-05c">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-06-05c">
     <meta name="theme-color" content="#1f7a59">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -32,11 +32,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
 
-    <link rel="stylesheet" href="./styles.css?v=2026-06-05b">
-    <script src="./data/courses.js?v=2026-06-05b" defer></script>
-    <script src="./lib/golf-math.js?v=2026-06-05b" defer></script>
-    <script src="./lib/shapes.js?v=2026-06-05b" defer></script>
-    <script src="./app.js?v=2026-06-05b" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-06-05c">
+    <script src="./data/courses.js?v=2026-06-05c" defer></script>
+    <script src="./lib/golf-math.js?v=2026-06-05c" defer></script>
+    <script src="./lib/shapes.js?v=2026-06-05c" defer></script>
+    <script src="./app.js?v=2026-06-05c" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -396,6 +396,13 @@
                     <option value="practice">Practice</option>
                   </select>
                 </label>
+                <label id="roundEntryModeField" class="has-chips">
+                  Entry mode
+                  <select id="roundEntryMode" data-use-chips="true">
+                    <option value="detailed">Detailed (everything)</option>
+                    <option value="speed">Speed (score only)</option>
+                  </select>
+                </label>
               </div>
 
               <div id="roundCourseMeta" class="course-meta-strip"></div>
@@ -600,6 +607,33 @@
               <label class="card-flow-option">
                 <input type="radio" name="cardFlowMode" value="default" id="cardFlowDefault">
                 <span><strong>Outcome-first</strong> — Score · Putts · Fairway · Clubs · …</span>
+              </label>
+            </div>
+          </article>
+
+          <article class="panel wide-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Preferences</p>
+                <h2>Entry mode default</h2>
+              </div>
+            </div>
+            <p class="profile-bag-hint">
+              "Detailed" tracks every per-hole stat — clubs, fairways, GIR,
+              putts, penalties, notes. "Speed" hides all of that and leaves
+              only the score input on each hole, for when you just want a
+              final gross without the data-entry overhead. You can still
+              override per-round in the setup banner. Switching mid-round
+              never deletes data you've already entered.
+            </p>
+            <div class="card-flow-options">
+              <label class="card-flow-option">
+                <input type="radio" name="entryModeDefault" value="detailed" id="entryModeDetailedDefault">
+                <span><strong>Detailed</strong> — every hole asks for clubs · fairway · GIR · putts · penalties · note</span>
+              </label>
+              <label class="card-flow-option">
+                <input type="radio" name="entryModeDefault" value="speed" id="entryModeSpeedDefault">
+                <span><strong>Speed (score only)</strong> — just score per hole, nothing else</span>
               </label>
             </div>
           </article>

@@ -2823,6 +2823,42 @@ body.floating-card-nav-visible .floating-card-nav {
   margin-bottom: 0;
 }
 
+/* Speed mode — strips the per-hole card down to just the score row.
+   Hides every non-score input row (clubs, fairway, GIR, putts, first-putt,
+   penalty, bunker, note) and any pill groups that aren't the score
+   selector. The score auto-calc in app.js short-circuits on total=0, so
+   with all the input rows hidden and empty, score becomes a pure
+   user-typed value with no fighting auto-fill. */
+
+.scorecard-cards[data-entry-mode="speed"] .card-extra,
+.scorecard[data-entry-mode="speed"] .card-extra {
+  display: none !important;
+}
+
+.scorecard-cards[data-entry-mode="speed"] .card-pill-row:not([data-pill-group="score-input"]),
+.scorecard[data-entry-mode="speed"] .card-pill-row:not([data-pill-group="score-input"]) {
+  display: none !important;
+}
+
+/* Tighten the card vertical rhythm — without the extra rows, the card
+   would feel oddly empty at the bottom. */
+.scorecard-cards[data-entry-mode="speed"] .scorecard-card {
+  padding-bottom: 12px;
+}
+
+/* Lightweight badge so it's obvious the card is intentionally minimal,
+   not bugged. */
+.scorecard-cards[data-entry-mode="speed"] .card-headline::after {
+  content: "Speed mode — score only";
+  display: block;
+  margin-top: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .completion-banner {
   display: flex;
   align-items: flex-start;
