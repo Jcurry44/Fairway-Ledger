@@ -4042,6 +4042,99 @@ body.floating-card-nav-visible .floating-card-nav {
   padding: 16px;
 }
 
+/* Bucket breakdown — multi-dimensional summary view at the top of the
+   sheet (by par type, by course, top holes, recent trend) before the
+   collapsed raw list. */
+
+.bucket-sheet-list .bucket-breakdown-overall {
+  font-size: 0.92rem;
+  color: var(--ink);
+  line-height: 1.4;
+  padding: 4px 4px 12px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 12px;
+}
+
+.bucket-sheet-list .bucket-breakdown-section {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+}
+
+.bucket-sheet-list .bucket-breakdown-header {
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+
+.bucket-sheet-list .bucket-breakdown-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bucket-sheet-list .bucket-breakdown-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdfa;
+}
+
+.bucket-sheet-list .bucket-breakdown-label {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bucket-sheet-list .bucket-breakdown-value {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--green-dark, #15573c);
+  white-space: nowrap;
+}
+
+.bucket-sheet-list .bucket-breakdown-sub {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
+.bucket-sheet-list .bucket-breakdown-details {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+.bucket-sheet-list .bucket-breakdown-summary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  padding: 6px 0;
+}
+
+.bucket-sheet-list .bucket-breakdown-summary::-webkit-details-marker {
+  display: none;
+}
+
+.bucket-sheet-list .bucket-row-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
 .hazard-chip-list {
   list-style: none;
   margin: 8px 0 0;

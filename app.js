@@ -5087,6 +5087,102 @@
       <div class="scoring-distribution-grid">${bucketCards}</div>`;
   }
 
+  // Compute total plays per physical hole across the given rounds. Returns
+  // a Map<physicalId, { count, label, courseName, par }>. Used to ground
+  // "most-tier'd holes" rates ("3 birdies in 11 plays") so a hole the user
+  // has played twice doesn't look as impressive as one they've played 11
+  // times.
+  function computePlayCountByPhysicalHole(rounds) {
+    const out = new Map();
+    rounds.forEach((round) => {
+      const course = getCourse(round.courseId);
+      const courseName = course ? course.name : "Unknown";
+      (round.holes || []).forEach((hole) => {
+        if (!Number.isFinite(hole.score) || hole.score <= 0) return;
+        const physId = physicalHoleId(round.courseId, hole);
+        const existing = out.get(physId);
+        if (!existing) {
+          out.set(physId, {
+            count: 1,
+            label: hole.label || `#${hole.number}`,
+            courseName,
+            par: hole.par,
+            number: hole.number
+          });
+        } else {
+          existing.count += 1;
+        }
+      });
+    });
+    return out;
+  }
+
+  // Group bucket.holes into the dimensions the user actually cares about
+  // when they tap "Birdies": by par type, by physical course, by physical
+  // hole (with play counts for context), and as a recent-trend split.
+  function computeBucketBreakdown(bucketHoles, allRounds) {
+    const byPar = { 3: 0, 4: 0, 5: 0, other: 0 };
+    const parHoleCount = { 3: new Set(), 4: new Set(), 5: new Set(), other: new Set() };
+    const byCourse = new Map();
+    const byHole = new Map();
+    bucketHoles.forEach((h) => {
+      const physId = physicalHoleId(h.courseId, { label: h.label, number: h.holeNumber });
+      const physCourse = physicalCourseName(h.courseId);
+      const parKey = (h.par === 3 || h.par === 4 || h.par === 5) ? h.par : "other";
+      byPar[parKey] += 1;
+      parHoleCount[parKey].add(physId);
+      const cEntry = byCourse.get(physCourse) || { count: 0, holes: new Set() };
+      cEntry.count += 1;
+      cEntry.holes.add(physId);
+      byCourse.set(physCourse, cEntry);
+      const hEntry = byHole.get(physId) || {
+        count: 0, label: h.label, par: h.par,
+        courseName: physCourse, holeNumber: h.holeNumber, physId
+      };
+      hEntry.count += 1;
+      byHole.set(physId, hEntry);
+    });
+
+    // Most-tier'd holes: rank by count, then by RATE (count / total plays)
+    // when total plays are known. Top 5.
+    const playCounts = computePlayCountByPhysicalHole(allRounds);
+    const topHoles = [...byHole.values()]
+      .map((h) => {
+        const totalPlays = playCounts.get(h.physId)?.count || h.count;
+        return { ...h, totalPlays, rate: h.count / Math.max(1, totalPlays) };
+      })
+      .sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return b.rate - a.rate;
+      })
+      .slice(0, 5);
+
+    // Recent trend: split bucket.holes into "last 5 rounds" vs "previous 5
+    // rounds" by round date. Useful for "are you trending into more birdies?"
+    const sortedByDate = [...bucketHoles].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    const recentRoundDates = new Set();
+    const previousRoundDates = new Set();
+    // Group bucket.holes by their round (date approximation — same date is
+    // very likely the same round; sample data uses one round per date).
+    const allDatesSorted = [...new Set(allRounds.map((r) => r.date).filter(Boolean))]
+      .sort((a, b) => b.localeCompare(a));
+    allDatesSorted.slice(0, 5).forEach((d) => recentRoundDates.add(d));
+    allDatesSorted.slice(5, 10).forEach((d) => previousRoundDates.add(d));
+    const recentCount = sortedByDate.filter((h) => recentRoundDates.has(h.date)).length;
+    const previousCount = sortedByDate.filter((h) => previousRoundDates.has(h.date)).length;
+
+    return {
+      byPar,
+      parHoleCount,
+      byCourse: [...byCourse.entries()].map(([name, v]) => ({
+        name, count: v.count, holeCount: v.holes.size
+      })).sort((a, b) => b.count - a.count),
+      topHoles,
+      recentTrend: { recent: recentCount, previous: previousCount },
+      total: bucketHoles.length
+    };
+  }
+
   function openScoringBucketSheet(bucketId) {
     if (!els.bucketSheetOverlay || !els.bucketSheetList) return;
     const filtered = getFilteredRounds();
@@ -5097,22 +5193,142 @@
     if (!bucket.holes.length) {
       els.bucketSheetList.innerHTML = `<li class="bucket-empty">No holes in this tier yet.</li>`;
     } else {
-      const sorted = [...bucket.holes].sort((a, b) => b.date.localeCompare(a.date));
-      els.bucketSheetList.innerHTML = sorted.map((h) => `
-        <li class="bucket-row">
-          <div class="bucket-row-main">
-            <strong>${escapeHtml(h.label)}</strong>
-            <span class="subtext">${escapeHtml(h.courseName)} · Par ${h.par}</span>
-          </div>
-          <div class="bucket-row-meta">
-            <span class="bucket-row-score">${h.score}</span>
-            <span class="bucket-row-date">${escapeHtml(h.date)}</span>
-          </div>
-        </li>`).join("");
+      const breakdown = computeBucketBreakdown(bucket.holes, filtered);
+      els.bucketSheetList.innerHTML = renderBucketBreakdown(bucket, breakdown);
     }
     els.bucketSheetOverlay.hidden = false;
     document.body.classList.add("hole-picker-open");
     if (els.bucketSheetClose) els.bucketSheetClose.focus();
+  }
+
+  function renderBucketBreakdown(bucket, breakdown) {
+    const lowerLabel = (bucket.label || "holes").toLowerCase();
+    const totalHolesPlayed = computeTotalHolesPlayedAcrossRounds();
+    const pctOverall = totalHolesPlayed > 0
+      ? ((breakdown.total / totalHolesPlayed) * 100).toFixed(1)
+      : null;
+    const overall = pctOverall
+      ? `${breakdown.total} ${lowerLabel} across ${totalHolesPlayed} tracked holes (${pctOverall}%).`
+      : `${breakdown.total} ${lowerLabel}.`;
+
+    const parSection = (() => {
+      const lines = [3, 4, 5].map((par) => {
+        const count = breakdown.byPar[par];
+        if (!count) return null;
+        const holesAtPar = breakdown.parHoleCount[par].size;
+        return `<li class="bucket-breakdown-line">
+          <span class="bucket-breakdown-label">Par ${par}</span>
+          <span class="bucket-breakdown-value">${count} ${lowerLabel} <span class="bucket-breakdown-sub">on ${holesAtPar} different hole${holesAtPar === 1 ? "" : "s"}</span></span>
+        </li>`;
+      }).filter(Boolean);
+      if (!lines.length) return "";
+      return `
+        <li class="bucket-breakdown-section">
+          <h4 class="bucket-breakdown-header">By par type</h4>
+          <ul class="bucket-breakdown-list">${lines.join("")}</ul>
+        </li>`;
+    })();
+
+    const courseSection = (() => {
+      if (!breakdown.byCourse.length) return "";
+      const lines = breakdown.byCourse.slice(0, 6).map((c) => `
+        <li class="bucket-breakdown-line">
+          <span class="bucket-breakdown-label">${escapeHtml(c.name)}</span>
+          <span class="bucket-breakdown-value">${c.count} ${lowerLabel} <span class="bucket-breakdown-sub">on ${c.holeCount} hole${c.holeCount === 1 ? "" : "s"}</span></span>
+        </li>`).join("");
+      return `
+        <li class="bucket-breakdown-section">
+          <h4 class="bucket-breakdown-header">By course</h4>
+          <ul class="bucket-breakdown-list">${lines}</ul>
+        </li>`;
+    })();
+
+    const topHolesSection = (() => {
+      if (!breakdown.topHoles.length) return "";
+      // Only worth showing if at least one hole has ≥2 entries — single-shot
+      // birdie holes don't tell a story.
+      const showable = breakdown.topHoles.filter((h) => h.count >= 2);
+      if (!showable.length) return "";
+      const lines = showable.map((h) => {
+        const rateBit = h.totalPlays > h.count
+          ? `in ${h.totalPlays} plays`
+          : "";
+        return `
+          <li class="bucket-breakdown-line">
+            <span class="bucket-breakdown-label">${escapeHtml(h.courseName)} · ${escapeHtml(h.label)}<span class="bucket-breakdown-sub"> · Par ${h.par}</span></span>
+            <span class="bucket-breakdown-value">${h.count} ${lowerLabel}${rateBit ? ` <span class="bucket-breakdown-sub">${rateBit}</span>` : ""}</span>
+          </li>`;
+      }).join("");
+      return `
+        <li class="bucket-breakdown-section">
+          <h4 class="bucket-breakdown-header">Holes you ${lowerLabel.replace(/s$/, "")} the most</h4>
+          <ul class="bucket-breakdown-list">${lines}</ul>
+        </li>`;
+    })();
+
+    const trendSection = (() => {
+      const { recent, previous } = breakdown.recentTrend;
+      if (recent === 0 && previous === 0) return "";
+      const arrow = recent > previous ? "↗"
+        : recent < previous ? "↘"
+        : "→";
+      return `
+        <li class="bucket-breakdown-section">
+          <h4 class="bucket-breakdown-header">Recent trend</h4>
+          <ul class="bucket-breakdown-list">
+            <li class="bucket-breakdown-line">
+              <span class="bucket-breakdown-label">Last 5 rounds</span>
+              <span class="bucket-breakdown-value">${recent} ${lowerLabel}</span>
+            </li>
+            <li class="bucket-breakdown-line">
+              <span class="bucket-breakdown-label">Previous 5 rounds</span>
+              <span class="bucket-breakdown-value">${previous} ${lowerLabel} <span class="bucket-breakdown-sub">${arrow}</span></span>
+            </li>
+          </ul>
+        </li>`;
+    })();
+
+    // Flat list (every hole at this tier) — collapsed by default behind a
+    // disclosure. Keeps the sheet from being a wall of rows but still lets
+    // the user drill into the raw data.
+    const sortedHoles = [...bucket.holes].sort((a, b) => b.date.localeCompare(a.date));
+    const rawListSection = `
+      <li class="bucket-breakdown-section">
+        <details class="bucket-breakdown-details">
+          <summary class="bucket-breakdown-header bucket-breakdown-summary">All ${bucket.holes.length} ${lowerLabel} ▾</summary>
+          <ul class="bucket-row-list">${sortedHoles.map((h) => `
+            <li class="bucket-row">
+              <div class="bucket-row-main">
+                <strong>${escapeHtml(h.label)}</strong>
+                <span class="subtext">${escapeHtml(h.courseName)} · Par ${h.par}</span>
+              </div>
+              <div class="bucket-row-meta">
+                <span class="bucket-row-score">${h.score}</span>
+                <span class="bucket-row-date">${escapeHtml(h.date)}</span>
+              </div>
+            </li>`).join("")}</ul>
+        </details>
+      </li>`;
+
+    return `
+      <li class="bucket-breakdown-overall">${overall}</li>
+      ${parSection}
+      ${courseSection}
+      ${topHolesSection}
+      ${trendSection}
+      ${rawListSection}
+    `;
+  }
+
+  function computeTotalHolesPlayedAcrossRounds() {
+    const filtered = getFilteredRounds();
+    let total = 0;
+    filtered.forEach((round) => {
+      (round.holes || []).forEach((hole) => {
+        if (Number.isFinite(hole.score) && hole.score > 0) total += 1;
+      });
+    });
+    return total;
   }
 
   function closeScoringBucketSheet() {
