@@ -680,5 +680,70 @@ window.__golfCourseCatalog = [
       { "number": 8, "par": 3, "yards": 130, "hcp": 9 },
       { "number": 9, "par": 4, "yards": 300, "hcp": 7 }
     ]
+  },
+
+  // Cross Creek Resort, Titusville, PA — three 9-hole courses (the "North
+  // 18" is courses 2+3 combined per the resort). All three pool under
+  // physicalCourseName "Cross Creek Resort" since they share .name.
+  //
+  // Per-hole pars below are approximated from each nine's published TOTAL
+  // par (Course 1 = 35, Course 2 = 35, Course 3 = 36). The detailed
+  // scorecard is only on the resort site as an image, so individual hole
+  // pars/yards weren't available to scrape. Jeff should verify on the
+  // printed scorecard at the course and report any wrong pars to fix.
+  // Yards default to 0 here — the app renders "no yardage" gracefully.
+  {
+    "id": "cross-creek-1-white",
+    "name": "Cross Creek Resort",
+    "tee": "Course 1",
+    "rating": null,
+    "slope": null,
+    "holes": [
+      { "number": 1, "par": 4, "yards": 0, "hcp": null },
+      { "number": 2, "par": 4, "yards": 0, "hcp": null },
+      { "number": 3, "par": 3, "yards": 0, "hcp": null },
+      { "number": 4, "par": 4, "yards": 0, "hcp": null },
+      { "number": 5, "par": 5, "yards": 0, "hcp": null },
+      { "number": 6, "par": 4, "yards": 0, "hcp": null },
+      { "number": 7, "par": 3, "yards": 0, "hcp": null },
+      { "number": 8, "par": 4, "yards": 0, "hcp": null },
+      { "number": 9, "par": 4, "yards": 0, "hcp": null }
+    ]
+  },
+  {
+    "id": "cross-creek-2-white",
+    "name": "Cross Creek Resort",
+    "tee": "Course 2",
+    "rating": null,
+    "slope": null,
+    "holes": [
+      { "number": 1, "par": 4, "yards": 0, "hcp": null },
+      { "number": 2, "par": 3, "yards": 0, "hcp": null },
+      { "number": 3, "par": 5, "yards": 0, "hcp": null },
+      { "number": 4, "par": 4, "yards": 0, "hcp": null },
+      { "number": 5, "par": 4, "yards": 0, "hcp": null },
+      { "number": 6, "par": 3, "yards": 0, "hcp": null },
+      { "number": 7, "par": 4, "yards": 0, "hcp": null },
+      { "number": 8, "par": 4, "yards": 0, "hcp": null },
+      { "number": 9, "par": 4, "yards": 0, "hcp": null }
+    ]
+  },
+  {
+    "id": "cross-creek-3-white",
+    "name": "Cross Creek Resort",
+    "tee": "Course 3",
+    "rating": null,
+    "slope": null,
+    "holes": [
+      { "number": 1, "par": 4, "yards": 0, "hcp": null },
+      { "number": 2, "par": 5, "yards": 0, "hcp": null },
+      { "number": 3, "par": 3, "yards": 0, "hcp": null },
+      { "number": 4, "par": 4, "yards": 0, "hcp": null },
+      { "number": 5, "par": 4, "yards": 0, "hcp": null },
+      { "number": 6, "par": 3, "yards": 0, "hcp": null },
+      { "number": 7, "par": 5, "yards": 0, "hcp": null },
+      { "number": 8, "par": 4, "yards": 0, "hcp": null },
+      { "number": 9, "par": 4, "yards": 0, "hcp": null }
+    ]
   }
 ];
