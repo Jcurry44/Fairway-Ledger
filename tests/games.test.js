@@ -285,6 +285,48 @@ test("bingo: three points per hole assigned by tap", () => {
   assert.equal(b.pointsByPlayer.b, 2);
 });
 
+// ---- Scramble -----------------------------------------------------------------------------------
+
+test("scramble: totals and to-par accumulate only complete holes", () => {
+  const holes = [
+    { number: 1, par: 4, scores: { t1: 4, t2: 5 } },
+    { number: 2, par: 5, scores: { t1: 4, t2: 4 } },
+    { number: 3, par: 3, scores: { t1: 3, t2: null } } // incomplete — ignored
+  ];
+  const s = G.computeScramble(holes, ["t1", "t2"]);
+  assert.equal(s.holesPlayed, 2);
+  assert.equal(s.parPlayed, 9);
+  assert.equal(s.totals.t1, 8);
+  assert.equal(s.toPar.t1, -1);
+  assert.equal(s.toPar.t2, 0);
+  assert.equal(s.leader, 0);
+});
+
+test("scramble: single team has no leader, still tracks vs par", () => {
+  const holes = [{ number: 1, par: 4, scores: { t1: 3 } }];
+  const s = G.computeScramble(holes, ["t1"]);
+  assert.equal(s.leader, null);
+  assert.equal(s.toPar.t1, -1);
+});
+
+test("scramble settlement: lower total takes the stake, tie pushes", () => {
+  const g = fakeGame("scramble", ["t1", "t2"]);
+  const win = G.computeSettlement(g, { holesPlayed: 9, leader: 1 }, 20);
+  assert.equal(win.nets.t2, 20);
+  assert.equal(win.nets.t1, -20);
+  const tie = G.computeSettlement(g, { holesPlayed: 9, leader: null }, 20);
+  assert.deepEqual(tie.transfers, []);
+});
+
+test("scramble: in catalog for every player count, entrant-based", () => {
+  const meta = G.GAME_BY_ID.scramble;
+  assert.equal(meta.entrantLabel, "Team");
+  assert.deepEqual(meta.entrantCounts, [1, 2]);
+  [2, 3, 4].forEach((n) => {
+    assert.ok(G.gamesForPlayerCount(n).some((g) => g.id === "scramble"), `missing for ${n}`);
+  });
+});
+
 // ---- Settlement --------------------------------------------------------------------------------
 
 function fakeGame(gameType, playerIds, teams) {

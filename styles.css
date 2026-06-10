@@ -1,18 +1,23 @@
 :root {
-  --bg: #eef1ec;
-  --panel: #ffffff;
-  --panel-soft: #f5f7f2;
-  --ink: #16201c;
-  --muted: #65736b;
-  --line: #d8dfd7;
-  --green: #1f7a59;
-  --green-dark: #123f32;
+  /* Premium clubhouse palette: warm cream paper, masters green, brass.
+     Tokens are the single source of truth — most of the reskin lives in
+     these values + the "Premium pass" overrides at the end of the file. */
+  --bg: #f1efe6;
+  --panel: #fffefa;
+  --panel-soft: #f6f4ea;
+  --ink: #1c241f;
+  --muted: #68705f;
+  --line: #ddd8c4;
+  --green: #1e6b4a;
+  --green-dark: #11422c;
   --navy: #18344a;
   --blue: #2f6f9f;
-  --gold: #c58b2e;
+  --gold: #a8853b;
+  --gold-soft: #d9c08a;
   --red: #b64b42;
-  --cream: #fbfaf3;
-  --shadow: 0 18px 45px rgba(20, 32, 28, 0.09);
+  --cream: #faf7ec;
+  --shadow: 0 10px 28px rgba(25, 38, 30, 0.08);
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
 }
 
 * {
@@ -27,7 +32,7 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    linear-gradient(180deg, #e6ece4 0, var(--bg) 340px),
+    linear-gradient(180deg, #eae8da 0, var(--bg) 340px),
     var(--bg);
   color: var(--ink);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -62,11 +67,14 @@ button {
   gap: 16px;
   margin-bottom: 12px;
   padding: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 8px;
+  /* Clubhouse masthead: deep masters green with a brass hairline. The old
+     gradient drifted into navy at the right edge, which read corporate
+     rather than golf. */
+  border: 1px solid rgba(217, 192, 138, 0.35);
+  border-radius: 16px;
   background:
-    linear-gradient(135deg, #102f26 0%, #163e33 56%, #1d3f57 100%);
-  box-shadow: 0 22px 60px rgba(16, 47, 38, 0.18);
+    linear-gradient(150deg, #0d3322 0%, #124530 62%, #175539 100%);
+  box-shadow: 0 14px 40px rgba(13, 51, 34, 0.22), inset 0 -2px 0 rgba(217, 192, 138, 0.4);
   color: #fff;
 }
 
@@ -6871,4 +6879,105 @@ td {
   border-radius: 10px;
   padding: 10px 14px;
   font-size: 0.92rem;
+}
+
+/* ===== Premium pass ======================================================
+   Country-club reskin applied on top of the existing components. Token
+   changes live in :root; everything here is typography, radius
+   normalization, and small material touches. Kept at the end of the file
+   so the overrides win the cascade at equal specificity. */
+
+/* Display typography — serif voice for headings, Inter stays for UI/body.
+   Fraunces loads from Google Fonts and falls back to Georgia offline. */
+h1, h2, h3,
+.games-hero h2,
+.brand h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.panel-heading h2 {
+  font-size: 1.15rem;
+}
+
+/* Eyebrows become brass with real tracking — the little typographic detail
+   that makes a heading block read "engraved plaque" instead of "form label".
+   Inside the dark header they stay warm cream so they don't vanish. */
+.eyebrow {
+  color: var(--gold);
+  letter-spacing: 0.1em;
+  font-weight: 800;
+}
+
+.app-header .eyebrow,
+.brand .eyebrow {
+  color: #d8c79b;
+}
+
+/* Radius + material normalization: 14px panels/cards, 10px controls.
+   Replaces the 7/8/10/12px mix that crept in component by component. */
+.panel {
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+
+.primary-button,
+.ghost-button,
+.danger-button,
+label.file-button,
+.tab-button,
+.home-chip,
+.scoring-bucket {
+  border-radius: 10px;
+}
+
+.primary-button {
+  background: var(--green-dark);
+}
+
+.primary-button:active {
+  transform: translateY(1px);
+}
+
+/* Active tab gets a brass tick along the bottom — quiet, clubby. */
+.tab-button.active {
+  background: var(--green-dark);
+  box-shadow: inset 0 -2px 0 var(--gold);
+}
+
+/* 5 tabs must fit a 375px phone without horizontal scroll (the Games tab
+   pushed the bar to ~354px of content in ~351px of room). Tighten gaps and
+   padding on narrow screens. */
+@media (max-width: 430px) {
+  .app-tabs {
+    gap: 4px;
+  }
+  .tab-button {
+    padding: 8px 9px;
+    font-size: 0.82rem;
+  }
+}
+
+/* Brass focus ring everywhere — visible, consistent, on-palette. */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* Games standings board: add a brass inner hairline so the dark green
+   panel reads "leaderboard at the turn", matching the new masthead. */
+.game-standings {
+  box-shadow: inset 0 0 0 1px rgba(217, 192, 138, 0.35);
+}
+
+/* Trophy/records accents pick up the brass — the record value is the one
+   number on the card that should read "engraved". */
+.trophy-card-value {
+  color: var(--gold);
+  font-family: var(--font-display);
 }

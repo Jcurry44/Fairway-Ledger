@@ -8017,6 +8017,7 @@
   const gamesUi = {
     view: "home",            // home | pick | rules | setup | play | summary
     playerCount: 4,
+    entrantCount: 2,         // team count for entrant-based games (Scramble)
     pickedGameId: null,
     activeGameId: null,
     entryView: "hole",       // hole | grid
@@ -8055,6 +8056,7 @@
       case "nines": return Games.computeNines(game.holes, ids);
       case "stableford": return Games.computeStableford(game.holes, ids);
       case "bingo": return Games.computeBingo(game.holes, ids);
+      case "scramble": return Games.computeScramble(game.holes, ids);
       default: return null;
     }
   }
@@ -8115,6 +8117,12 @@
       case "bingo": {
         const sorted = [...ids].sort((a, b) => computed.pointsByPlayer[b] - computed.pointsByPlayer[a]);
         return [sorted.map((pid) => `${gamePlayerName(game, pid)} ${formatGamePoints(computed.pointsByPlayer[pid])}`).join(" · ")];
+      }
+      case "scramble": {
+        if (!computed.holesPlayed) return ["No holes played yet."];
+        const line = (pid) => `${gamePlayerName(game, pid)} ${computed.totals[pid]} (${formatSigned(computed.toPar[pid], 0)})`;
+        const sorted = [...ids].sort((a, b) => computed.totals[a] - computed.totals[b]);
+        return [`${sorted.map(line).join(" · ")} thru ${computed.holesPlayed}`];
       }
       default: return [];
     }
@@ -8218,15 +8226,32 @@
   function renderGameSetupView() {
     const meta = Games.GAME_BY_ID[gamesUi.pickedGameId];
     if (!meta) return renderGamePickView();
-    const count = meta.players.includes(gamesUi.playerCount)
-      ? gamesUi.playerCount
-      : meta.players[meta.players.length - 1];
-    const remembered = recallPlayerNames();
+    // Entrant-based games (Scramble): the rows are TEAMS, not players —
+    // one ball per team means one name + one score row per team.
+    const isEntrant = Boolean(meta.entrantLabel);
+    const count = isEntrant
+      ? (meta.entrantCounts.includes(gamesUi.entrantCount) ? gamesUi.entrantCount : meta.entrantCounts[meta.entrantCounts.length - 1])
+      : (meta.players.includes(gamesUi.playerCount)
+        ? gamesUi.playerCount
+        : meta.players[meta.players.length - 1]);
+    const remembered = isEntrant ? [] : recallPlayerNames();
+    const label = (i) => isEntrant
+      ? `${meta.entrantLabel} ${i + 1}`
+      : `Player ${i + 1}${i === 0 ? " (you)" : ""}`;
+    const placeholder = (i) => isEntrant
+      ? (i === 0 ? "e.g. Jeff & Rob" : "e.g. Dad & Mike")
+      : "Name";
+    const entrantChips = isEntrant ? `
+      <h3 class="games-section-title">How many teams?</h3>
+      <div class="games-count-row">
+        ${meta.entrantCounts.map((n) => `
+          <button type="button" class="games-count-chip${n === count ? " active" : ""}" data-game-entrants="${n}">${n} team${n === 1 ? "" : "s"}</button>`).join("")}
+      </div>` : "";
     const nameInputs = Array.from({ length: count }, (_, i) => `
       <label class="game-setup-field">
-        Player ${i + 1}${i === 0 ? " (you)" : ""}
-        <input type="text" class="game-player-name" data-player-index="${i}" maxlength="20"
-          value="${escapeHtml(remembered[i] || (i === 0 ? "Me" : ""))}" placeholder="Name">
+        ${escapeHtml(label(i))}
+        <input type="text" class="game-player-name" data-player-index="${i}" maxlength="24"
+          value="${escapeHtml(remembered[i] || (!isEntrant && i === 0 ? "Me" : ""))}" placeholder="${escapeHtml(placeholder(i))}">
       </label>`).join("");
     const holeChips = meta.holeCounts.map((n) => `
       <button type="button" class="games-count-chip${n === 18 ? " active" : ""}" data-game-holecount="${n}">${n} holes</button>`).join("");
@@ -8242,7 +8267,8 @@
       <div class="games-setup">
         <button type="button" class="games-back" data-game-action="rules">← Rules</button>
         <h2>${escapeHtml(meta.name)} — setup</h2>
-        <h3 class="games-section-title">Players</h3>
+        ${entrantChips}
+        <h3 class="games-section-title">${isEntrant ? "Team names" : "Players"}</h3>
         <div class="game-setup-names">${nameInputs}</div>
         ${teamsBlock}
         <h3 class="games-section-title">Holes</h3>
@@ -8503,6 +8529,11 @@
       renderGames();
       return;
     }
+    if (t.dataset.gameEntrants) {
+      gamesUi.entrantCount = Number(t.dataset.gameEntrants);
+      renderGames();
+      return;
+    }
     if (t.dataset.gamePick) {
       gamesUi.pickedGameId = t.dataset.gamePick;
       gamesUi.view = "rules";
@@ -8613,9 +8644,12 @@
   function startGameFromSetup() {
     const meta = Games.GAME_BY_ID[gamesUi.pickedGameId];
     if (!meta || !els.gamesRoot) return;
+    const isEntrant = Boolean(meta.entrantLabel);
     const nameInputs = [...els.gamesRoot.querySelectorAll(".game-player-name")];
-    const names = nameInputs.map((input, i) => input.value.trim() || `Player ${i + 1}`);
-    rememberPlayerNames(names);
+    const names = nameInputs.map((input, i) =>
+      input.value.trim() || (isEntrant ? `${meta.entrantLabel} ${i + 1}` : `Player ${i + 1}`));
+    // Team names shouldn't overwrite the remembered individual player names.
+    if (!isEntrant) rememberPlayerNames(names);
     const players = names.map((name, i) => ({ id: `p${i + 1}`, name }));
     const holeChip = els.gamesRoot.querySelector("[data-game-holecount].active");
     const requested = holeChip ? Number(holeChip.dataset.gameHolecount) : 18;
