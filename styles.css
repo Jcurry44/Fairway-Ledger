@@ -6417,3 +6417,458 @@ td {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ===== Games tab ========================================================= */
+
+.games-root {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 4px 0 40px;
+}
+
+.games-hero {
+  text-align: center;
+  padding: 18px 16px 22px;
+}
+
+.games-hero h2 {
+  margin: 0 0 6px;
+  font-size: 1.5rem;
+}
+
+.games-hero p {
+  margin: 0 0 14px;
+  color: var(--muted);
+}
+
+.games-section-title {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 18px 0 8px;
+}
+
+.games-empty {
+  text-align: center;
+  color: var(--muted);
+  font-style: italic;
+  padding: 12px 16px;
+}
+
+.games-back,
+.games-back-secondary {
+  background: none;
+  border: none;
+  color: var(--green-dark, #15573c);
+  font-weight: 700;
+  font-size: 0.9rem;
+  padding: 8px 0;
+  cursor: pointer;
+  display: inline-block;
+}
+
+.games-back-secondary {
+  display: block;
+  margin: 10px auto 0;
+  color: var(--muted);
+}
+
+/* Game cards (home list) */
+
+.game-card {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.game-card-main {
+  flex: 1;
+  text-align: left;
+  background: #fbfdfa;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.game-card-main strong { font-size: 1rem; color: var(--ink); }
+.game-card-sub { font-size: 0.78rem; color: var(--muted); }
+.game-card-standings { font-size: 0.85rem; color: var(--green-dark, #15573c); font-weight: 700; }
+
+.game-card-delete {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 12px;
+  color: var(--muted);
+  padding: 0 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.game-card-delete.confirming {
+  background: #fff1f0;
+  border-color: #e8b4b0;
+  color: #b3261e;
+  font-size: 0.72rem;
+}
+
+/* Picker */
+
+.games-count-row {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+
+.games-count-chip {
+  border: 1.5px solid var(--line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 10px 20px;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.games-count-chip.small {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
+.games-count-chip.active {
+  background: var(--green-dark, #15573c);
+  border-color: var(--green-dark, #15573c);
+  color: #fff;
+}
+
+.games-count-chip.lone.active {
+  background: #7c3a00;
+  border-color: #7c3a00;
+}
+
+.games-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.game-pick-card {
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.game-pick-card.recommended {
+  border-color: var(--green-dark, #15573c);
+  background: #f3f9f4;
+}
+
+.game-pick-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.game-pick-head strong { font-size: 1rem; color: var(--ink); }
+
+.game-pick-badge {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: var(--green-dark, #15573c);
+  border-radius: 999px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+
+.game-pick-blurb { font-size: 0.86rem; color: var(--muted); line-height: 1.35; }
+
+.game-pick-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.game-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--muted);
+  background: #f0f3ef;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+/* Rules */
+
+.game-rules-list {
+  margin: 0 0 18px;
+  padding: 0 0 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.game-rules-list li {
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+/* Setup */
+
+.game-setup-names {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.game-setup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.game-setup-field input {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.game-setup-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.88rem;
+  color: var(--ink);
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.game-setup-toggle input { margin-top: 3px; }
+
+.game-stake-field { margin: 14px 0 18px; }
+
+.games-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 6px 0;
+}
+
+.games-hint-inline {
+  font-weight: 500;
+  font-size: 0.74rem;
+  color: var(--muted);
+  text-transform: none;
+}
+
+/* Play view */
+
+.games-play-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.games-play-title { font-weight: 800; color: var(--ink); }
+
+.games-view-toggle {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--green-dark, #15573c);
+  cursor: pointer;
+}
+
+.game-standings {
+  background: var(--green-dark, #15573c);
+  color: #fff;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin: 10px 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.game-standings-line { font-weight: 800; font-size: 0.95rem; }
+
+.game-standings.final { background: #233a2e; }
+
+.game-hole-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.game-hole-nav strong { font-size: 1.1rem; }
+
+.game-par-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.game-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.game-score-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--ink);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.game-stepper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.game-step {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--green-dark, #15573c);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.game-score-value {
+  min-width: 34px;
+  text-align: center;
+  font-size: 1.4rem;
+  font-weight: 900;
+  color: var(--ink);
+}
+
+.game-score-value.empty { color: #c2cbc4; }
+
+.game-pull-chip {
+  border: 1px dashed var(--green-dark, #15573c);
+  background: #f3f9f4;
+  color: var(--green-dark, #15573c);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Wolf + Bingo controls */
+
+.game-wolf-row, .game-bingo-row {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.game-wolf-label, .game-bingo-label {
+  display: block;
+  font-size: 0.88rem;
+  margin-bottom: 6px;
+  color: var(--ink);
+}
+
+.game-wolf-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Grid view */
+
+.game-grid-wrap { overflow-x: auto; }
+
+.game-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.game-grid th, .game-grid td {
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  text-align: center;
+}
+
+.game-grid th {
+  background: #f0f3ef;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
+.game-grid tbody tr { cursor: pointer; }
+.game-grid tbody tr:active { background: #f3f9f4; }
+
+.game-grid-par { color: var(--muted); font-size: 0.7rem; margin-left: 2px; }
+
+/* Finish + settle */
+
+.games-finish-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.game-settle-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.game-settle-list li {
+  background: #fbfdfa;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.92rem;
+}

@@ -586,6 +586,7 @@
     completionCheck: document.getElementById("completionCheck"),
     reviewSection: document.getElementById("reviewSection"),
     reviewPreview: document.getElementById("reviewPreview"),
+    gamesRoot: document.getElementById("gamesRoot"),
     roundForm: document.getElementById("roundForm"),
     resetRoundButton: document.getElementById("resetRoundButton"),
     viewToggleButton: document.getElementById("viewToggleButton"),
@@ -7989,6 +7990,672 @@
         showToast("Snapshot deleted.");
       }
     });
+  }
+
+  // ---- Games tab ----------------------------------------------------------
+  //
+  // Group-game scorekeeper (Match Play, Nassau, Skins, Wolf, etc). All
+  // scoring math lives in lib/games.js (window.GolfGames) so it's
+  // unit-tested; this section is purely the UI state machine + persistence.
+  //
+  // Games are stored under their own localStorage key, completely isolated
+  // from state.rounds — nothing in here can touch round data.
+
+  const GAMES_KEY = "fairwayLedger.games.v1";
+  const GAME_PLAYER_NAMES_KEY = "fairwayLedger.gamePlayerNames.v1";
+  const Games = window.GolfGames;
+
+  let gamesState = (() => {
+    try {
+      const raw = localStorage.getItem(GAMES_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return parsed && Array.isArray(parsed.games) ? parsed : { games: [] };
+    } catch { return { games: [] }; }
+  })();
+
+  // UI-only state (not persisted): which view is showing, what's mid-pick.
+  const gamesUi = {
+    view: "home",            // home | pick | rules | setup | play | summary
+    playerCount: 4,
+    pickedGameId: null,
+    activeGameId: null,
+    entryView: "hole",       // hole | grid
+    holeIndex: 0,
+    confirmingDeleteId: null
+  };
+
+  function saveGamesState() {
+    try { localStorage.setItem(GAMES_KEY, JSON.stringify(gamesState)); } catch {}
+  }
+
+  function getActiveGame() {
+    return gamesState.games.find((g) => g.id === gamesUi.activeGameId) || null;
+  }
+
+  function rememberPlayerNames(names) {
+    try { localStorage.setItem(GAME_PLAYER_NAMES_KEY, JSON.stringify(names)); } catch {}
+  }
+  function recallPlayerNames() {
+    try {
+      const raw = localStorage.getItem(GAME_PLAYER_NAMES_KEY);
+      const arr = raw ? JSON.parse(raw) : null;
+      return Array.isArray(arr) ? arr : [];
+    } catch { return []; }
+  }
+
+  function computeGame(game) {
+    const ids = game.players.map((p) => p.id);
+    switch (game.gameType) {
+      case "matchplay": return Games.computeMatchPlay(game.holes, ids[0], ids[1], game.holeCount);
+      case "nassau": return Games.computeNassau(game.holes, ids[0], ids[1]);
+      case "skins": return Games.computeSkins(game.holes, ids, game.options);
+      case "bestball": return Games.computeBestBall(game.holes, game.teams, game.holeCount);
+      case "wolf": return Games.computeWolf(game.holes, ids);
+      case "vegas": return Games.computeVegas(game.holes, game.teams, game.options);
+      case "nines": return Games.computeNines(game.holes, ids);
+      case "stableford": return Games.computeStableford(game.holes, ids);
+      case "bingo": return Games.computeBingo(game.holes, ids);
+      default: return null;
+    }
+  }
+
+  function gamePlayerName(game, pid) {
+    const p = game.players.find((x) => x.id === pid);
+    return p ? p.name : pid;
+  }
+
+  function teamLabel(game, teamIndex) {
+    if (!game.teams) return teamIndex === 0 ? "Team 1" : "Team 2";
+    return game.teams[teamIndex].map((pid) => gamePlayerName(game, pid)).join(" & ");
+  }
+
+  // One-line standings summary used on the play view AND the home cards.
+  function gameStandingsLines(game) {
+    const computed = computeGame(game);
+    if (!computed) return [];
+    const ids = game.players.map((p) => p.id);
+    switch (game.gameType) {
+      case "matchplay": {
+        if (computed.thru === 0) return ["No holes played yet."];
+        if (computed.leader === null) return [`All square thru ${computed.thru}`];
+        const name = gamePlayerName(game, ids[computed.leader]);
+        return [`${name} ${computed.status}${computed.done ? "" : ` thru ${computed.thru}`}`];
+      }
+      case "nassau": {
+        const betLine = (label, m) => {
+          if (m.thru === 0) return `${label}: —`;
+          if (m.leader === null) return `${label}: AS${m.done ? " (push)" : ""}`;
+          return `${label}: ${gamePlayerName(game, ids[m.leader])} ${m.status}`;
+        };
+        return [
+          betLine("Front", computed.front),
+          betLine("Back", computed.back),
+          betLine("Overall", computed.overall)
+        ];
+      }
+      case "skins": {
+        const parts = ids.map((pid) => `${gamePlayerName(game, pid)} ${computed.skinsByPlayer[pid]}`);
+        if (computed.carrying > 0) parts.push(`${computed.carrying} carrying`);
+        return [parts.join(" · ")];
+      }
+      case "bestball": {
+        if (computed.thru === 0) return ["No holes played yet."];
+        if (computed.leader === null) return [`All square thru ${computed.thru}`];
+        return [`${teamLabel(game, computed.leader)} ${computed.status}${computed.done ? "" : ` thru ${computed.thru}`}`];
+      }
+      case "vegas": {
+        if (!computed.holeOutcomes.length) return ["No holes played yet."];
+        if (computed.points === 0) return ["Teams all square"];
+        const lead = computed.points > 0 ? 0 : 1;
+        return [`${teamLabel(game, lead)} +${Math.abs(computed.points)} points`];
+      }
+      case "wolf":
+      case "nines":
+      case "stableford":
+      case "bingo": {
+        const sorted = [...ids].sort((a, b) => computed.pointsByPlayer[b] - computed.pointsByPlayer[a]);
+        return [sorted.map((pid) => `${gamePlayerName(game, pid)} ${formatGamePoints(computed.pointsByPlayer[pid])}`).join(" · ")];
+      }
+      default: return [];
+    }
+  }
+
+  function formatGamePoints(v) {
+    return Number.isInteger(v) ? String(v) : v.toFixed(1);
+  }
+
+  // ---- Games: rendering -----------------------------------------------------
+
+  function renderGames() {
+    if (!els.gamesRoot) return;
+    let html = "";
+    switch (gamesUi.view) {
+      case "pick": html = renderGamePickView(); break;
+      case "rules": html = renderGameRulesView(); break;
+      case "setup": html = renderGameSetupView(); break;
+      case "play": html = renderGamePlayView(); break;
+      case "summary": html = renderGameSummaryView(); break;
+      default: html = renderGamesHomeView();
+    }
+    els.gamesRoot.innerHTML = html;
+  }
+
+  function renderGamesHomeView() {
+    const active = gamesState.games.filter((g) => g.status === "active");
+    const finished = gamesState.games.filter((g) => g.status === "final")
+      .sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 10);
+    const card = (game) => {
+      const meta = Games.GAME_BY_ID[game.gameType];
+      const lines = gameStandingsLines(game);
+      const confirming = gamesUi.confirmingDeleteId === game.id;
+      return `
+        <div class="game-card">
+          <button type="button" class="game-card-main" data-game-open="${game.id}">
+            <strong>${escapeHtml(meta ? meta.name : game.gameType)}</strong>
+            <span class="game-card-sub">${escapeHtml(game.date || "")} · ${game.players.map((p) => escapeHtml(p.name)).join(", ")}</span>
+            <span class="game-card-standings">${lines.map((l) => escapeHtml(l)).join("<br>")}</span>
+          </button>
+          <button type="button" class="game-card-delete${confirming ? " confirming" : ""}" data-game-delete="${game.id}">
+            ${confirming ? "Tap again to delete" : "✕"}
+          </button>
+        </div>`;
+    };
+    return `
+      <div class="games-home">
+        <div class="games-hero">
+          <h2>Golf Games</h2>
+          <p>Pick a game, enter scores at the tee box, let the app do the math.</p>
+          <button type="button" class="primary-button" data-game-action="new">New game →</button>
+        </div>
+        ${active.length ? `<h3 class="games-section-title">In progress</h3>${active.map(card).join("")}` : ""}
+        ${finished.length ? `<h3 class="games-section-title">Finished</h3>${finished.map(card).join("")}` : ""}
+        ${!active.length && !finished.length ? `<p class="games-empty">No games yet. Start one before your next round — the standings update live as you enter scores.</p>` : ""}
+      </div>`;
+  }
+
+  function renderGamePickView() {
+    const count = gamesUi.playerCount;
+    const games = Games.gamesForPlayerCount(count);
+    return `
+      <div class="games-pick">
+        <button type="button" class="games-back" data-game-action="home">← Games</button>
+        <h2>How many players?</h2>
+        <div class="games-count-row">
+          ${[2, 3, 4].map((n) => `
+            <button type="button" class="games-count-chip${n === count ? " active" : ""}" data-game-count="${n}">${n}</button>`).join("")}
+        </div>
+        <h3 class="games-section-title">${count}-player games</h3>
+        <div class="games-list">
+          ${games.map((g) => `
+            <button type="button" class="game-pick-card${g.bestWith.includes(count) ? " recommended" : ""}" data-game-pick="${g.id}">
+              <span class="game-pick-head">
+                <strong>${escapeHtml(g.name)}</strong>
+                ${g.bestWith.includes(count) ? `<span class="game-pick-badge">great with ${count}</span>` : ""}
+              </span>
+              <span class="game-pick-blurb">${escapeHtml(g.blurb)}</span>
+              <span class="game-pick-tags">${g.tags.map((t) => `<span class="game-tag">${escapeHtml(t)}</span>`).join("")}</span>
+            </button>`).join("")}
+        </div>
+      </div>`;
+  }
+
+  function renderGameRulesView() {
+    const meta = Games.GAME_BY_ID[gamesUi.pickedGameId];
+    if (!meta) return renderGamePickView();
+    return `
+      <div class="games-rules">
+        <button type="button" class="games-back" data-game-action="pick">← Back</button>
+        <h2>${escapeHtml(meta.name)}</h2>
+        <p class="game-pick-blurb">${escapeHtml(meta.blurb)}</p>
+        <h3 class="games-section-title">How to play</h3>
+        <ul class="game-rules-list">
+          ${meta.rules.map((r) => `<li>${escapeHtml(r)}</li>`).join("")}
+        </ul>
+        <button type="button" class="primary-button" data-game-action="setup">Set up game →</button>
+      </div>`;
+  }
+
+  function renderGameSetupView() {
+    const meta = Games.GAME_BY_ID[gamesUi.pickedGameId];
+    if (!meta) return renderGamePickView();
+    const count = meta.players.includes(gamesUi.playerCount)
+      ? gamesUi.playerCount
+      : meta.players[meta.players.length - 1];
+    const remembered = recallPlayerNames();
+    const nameInputs = Array.from({ length: count }, (_, i) => `
+      <label class="game-setup-field">
+        Player ${i + 1}${i === 0 ? " (you)" : ""}
+        <input type="text" class="game-player-name" data-player-index="${i}" maxlength="20"
+          value="${escapeHtml(remembered[i] || (i === 0 ? "Me" : ""))}" placeholder="Name">
+      </label>`).join("");
+    const holeChips = meta.holeCounts.map((n) => `
+      <button type="button" class="games-count-chip${n === 18 ? " active" : ""}" data-game-holecount="${n}">${n} holes</button>`).join("");
+    const optionToggles = (meta.options || []).map((opt) => `
+      <label class="game-setup-toggle">
+        <input type="checkbox" class="game-option-toggle" data-option-id="${opt.id}" ${opt.default ? "checked" : ""}>
+        <span>${escapeHtml(opt.label)}</span>
+      </label>`).join("");
+    const teamsBlock = meta.teams ? `
+      <h3 class="games-section-title">Teams</h3>
+      <p class="games-hint">Player 1 &amp; Player 2 are Team 1; Player 3 &amp; Player 4 are Team 2. Order the names to set the teams.</p>` : "";
+    return `
+      <div class="games-setup">
+        <button type="button" class="games-back" data-game-action="rules">← Rules</button>
+        <h2>${escapeHtml(meta.name)} — setup</h2>
+        <h3 class="games-section-title">Players</h3>
+        <div class="game-setup-names">${nameInputs}</div>
+        ${teamsBlock}
+        <h3 class="games-section-title">Holes</h3>
+        <div class="games-count-row">${holeChips}</div>
+        ${optionToggles ? `<h3 class="games-section-title">Options</h3>${optionToggles}` : ""}
+        <label class="game-setup-field game-stake-field">
+          ${escapeHtml(meta.stakeLabel || "$ per point")} <span class="games-hint-inline">(optional — leave blank for bragging rights)</span>
+          <input type="number" inputmode="decimal" min="0" step="0.25" class="game-stake-input" placeholder="0">
+        </label>
+        <button type="button" class="primary-button" data-game-action="start">Start game →</button>
+      </div>`;
+  }
+
+  function gameHoleEntryComplete(game, hole) {
+    const meta = Games.GAME_BY_ID[game.gameType];
+    if (game.gameType === "bingo") {
+      const b = hole.bingo || {};
+      return Boolean(b.bingo || b.bango || b.bongo);
+    }
+    if (meta && meta.needsScores) {
+      return game.players.every((p) => Number.isFinite(hole.scores[p.id]) && hole.scores[p.id] > 0);
+    }
+    return false;
+  }
+
+  function renderGamePlayView() {
+    const game = getActiveGame();
+    if (!game) return renderGamesHomeView();
+    const meta = Games.GAME_BY_ID[game.gameType];
+    const lines = gameStandingsLines(game);
+    const standings = `
+      <div class="game-standings">
+        ${lines.map((l) => `<div class="game-standings-line">${escapeHtml(l)}</div>`).join("")}
+      </div>`;
+    const entry = gamesUi.entryView === "grid"
+      ? renderGameGrid(game)
+      : renderGameHoleEntry(game, meta);
+    const doneCount = game.holes.filter((h) => gameHoleEntryComplete(game, h)).length;
+    return `
+      <div class="games-play">
+        <div class="games-play-top">
+          <button type="button" class="games-back" data-game-action="home">← Games</button>
+          <span class="games-play-title">${escapeHtml(meta ? meta.name : "")}</span>
+          <button type="button" class="games-view-toggle" data-game-action="toggle-view">${gamesUi.entryView === "grid" ? "Hole view" : "Grid view"}</button>
+        </div>
+        ${standings}
+        ${entry}
+        <div class="games-finish-row">
+          <span class="games-hint">${doneCount}/${game.holes.length} holes entered</span>
+          <button type="button" class="primary-button" data-game-action="finish">Finish game</button>
+        </div>
+      </div>`;
+  }
+
+  function renderGameHoleEntry(game, meta) {
+    const idx = Math.max(0, Math.min(gamesUi.holeIndex, game.holes.length - 1));
+    const hole = game.holes[idx];
+    const parRow = meta && meta.needsPar ? `
+      <div class="game-par-row">
+        <span>Par</span>
+        ${[3, 4, 5].map((p) => `
+          <button type="button" class="games-count-chip small${hole.par === p ? " active" : ""}" data-game-par="${p}">${p}</button>`).join("")}
+      </div>` : "";
+
+    let specialControls = "";
+    if (game.gameType === "wolf") {
+      const ids = game.players.map((p) => p.id);
+      const wolfId = Games.wolfForHole(ids, idx);
+      const pick = hole.wolf || {};
+      const partners = ids.filter((p) => p !== wolfId);
+      specialControls = `
+        <div class="game-wolf-row">
+          <span class="game-wolf-label">🐺 Wolf: <strong>${escapeHtml(gamePlayerName(game, wolfId))}</strong></span>
+          <div class="game-wolf-choices">
+            ${partners.map((pid) => `
+              <button type="button" class="games-count-chip small${pick.partnerId === pid ? " active" : ""}" data-game-wolf-partner="${pid}">+ ${escapeHtml(gamePlayerName(game, pid))}</button>`).join("")}
+            <button type="button" class="games-count-chip small lone${pick.lone ? " active" : ""}" data-game-wolf-lone="1">Lone Wolf</button>
+          </div>
+        </div>`;
+    }
+    if (game.gameType === "bingo") {
+      const b = hole.bingo || { bingo: null, bango: null, bongo: null };
+      const row = (slot, label, hint) => `
+        <div class="game-bingo-row">
+          <span class="game-bingo-label"><strong>${label}</strong> <span class="games-hint-inline">${hint}</span></span>
+          <div class="game-wolf-choices">
+            ${game.players.map((p) => `
+              <button type="button" class="games-count-chip small${b[slot] === p.id ? " active" : ""}" data-game-bingo="${slot}:${p.id}">${escapeHtml(p.name)}</button>`).join("")}
+          </div>
+        </div>`;
+      specialControls = `
+        ${row("bingo", "Bingo", "first on the green")}
+        ${row("bango", "Bango", "closest once all on")}
+        ${row("bongo", "Bongo", "first to hole out")}`;
+    }
+
+    const scoreRows = meta && meta.needsScores ? game.players.map((p) => {
+      const val = hole.scores[p.id];
+      const pull = renderGamePullChip(game, hole, p, 0);
+      return `
+        <div class="game-score-row">
+          <span class="game-score-name">${escapeHtml(p.name)}</span>
+          ${pull}
+          <div class="game-stepper">
+            <button type="button" class="game-step" data-game-score="${p.id}" data-delta="-1">−</button>
+            <span class="game-score-value${Number.isFinite(val) ? "" : " empty"}">${Number.isFinite(val) ? val : "–"}</span>
+            <button type="button" class="game-step" data-game-score="${p.id}" data-delta="1">+</button>
+          </div>
+        </div>`;
+    }).join("") : "";
+
+    return `
+      <div class="game-hole-entry">
+        <div class="game-hole-nav">
+          <button type="button" class="card-step" data-game-nav="-1" ${idx === 0 ? "disabled" : ""}>‹</button>
+          <strong>Hole ${hole.number}</strong>
+          <button type="button" class="card-step" data-game-nav="1" ${idx >= game.holes.length - 1 ? "disabled" : ""}>›</button>
+        </div>
+        ${parRow}
+        ${specialControls}
+        ${scoreRows}
+      </div>`;
+  }
+
+  // "Pull from my scorecard" chip: if the user (player 1) has an in-progress
+  // round draft with a score for this hole number, offer a one-tap fill so
+  // game + personal round don't need double entry.
+  function renderGamePullChip(game, hole, player, playerIndex) {
+    if (playerIndex !== 0) return "";
+    if (game.players[0].id !== player.id) return "";
+    if (Number.isFinite(hole.scores[player.id])) return "";
+    const draft = loadInProgressRound();
+    if (!draft) return "";
+    const draftHole = (draft.holes || []).find((h) => Number(h.number) === hole.number);
+    const score = draftHole ? Number(draftHole.score) : null;
+    if (!Number.isFinite(score) || score <= 0) return "";
+    return `<button type="button" class="game-pull-chip" data-game-pull="${score}" title="Pull from your in-progress round">⤓ ${score}</button>`;
+  }
+
+  function renderGameGrid(game) {
+    const meta = Games.GAME_BY_ID[game.gameType];
+    if (game.gameType === "bingo") {
+      // Bingo grid: per hole, show which letters are assigned.
+      return `
+        <div class="game-grid-wrap">
+          <table class="game-grid">
+            <thead><tr><th>Hole</th>${game.players.map((p) => `<th>${escapeHtml(p.name.slice(0, 6))}</th>`).join("")}</tr></thead>
+            <tbody>
+              ${game.holes.map((h, i) => {
+                const b = h.bingo || {};
+                return `<tr data-game-grid-hole="${i}">
+                  <td>${h.number}</td>
+                  ${game.players.map((p) => {
+                    const marks = ["bingo", "bango", "bongo"].filter((s) => b[s] === p.id).length;
+                    return `<td>${marks ? "●".repeat(marks) : ""}</td>`;
+                  }).join("")}
+                </tr>`;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+        <p class="games-hint">Tap a row to jump to that hole.</p>`;
+    }
+    return `
+      <div class="game-grid-wrap">
+        <table class="game-grid">
+          <thead><tr><th>Hole</th>${game.players.map((p) => `<th>${escapeHtml(p.name.slice(0, 6))}</th>`).join("")}</tr></thead>
+          <tbody>
+            ${game.holes.map((h, i) => `
+              <tr data-game-grid-hole="${i}">
+                <td>${h.number}${meta && meta.needsPar ? `<span class="game-grid-par">·${h.par}</span>` : ""}</td>
+                ${game.players.map((p) => {
+                  const v = h.scores[p.id];
+                  return `<td>${Number.isFinite(v) ? v : ""}</td>`;
+                }).join("")}
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+      <p class="games-hint">Tap a row to jump to that hole.</p>`;
+  }
+
+  function renderGameSummaryView() {
+    const game = getActiveGame();
+    if (!game) return renderGamesHomeView();
+    const meta = Games.GAME_BY_ID[game.gameType];
+    const computed = computeGame(game);
+    const lines = gameStandingsLines(game);
+    const stake = game.options && Number.isFinite(game.options.stake) ? game.options.stake : null;
+    let settleHtml = "";
+    if (stake && computed) {
+      const settlement = Games.computeSettlement(game, computed, stake);
+      if (settlement && settlement.transfers.length) {
+        settleHtml = `
+          <h3 class="games-section-title">Settle up</h3>
+          <ul class="game-settle-list">
+            ${settlement.transfers.map((t) => `
+              <li><strong>${escapeHtml(gamePlayerName(game, t.from))}</strong> pays <strong>${escapeHtml(gamePlayerName(game, t.to))}</strong> $${t.amount.toFixed(2)}</li>`).join("")}
+          </ul>`;
+      } else if (settlement) {
+        settleHtml = `<h3 class="games-section-title">Settle up</h3><p class="games-hint">All square — nobody owes anything.</p>`;
+      }
+    }
+    let extras = "";
+    if (game.gameType === "skins" && computed && computed.carrying > 0) {
+      extras = `<p class="games-hint">${computed.carrying} skin${computed.carrying === 1 ? "" : "s"} went unclaimed at the end.</p>`;
+    }
+    return `
+      <div class="games-summary">
+        <button type="button" class="games-back" data-game-action="home">← Games</button>
+        <h2>${escapeHtml(meta ? meta.name : "")} — final</h2>
+        <div class="game-standings final">
+          ${lines.map((l) => `<div class="game-standings-line">${escapeHtml(l)}</div>`).join("")}
+        </div>
+        ${extras}
+        ${settleHtml}
+        ${game.status === "active" ? `<button type="button" class="primary-button" data-game-action="confirm-finish">Confirm final →</button>
+        <button type="button" class="games-back-secondary" data-game-action="resume-play">← Keep playing</button>` : ""}
+      </div>`;
+  }
+
+  // ---- Games: event handling --------------------------------------------------
+
+  function gamesMutateHole(fn) {
+    const game = getActiveGame();
+    if (!game || game.status !== "active") return;
+    const idx = Math.max(0, Math.min(gamesUi.holeIndex, game.holes.length - 1));
+    fn(game, game.holes[idx], idx);
+    saveGamesState();
+    renderGames();
+  }
+
+  function handleGamesClick(event) {
+    const t = event.target.closest("button, [data-game-grid-hole]");
+    if (!t) return;
+
+    if (t.dataset.gameAction) {
+      const action = t.dataset.gameAction;
+      if (action === "new") { gamesUi.view = "pick"; }
+      if (action === "home") { gamesUi.view = "home"; gamesUi.confirmingDeleteId = null; }
+      if (action === "pick") { gamesUi.view = "pick"; }
+      if (action === "rules") { gamesUi.view = "rules"; }
+      if (action === "setup") { gamesUi.view = "setup"; }
+      if (action === "toggle-view") { gamesUi.entryView = gamesUi.entryView === "grid" ? "hole" : "grid"; }
+      if (action === "start") { startGameFromSetup(); return; }
+      if (action === "finish") { gamesUi.view = "summary"; }
+      if (action === "resume-play") { gamesUi.view = "play"; }
+      if (action === "confirm-finish") {
+        const game = getActiveGame();
+        if (game) { game.status = "final"; saveGamesState(); }
+      }
+      renderGames();
+      return;
+    }
+
+    if (t.dataset.gameCount) {
+      gamesUi.playerCount = Number(t.dataset.gameCount);
+      renderGames();
+      return;
+    }
+    if (t.dataset.gamePick) {
+      gamesUi.pickedGameId = t.dataset.gamePick;
+      gamesUi.view = "rules";
+      renderGames();
+      return;
+    }
+    if (t.dataset.gameHolecount) {
+      // Toggle active chip within setup (read at start time).
+      const row = t.closest(".games-count-row");
+      if (row) row.querySelectorAll(".games-count-chip").forEach((c) => c.classList.toggle("active", c === t));
+      return;
+    }
+    if (t.dataset.gameOpen) {
+      const game = gamesState.games.find((g) => g.id === t.dataset.gameOpen);
+      if (!game) return;
+      gamesUi.activeGameId = game.id;
+      gamesUi.view = game.status === "final" ? "summary" : "play";
+      gamesUi.holeIndex = game.status === "final" ? 0 : firstIncompleteGameHole(game);
+      renderGames();
+      return;
+    }
+    if (t.dataset.gameDelete) {
+      const id = t.dataset.gameDelete;
+      if (gamesUi.confirmingDeleteId === id) {
+        gamesState.games = gamesState.games.filter((g) => g.id !== id);
+        gamesUi.confirmingDeleteId = null;
+        saveGamesState();
+      } else {
+        gamesUi.confirmingDeleteId = id;
+      }
+      renderGames();
+      return;
+    }
+    if (t.dataset.gameNav) {
+      const game = getActiveGame();
+      if (!game) return;
+      gamesUi.holeIndex = Math.max(0, Math.min(game.holes.length - 1, gamesUi.holeIndex + Number(t.dataset.gameNav)));
+      renderGames();
+      return;
+    }
+    if (t.dataset.gameScore) {
+      const pid = t.dataset.gameScore;
+      const delta = Number(t.dataset.delta);
+      gamesMutateHole((game, hole) => {
+        const current = hole.scores[pid];
+        if (!Number.isFinite(current)) {
+          // First tap seeds par (or par+1 for "−"? No — par either way; the
+          // user can step from there).
+          hole.scores[pid] = Number.isFinite(hole.par) ? hole.par : 4;
+        } else {
+          hole.scores[pid] = Math.max(1, Math.min(15, current + delta));
+        }
+      });
+      return;
+    }
+    if (t.dataset.gamePull) {
+      const score = Number(t.dataset.gamePull);
+      gamesMutateHole((game, hole) => {
+        hole.scores[game.players[0].id] = score;
+      });
+      return;
+    }
+    if (t.dataset.gamePar) {
+      const par = Number(t.dataset.gamePar);
+      gamesMutateHole((game, hole) => { hole.par = par; });
+      return;
+    }
+    if (t.dataset.gameWolfPartner) {
+      const pid = t.dataset.gameWolfPartner;
+      gamesMutateHole((game, hole, idx) => {
+        const wolfId = Games.wolfForHole(game.players.map((p) => p.id), idx);
+        const existing = hole.wolf || {};
+        hole.wolf = existing.partnerId === pid
+          ? null // tap again to clear
+          : { wolfId, partnerId: pid, lone: false };
+      });
+      return;
+    }
+    if (t.dataset.gameWolfLone) {
+      gamesMutateHole((game, hole, idx) => {
+        const wolfId = Games.wolfForHole(game.players.map((p) => p.id), idx);
+        const existing = hole.wolf || {};
+        hole.wolf = existing.lone ? null : { wolfId, partnerId: null, lone: true };
+      });
+      return;
+    }
+    if (t.dataset.gameBingo) {
+      const [slot, pid] = t.dataset.gameBingo.split(":");
+      gamesMutateHole((game, hole) => {
+        if (!hole.bingo) hole.bingo = { bingo: null, bango: null, bongo: null };
+        hole.bingo[slot] = hole.bingo[slot] === pid ? null : pid;
+      });
+      return;
+    }
+    const gridRow = t.closest ? t.closest("[data-game-grid-hole]") : null;
+    if (gridRow) {
+      gamesUi.holeIndex = Number(gridRow.dataset.gameGridHole);
+      gamesUi.entryView = "hole";
+      renderGames();
+    }
+  }
+
+  function firstIncompleteGameHole(game) {
+    const idx = game.holes.findIndex((h) => !gameHoleEntryComplete(game, h));
+    return idx === -1 ? game.holes.length - 1 : idx;
+  }
+
+  function startGameFromSetup() {
+    const meta = Games.GAME_BY_ID[gamesUi.pickedGameId];
+    if (!meta || !els.gamesRoot) return;
+    const nameInputs = [...els.gamesRoot.querySelectorAll(".game-player-name")];
+    const names = nameInputs.map((input, i) => input.value.trim() || `Player ${i + 1}`);
+    rememberPlayerNames(names);
+    const players = names.map((name, i) => ({ id: `p${i + 1}`, name }));
+    const holeChip = els.gamesRoot.querySelector("[data-game-holecount].active");
+    const requested = holeChip ? Number(holeChip.dataset.gameHolecount) : 18;
+    const holeCount = meta.holeCounts.includes(requested) ? requested : meta.holeCounts[0];
+    const options = { stake: null };
+    (meta.options || []).forEach((opt) => {
+      const toggle = els.gamesRoot.querySelector(`.game-option-toggle[data-option-id="${opt.id}"]`);
+      options[opt.id] = toggle ? toggle.checked : Boolean(opt.default);
+    });
+    const stakeInput = els.gamesRoot.querySelector(".game-stake-input");
+    const stakeVal = stakeInput ? Number(stakeInput.value) : NaN;
+    if (Number.isFinite(stakeVal) && stakeVal > 0) options.stake = stakeVal;
+    const teams = meta.teams ? [[players[0].id, players[1].id], [players[2].id, players[3].id]] : null;
+    const game = {
+      id: makeId("game"),
+      date: today,
+      gameType: meta.id,
+      holeCount,
+      players,
+      teams,
+      options,
+      holes: Array.from({ length: holeCount }, (_, i) => ({
+        number: i + 1,
+        par: 4,
+        scores: Object.fromEntries(players.map((p) => [p.id, null]))
+      })),
+      status: "active"
+    };
+    gamesState.games.unshift(game);
+    saveGamesState();
+    gamesUi.activeGameId = game.id;
+    gamesUi.view = "play";
+    gamesUi.holeIndex = 0;
+    gamesUi.entryView = "hole";
+    renderGames();
+  }
+
+  if (els.gamesRoot) {
+    els.gamesRoot.addEventListener("click", handleGamesClick);
+    renderGames();
   }
 
   function setActiveTab(tabName) {
