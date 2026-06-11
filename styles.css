@@ -363,19 +363,25 @@ h2 {
   border-radius: 7px;
   background: transparent;
   color: var(--muted);
-  padding: 10px 16px;
+  padding: 10px 14px;
   font-weight: 850;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
 }
 
-.tab-button::before {
-  content: "";
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-right: 8px;
-  border-radius: 50%;
-  background: #b7c2b9;
-  vertical-align: 1px;
+/* Line icons replaced the old colored-dot ::before — five text labels with
+   dots read as one squeezed word-salad on a phone. */
+.tab-icon {
+  width: 19px;
+  height: 19px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .tab-button.active {
@@ -384,8 +390,8 @@ h2 {
   box-shadow: 0 10px 24px rgba(16, 47, 38, 0.18);
 }
 
-.tab-button.active::before {
-  background: var(--gold);
+.tab-button.active .tab-icon {
+  stroke: var(--gold-soft, #d9c08a);
 }
 
 .tab-panel {
@@ -6120,16 +6126,25 @@ td {
     padding: 5px;
   }
 
+  /* Phone tab bar: classic icon-over-label segments, equal widths. Five
+     side-by-side text labels always read "jammed" no matter the padding —
+     stacking gives every tab air without costing fit. */
   .tab-button {
-    flex: 1 1 auto;
+    flex: 1 1 0;
     min-width: 0;
-    padding: 9px 10px;
-    font-size: 0.88rem;
+    flex-direction: column;
+    gap: 3px;
+    padding: 7px 2px 6px;
+    min-height: 52px;
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
     white-space: nowrap;
   }
 
-  .tab-button::before {
-    margin-right: 5px;
+  .tab-icon {
+    width: 21px;
+    height: 21px;
   }
 
   .home-hero {
@@ -6946,18 +6961,8 @@ label.file-button,
   box-shadow: inset 0 -2px 0 var(--gold);
 }
 
-/* 5 tabs must fit a 375px phone without horizontal scroll (the Games tab
-   pushed the bar to ~354px of content in ~351px of room). Tighten gaps and
-   padding on narrow screens. */
-@media (max-width: 430px) {
-  .app-tabs {
-    gap: 4px;
-  }
-  .tab-button {
-    padding: 8px 9px;
-    font-size: 0.82rem;
-  }
-}
+/* (Tab fit at ≤430px is now handled by the icon-over-label layout in the
+   760px block — equal flex segments can't overflow.) */
 
 /* Brass focus ring everywhere — visible, consistent, on-palette. */
 button:focus-visible,
@@ -7039,15 +7044,11 @@ summary:focus-visible {
     font-size: 0.82rem;
   }
 
-  /* Sticky tab bar: shave height, tuck closer to content. */
+  /* Sticky tab bar: shave height, tuck closer to content. (Button layout
+     itself — icon-over-label — lives in the 760px block above.) */
   .app-tabs {
     margin-bottom: 10px;
     padding: 4px;
-  }
-
-  .tab-button {
-    min-height: 40px;
-    padding: 8px 8px;
   }
 
   /* Option chips (Wind / Play type / Entry mode / Tee): tighter so most
@@ -7074,4 +7075,33 @@ summary:focus-visible {
     align-items: center;
     min-height: 44px;
   }
+
+  /* Panel headings on a phone: the action button ("Take snapshot now",
+     "Reset to all clubs") was crowding the serif heading on one line.
+     Compact ghost sizing keeps both comfortable. */
+  .panel-heading {
+    gap: 8px;
+  }
+
+  .panel-heading > button,
+  .panel-heading .ghost-button {
+    min-height: 36px;
+    padding: 6px 11px;
+    font-size: 0.78rem;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .profile-bag-hint {
+    font-size: 0.82rem;
+    line-height: 1.45;
+  }
+}
+
+/* Secondary descriptor inside a preference option — quieter than the
+   option name so the row scans as "name, then detail". */
+.option-hint {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.84rem;
 }

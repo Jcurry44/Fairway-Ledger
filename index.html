@@ -15,9 +15,9 @@
     <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
          icon, theme color in the browser chrome, and a standalone display
          mode instead of a tab. -->
-    <link rel="manifest" href="./manifest.json?v=2026-06-06d">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-06-06d">
-    <link rel="apple-touch-icon" href="./icon.svg?v=2026-06-06d">
+    <link rel="manifest" href="./manifest.json?v=2026-06-06e">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-06-06e">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-06-06e">
     <meta name="theme-color" content="#1f7a59">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -32,12 +32,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap">
 
-    <link rel="stylesheet" href="./styles.css?v=2026-06-06d">
-    <script src="./data/courses.js?v=2026-06-06d" defer></script>
-    <script src="./lib/golf-math.js?v=2026-06-06d" defer></script>
-    <script src="./lib/shapes.js?v=2026-06-06d" defer></script>
-    <script src="./lib/games.js?v=2026-06-06d" defer></script>
-    <script src="./app.js?v=2026-06-06d" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-06-06e">
+    <script src="./data/courses.js?v=2026-06-06e" defer></script>
+    <script src="./lib/golf-math.js?v=2026-06-06e" defer></script>
+    <script src="./lib/shapes.js?v=2026-06-06e" defer></script>
+    <script src="./lib/games.js?v=2026-06-06e" defer></script>
+    <script src="./app.js?v=2026-06-06e" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -87,11 +87,26 @@
 
       <main>
         <nav class="app-tabs" aria-label="Primary">
-          <button class="tab-button active" type="button" data-tab-target="home" aria-selected="true">Home</button>
-          <button class="tab-button" type="button" data-tab-target="rounds" aria-selected="false">Add Round</button>
-          <button class="tab-button" type="button" data-tab-target="courses" aria-selected="false">Courses</button>
-          <button class="tab-button" type="button" data-tab-target="games" aria-selected="false">Games</button>
-          <button class="tab-button" type="button" data-tab-target="profile" aria-selected="false">Profile</button>
+          <button class="tab-button active" type="button" data-tab-target="home" aria-selected="true">
+            <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/></svg>
+            <span class="tab-label">Home</span>
+          </button>
+          <button class="tab-button" type="button" data-tab-target="rounds" aria-selected="false">
+            <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 8.5v7M8.5 12h7"/></svg>
+            <span class="tab-label">Add Round</span>
+          </button>
+          <button class="tab-button" type="button" data-tab-target="courses" aria-selected="false">
+            <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 21V4"/><path d="M7 5l9 2.8L7 10.6"/><path d="M4 21h9"/><circle cx="17.5" cy="19.5" r="1.5"/></svg>
+            <span class="tab-label">Courses</span>
+          </button>
+          <button class="tab-button" type="button" data-tab-target="games" aria-selected="false">
+            <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v4a4 4 0 0 1-8 0V4z"/><path d="M8 5H5.5a2.6 2.6 0 0 0 2.8 4M16 5h2.5a2.6 2.6 0 0 1-2.8 4"/><path d="M12 12v4"/><path d="M8.5 20h7M10 16.5h4"/></svg>
+            <span class="tab-label">Games</span>
+          </button>
+          <button class="tab-button" type="button" data-tab-target="profile" aria-selected="false">
+            <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.8"/><path d="M4.5 20c1.6-4 5-5.2 7.5-5.2S17.9 16 19.5 20"/></svg>
+            <span class="tab-label">Profile</span>
+          </button>
         </nav>
 
         <section class="tab-panel active" data-tab-panel="home" data-active-section="overview">
@@ -602,21 +617,17 @@
               </div>
             </div>
             <p class="profile-bag-hint">
-              Choose how the Card scorecard arranges each hole's inputs.
-              "Narrative" mirrors how you played the hole — tee shot first,
-              then approach, then green, with the final score at the
-              bottom. "Outcome-first" leads with Score and Putts (the
-              original layout). Switching is non-destructive — any data
-              you've already entered stays intact.
+              How the Card view orders each hole's inputs. Switching never
+              deletes anything you've entered.
             </p>
             <div class="card-flow-options">
               <label class="card-flow-option">
                 <input type="radio" name="cardFlowMode" value="narrative" id="cardFlowNarrative">
-                <span><strong>Narrative</strong> (recommended) — Clubs · Fairway · Bunker · 1st putt · Putts · Pen · Score</span>
+                <span><strong>Narrative</strong> <span class="option-hint">recommended — tee shot first, score last</span></span>
               </label>
               <label class="card-flow-option">
                 <input type="radio" name="cardFlowMode" value="default" id="cardFlowDefault">
-                <span><strong>Outcome-first</strong> — Score · Putts · Fairway · Clubs · …</span>
+                <span><strong>Outcome-first</strong> <span class="option-hint">score &amp; putts up top</span></span>
               </label>
             </div>
           </article>
@@ -629,21 +640,18 @@
               </div>
             </div>
             <p class="profile-bag-hint">
-              "Detailed" tracks every per-hole stat — clubs, fairways, GIR,
-              putts, penalties, notes. "Speed" hides all of that and leaves
-              only the score input on each hole, for when you just want a
-              final gross without the data-entry overhead. You can still
-              override per-round in the setup banner. Switching mid-round
-              never deletes data you've already entered.
+              Speed mode shows just the score on each hole — no clubs,
+              fairways, or putts. You can still override per round in the
+              setup banner.
             </p>
             <div class="card-flow-options">
               <label class="card-flow-option">
                 <input type="radio" name="entryModeDefault" value="detailed" id="entryModeDetailedDefault">
-                <span><strong>Detailed</strong> — every hole asks for clubs · fairway · GIR · putts · penalties · note</span>
+                <span><strong>Detailed</strong> <span class="option-hint">track everything</span></span>
               </label>
               <label class="card-flow-option">
                 <input type="radio" name="entryModeDefault" value="speed" id="entryModeSpeedDefault">
-                <span><strong>Speed (score only)</strong> — just score per hole, nothing else</span>
+                <span><strong>Speed</strong> <span class="option-hint">score only</span></span>
               </label>
             </div>
           </article>
