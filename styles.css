@@ -6981,3 +6981,97 @@ summary:focus-visible {
   color: var(--gold);
   font-family: var(--font-display);
 }
+
+/* "More courses ▾" expander chip on the Course row — visually quieter
+   than the course chips so it reads as a control, not an option. */
+.select-chip-more {
+  border-style: dashed !important;
+  color: var(--muted) !important;
+  background: transparent !important;
+  font-weight: 700;
+}
+
+/* ===== Mobile polish ======================================================
+   Round 2 of the phone pass, driven by Jeff's "mobile UI is not great"
+   review. Measured problems at 375px: 136px masthead + 53px sticky tabs
+   ate a quarter of the screen before content; the Course row was a 411px
+   chip wall; option chip rows ran 103px tall; radio rows had ~13px tap
+   targets. */
+
+@media (max-width: 760px) {
+  /* Compact masthead: brand stays, decoration shrinks. Target ≤ 84px. */
+  .app-header {
+    padding: 10px 64px 12px 14px;
+    border-radius: 14px;
+    margin-bottom: 8px;
+  }
+
+  .brand {
+    gap: 9px;
+  }
+
+  .brand-mark,
+  .brand-mark svg {
+    width: 26px;
+    height: 26px;
+  }
+
+  .brand h1 {
+    font-size: 1.15rem;
+    margin: 0;
+  }
+
+  .app-header .eyebrow,
+  .brand .eyebrow {
+    font-size: 0.56rem;
+    letter-spacing: 0.14em;
+    margin: 0 0 1px;
+  }
+
+  .header-actions {
+    top: 10px;
+    right: 10px;
+  }
+
+  .header-actions-toggle {
+    min-height: 36px;
+    padding: 6px 12px;
+    font-size: 0.82rem;
+  }
+
+  /* Sticky tab bar: shave height, tuck closer to content. */
+  .app-tabs {
+    margin-bottom: 10px;
+    padding: 4px;
+  }
+
+  .tab-button {
+    min-height: 40px;
+    padding: 8px 8px;
+  }
+
+  /* Option chips (Wind / Play type / Entry mode / Tee): tighter so most
+     rows fit one line, two at worst — was 103px per row. */
+  .select-chips {
+    gap: 5px;
+  }
+
+  .select-chip {
+    padding: 8px 11px;
+    font-size: 0.84rem;
+    min-height: 36px;
+  }
+
+  /* Panels breathe a little less on a phone — more content per screen. */
+  .panel {
+    border-radius: 12px;
+  }
+
+  /* Preference radio rows (Scorecard flow / Entry mode default): the
+     radio itself is 13px — give the whole label a comfortable tap area. */
+  .card-flow-option {
+    padding: 10px 0;
+    align-items: center;
+    min-height: 44px;
+  }
+}

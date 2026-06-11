@@ -1205,6 +1205,7 @@
   function resetRoundSetupState() {
     roundStarted = false;
     setupChipRowsTapped = new Set();
+    courseChipsExpanded = false;
     applyRoundStartedUi();
   }
   function captureInProgressRound() {
@@ -1696,6 +1697,14 @@
       select.parentNode.insertBefore(row, select.nextSibling);
       select.dataset.chipsInit = "true";
       row.addEventListener("click", (event) => {
+        // "More courses ▾" expander on the Course row — show/hide the
+        // courses the user hasn't played yet.
+        const toggleChip = event.target.closest('[data-chip-action="toggle-courses"]');
+        if (toggleChip) {
+          courseChipsExpanded = !courseChipsExpanded;
+          syncChipsForSelect(select);
+          return;
+        }
         // Course-name chips (round-setup roundCourse only) — collapse all
         // tee variants under one chip and pick a sensible default tee.
         const courseChip = event.target.closest("[data-chip-course-name]");
@@ -1895,17 +1904,58 @@
     `).join("");
   }
 
+  // Chip labels drop the "Golf Course / Golf Club / Golf Links" suffix —
+  // on a phone, "Seneca Hickory Stick Golf Course" forces one chip per
+  // line and the Course row becomes a 400px wall. Full names stay
+  // everywhere else (selects, analytics, round detail).
+  function shortCourseChipLabel(name) {
+    return String(name).replace(/\s+(Golf\s+(Course|Club|Links)|Country\s+Club)$/i, "");
+  }
+
+  // Courses the user has actually played, most recent first. Drives the
+  // played-first Course chip row: your usual tracks up top, everything
+  // else behind "More courses".
+  function getPlayedPhysicalCourseNames() {
+    const seen = new Set();
+    const names = [];
+    [...state.rounds]
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+      .forEach((round) => {
+        const name = physicalCourseName(round.courseId);
+        if (!name || seen.has(name)) return;
+        seen.add(name);
+        names.push(name);
+      });
+    return names;
+  }
+
+  let courseChipsExpanded = false;
+
   function syncRoundCourseChips(select, row) {
     const names = getPhysicalCourseNames();
     const showActive = isSetupChipRowActiveForRender("roundCourse");
     const currentName = physicalCourseName(select.value);
-    row.innerHTML = names.map((name) => `
+    const played = getPlayedPhysicalCourseNames().filter((n) => names.includes(n));
+    const rest = names.filter((n) => !played.includes(n));
+    // No history yet (or everything played): plain full list, no toggle.
+    const collapsible = played.length > 0 && rest.length > 0;
+    // The currently-selected course always shows even if it's in the
+    // collapsed group — otherwise picking from "More" then collapsing
+    // would hide the active chip.
+    const visible = collapsible && !courseChipsExpanded
+      ? [...played, ...(currentName && rest.includes(currentName) ? [currentName] : [])]
+      : [...played, ...rest];
+    const chip = (name) => `
       <button type="button"
               class="select-chip${showActive && name === currentName ? " active" : ""}"
               data-chip-course-name="${escapeHtml(name)}">
-        ${escapeHtml(name)}
-      </button>
-    `).join("");
+        ${escapeHtml(shortCourseChipLabel(name))}
+      </button>`;
+    const toggle = collapsible ? `
+      <button type="button" class="select-chip select-chip-more" data-chip-action="toggle-courses">
+        ${courseChipsExpanded ? "Fewer ▴" : `More courses (${rest.length}) ▾`}
+      </button>` : "";
+    row.innerHTML = visible.map(chip).join("") + toggle;
   }
 
   function renderSelectOptions() {
