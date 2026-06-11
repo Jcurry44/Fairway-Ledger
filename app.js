@@ -4288,7 +4288,7 @@
         <ul class="par-detail-course-list">
           ${courseRows.map((c) => `
             <li>
-              <span class="par-detail-course-name">${escapeHtml(c.name)}</span>
+              <button type="button" class="link-course" data-open-course-name="${escapeHtml(c.name)}">${escapeHtml(c.name)}</button>
               <span class="par-detail-course-meta">${c.n} hole${c.n === 1 ? "" : "s"}</span>
               <strong class="par-detail-course-val ${parTypeTier(c.avgToPar)}">${formatSigned(c.avgToPar)}</strong>
             </li>`).join("")}
@@ -5490,7 +5490,7 @@
       if (!breakdown.byCourse.length) return "";
       const lines = breakdown.byCourse.slice(0, 6).map((c) => `
         <li class="bucket-breakdown-line">
-          <span class="bucket-breakdown-label">${escapeHtml(c.name)}</span>
+          <button type="button" class="link-course bucket-breakdown-label" data-open-course-name="${escapeHtml(c.name)}">${escapeHtml(c.name)}</button>
           <span class="bucket-breakdown-value">${c.count} ${lowerLabel} <span class="bucket-breakdown-sub">on ${c.holeCount} hole${c.holeCount === 1 ? "" : "s"}</span></span>
         </li>`).join("");
       return `
@@ -6718,7 +6718,7 @@
           <div class="round-row${editingRoundId === round.id ? " editing" : ""}">
             <div class="round-row-main">
               <strong>${totals.gross} (${formatSigned(totals.toPar, 0)})${editingBadge}${tagBadge}</strong>
-              <span class="subtext">${round.date} | ${escapeHtml(course ? course.name : "Unknown")}${windLabel}${sgLabel}</span>
+              <span class="subtext">${round.date} | <button type="button" class="link-course" data-open-course-name="${escapeHtml(physicalCourseName(round.courseId))}">${escapeHtml(course ? course.name : "Unknown")}</button>${windLabel}${sgLabel}</span>
               ${narrativeHtml}
               ${scorecardHtml}
             </div>
@@ -7983,10 +7983,15 @@
       } catch { return round.date; }
     })();
     els.roundDetailTitle.textContent = `${totals.gross} (${formatSigned(totals.toPar, 0)})`;
-    const bits = [dateStr, courseName];
-    if (round.wind) bits.push(formatWind(round.wind));
-    if (round.tag) bits.push(formatRoundTag(round.tag));
-    els.roundDetailSubtitle.textContent = bits.filter(Boolean).join(" · ");
+    // Course name in the subtitle is a drill-down — tap it to jump to the
+    // course's profile in the Courses tab (global data-open-course-name
+    // handler closes this sheet first).
+    const physName = physicalCourseName(round.courseId);
+    const courseBit = `<button type="button" class="link-course" data-open-course-name="${escapeHtml(physName)}">${escapeHtml(courseName)}</button>`;
+    const bits = [escapeHtml(dateStr), courseBit];
+    if (round.wind) bits.push(escapeHtml(formatWind(round.wind)));
+    if (round.tag) bits.push(escapeHtml(formatRoundTag(round.tag)));
+    els.roundDetailSubtitle.innerHTML = bits.filter(Boolean).join(" · ");
     els.roundDetailBody.innerHTML = renderRoundScorecard(round);
     els.roundDetailEditButton.onclick = () => {
       closeRoundDetail();
@@ -8766,6 +8771,45 @@
       if (round) showRoundDetail(round);
     });
   }
+
+  // Open a course's profile in the Courses tab from anywhere, by PHYSICAL
+  // name ("Ridgeview Golf Club" — tee variants pool). Used by every
+  // data-open-course-name link: round-detail subtitle, Recent Scorecards
+  // rows, the par-type sheet's By-course rows, the scoring-tier sheet's
+  // By-course rows.
+  function openCourseDetailForName(name) {
+    const entries = getCatalogEntriesForCourseName(name);
+    if (!entries.length) return;
+    // Prefer the variant the user actually plays (most recent round at
+    // this course), else the first catalog entry.
+    const lastPlayed = [...state.rounds]
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+      .find((r) => physicalCourseName(r.courseId) === name);
+    const playedEntry = lastPlayed ? entries.find((e) => e.id === lastPlayed.courseId) : null;
+    selectedCourseDetailId = (playedEntry || entries[0]).id;
+    renderCourseList();
+    renderCourseDetail();
+    setActiveTab("courses");
+    setTimeout(() => {
+      const panel = document.querySelector(".course-detail-panel");
+      if (panel) panel.scrollIntoView({ block: "start", behavior: "smooth" });
+    }, 80);
+  }
+
+  // One global handler for every course-name link in the app. Also closes
+  // whichever sheet/overlay the link was inside, so the jump lands clean.
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest("[data-open-course-name]");
+    if (!link) return;
+    const name = link.dataset.openCourseName;
+    [els.roundDetailOverlay, els.bucketSheetOverlay, els.parTypeSheetOverlay].forEach((overlay) => {
+      if (overlay && !overlay.hidden) {
+        overlay.hidden = true;
+      }
+    });
+    document.body.classList.remove("hole-picker-open");
+    openCourseDetailForName(name);
+  });
 
   // Every other Overview metric tile drills into the section that explains
   // it: Rounds / Avg score / Avg to par → the scoring trend chart, Avg SG →
