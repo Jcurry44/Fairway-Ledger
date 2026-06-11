@@ -3932,14 +3932,44 @@
     `;
   }
 
+  // How many of the user's rounds DON'T produce a differential because the
+  // course has no rating/slope on file. Drives the "here's why rounds are
+  // missing" line in the handicap explainer.
+  function countUnratedRounds() {
+    return state.rounds.filter((round) => {
+      const course = getCourse(round.courseId);
+      return !course || !course.rating || !course.slope;
+    }).length;
+  }
+
   function renderHandicapPanel() {
     const estimate = calculateHandicapEstimate(state.rounds);
+    const unrated = countUnratedRounds();
+    const unratedLine = unrated > 0 ? `
+      <p class="handicap-explain-step">
+        <strong>${unrated} of your rounds ${unrated === 1 ? "doesn't" : "don't"} count yet</strong>
+        because ${unrated === 1 ? "its course has" : "their courses have"} no
+        rating &amp; slope on file. Add the official numbers via the Courses
+        tab search (online results include them) and those rounds join the
+        math automatically.
+      </p>` : "";
+
     if (estimate.index === null) {
       els.handicapPanel.innerHTML = `
         <div class="handicap-index-box">
           <span>Estimated index</span>
           <strong>--</strong>
-          <small>${estimate.eligible.length} rated score differential${estimate.eligible.length === 1 ? "" : "s"}</small>
+          <small>${estimate.eligible.length} rated score differential${estimate.eligible.length === 1 ? "" : "s"} so far — need 3</small>
+        </div>
+        <div class="handicap-explain">
+          <h4 class="handicap-explain-h">Why there's no number yet</h4>
+          <p class="handicap-explain-step">
+            A handicap is built from <strong>differentials</strong> — one per
+            round, measuring how you played against the course's difficulty:
+            <em>(score − course rating) × 113 ÷ slope</em>. It takes at least
+            <strong>3 rounds at rated courses</strong> to estimate an index.
+          </p>
+          ${unratedLine}
         </div>
         <p class="handicap-note">${estimate.note}</p>
       `;
@@ -3951,21 +3981,65 @@
     const courseHandicap = nextCourse && nextCourse.rating && nextCourse.slope
       ? Math.round(estimate.index * (nextCourse.slope / 113) + (nextCourse.rating - par))
       : null;
-    const bestDiffs = estimate.used
-      .map((item) => `${item.differential.toFixed(1)}${item.approximate ? "*" : ""}`)
-      .join(", ");
+    // Plain-English walk-through with the user's real numbers. estimate.rule
+    // is the WHS best-N-of-M table row; estimate.used are the rounds that
+    // actually made the cut.
+    const rule = estimate.rule;
+    const adjText = rule && rule.adjustment
+      ? `, then subtract ${Math.abs(rule.adjustment)} (small-sample safety margin)`
+      : "";
+    const usedIds = new Set(estimate.used.map((item) => item.round.id));
+    const usedAvg = average(estimate.used.map((item) => item.differential));
+    const usedExample = estimate.used.slice(0, 3).map((item) =>
+      `${item.gross} at ${escapeHtml(physicalCourseName(item.round.courseId))} → ${item.differential.toFixed(1)}`
+    ).join(" · ");
+    const worstUsed = estimate.used.length
+      ? Math.max(...estimate.used.map((i) => i.differential)).toFixed(1)
+      : "—";
+
+    // Every eligible round, best first; the counted ones get the brass badge.
+    const rows = [...estimate.eligible]
+      .sort((a, b) => a.differential - b.differential)
+      .map((item) => `
+        <li class="handicap-round-row${usedIds.has(item.round.id) ? " counted" : ""}">
+          <span class="handicap-round-main">
+            <strong>${item.gross}</strong>
+            <button type="button" class="link-course" data-open-course-name="${escapeHtml(physicalCourseName(item.round.courseId))}">${escapeHtml(physicalCourseName(item.round.courseId))}</button>
+            <small>${escapeHtml(item.round.date || "")}${item.approximate ? " · 9-hole est." : ""}</small>
+          </span>
+          <span class="handicap-round-diff">${item.differential.toFixed(1)}${usedIds.has(item.round.id) ? `<em class="counted-badge">counted</em>` : ""}</span>
+        </li>`).join("");
 
     els.handicapPanel.innerHTML = `
       <div class="handicap-index-box">
         <span>Estimated index</span>
         <strong>${estimate.index.toFixed(1)}</strong>
-        <small>${estimate.eligible.length} rated differentials | using best ${estimate.used.length}</small>
+        <small>${estimate.eligible.length} rated differentials · best ${estimate.used.length} counted</small>
       </div>
+      <div class="handicap-explain">
+        <h4 class="handicap-explain-h">How this number was built</h4>
+        <p class="handicap-explain-step">
+          <strong>1 · Every rated round gets a differential</strong> — how you
+          played against that course's difficulty, scaled so easy and hard
+          courses compare fairly: <em>(score − course rating) × 113 ÷ slope</em>.
+        </p>
+        <p class="handicap-explain-step">
+          <strong>2 · Only your best rounds count.</strong> With ${estimate.eligible.length}
+          rated rounds, the World Handicap System table says: average your best
+          ${estimate.used.length}${adjText}.
+        </p>
+        <p class="handicap-explain-step">
+          <strong>3 · Your best:</strong> ${usedExample}.
+          Average ${usedAvg.toFixed(1)}${rule && rule.adjustment ? ` − ${Math.abs(rule.adjustment)}` : ""}
+          → <strong>index ${estimate.index.toFixed(1)}</strong>.
+          Beat a ${worstUsed} differential in a future round and the index drops.
+        </p>
+        ${unratedLine}
+      </div>
+      <ul class="handicap-round-list">${rows}</ul>
       <div class="handicap-details">
-        <div class="handicap-detail-row"><span>Best differentials</span><strong>${escapeHtml(bestDiffs)}</strong></div>
-        <div class="handicap-detail-row"><span>9-hole estimates</span><strong>${estimate.approximateNineCount}</strong></div>
         <div class="handicap-detail-row"><span>Next course handicap</span><strong>${courseHandicap === null ? "--" : courseHandicap}</strong></div>
-        <div class="handicap-detail-row"><span>PCC</span><strong>0</strong></div>
+        <div class="handicap-detail-row"><span>9-hole estimates</span><strong>${estimate.approximateNineCount}</strong></div>
       </div>
       <p class="handicap-note">${estimate.note}</p>
     `;

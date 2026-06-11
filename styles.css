@@ -7412,3 +7412,159 @@ summary:focus-visible {
 
   .hero-spark-caption { text-align: left; }
 }
+
+/* ===== Composition pass 2: handicap explainer + tab hero moments ======== */
+
+/* The index box becomes the Trends-tab dark moment, matching the Home hero. */
+.handicap-index-box {
+  background: linear-gradient(150deg, #0d3322 0%, #124530 62%, #175539 100%) !important;
+  border: 1px solid rgba(217, 192, 138, 0.35) !important;
+  border-radius: 14px;
+  color: #fff !important;
+  box-shadow: inset 0 -2px 0 rgba(217, 192, 138, 0.4);
+}
+
+.handicap-index-box span { color: #d8c79b !important; }
+
+.handicap-index-box strong {
+  font-family: var(--font-display);
+  font-size: 2.8rem !important;
+  color: #fdfbf2 !important;
+}
+
+.handicap-index-box small { color: #bcd8cb !important; }
+
+/* Plain-English "how this number was built" walk-through. */
+.handicap-explain {
+  margin: 14px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.handicap-explain-h {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.handicap-explain-step {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.handicap-explain-step em {
+  font-style: normal;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+/* Every eligible round, best first; counted rounds get the brass badge. */
+.handicap-round-list {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.handicap-round-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.handicap-round-row.counted {
+  border-color: var(--gold-soft);
+  background: #fdfbf2;
+}
+
+.handicap-round-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.handicap-round-main strong { font-size: 1rem; }
+.handicap-round-main small { color: var(--muted); font-size: 0.72rem; }
+
+.handicap-round-diff {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--green-dark);
+  white-space: nowrap;
+}
+
+.counted-badge {
+  font-style: normal;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7a5c1d;
+  background: rgba(217, 192, 138, 0.35);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+/* Courses tab hero moment: the course profile header goes clubhouse green. */
+.course-profile-hero {
+  background: linear-gradient(150deg, #0d3322 0%, #124530 62%, #175539 100%);
+  border: 1px solid rgba(217, 192, 138, 0.35);
+  border-radius: 14px;
+  color: #fff;
+  padding: 18px;
+  box-shadow: inset 0 -2px 0 rgba(217, 192, 138, 0.4);
+}
+
+.course-profile-hero h3,
+.course-profile-hero strong {
+  font-family: var(--font-display);
+  color: #fdfbf2;
+}
+
+.course-profile-hero .subtext,
+.course-profile-hero small,
+.course-profile-hero span {
+  color: #bcd8cb;
+}
+
+/* Games tab hero moment. */
+.games-hero {
+  background: linear-gradient(150deg, #0d3322 0%, #124530 62%, #175539 100%);
+  border: 1px solid rgba(217, 192, 138, 0.35);
+  border-radius: 16px;
+  color: #fff;
+  margin-bottom: 14px;
+  box-shadow: inset 0 -2px 0 rgba(217, 192, 138, 0.4);
+}
+
+.games-hero h2 { color: #fdfbf2; }
+.games-hero p { color: #bcd8cb; }
+
+.games-hero .primary-button {
+  background: #fdfbf2;
+  color: var(--green-dark);
+  font-weight: 800;
+}
