@@ -8767,6 +8767,27 @@
     });
   }
 
+  // Every other Overview metric tile drills into the section that explains
+  // it: Rounds / Avg score / Avg to par → the scoring trend chart, Avg SG →
+  // the strokes-gained trend, Handicap → the handicap detail, GIR → the
+  // hole heatmap. One delegated wiring pass; the targets live on the tiles
+  // as data-drill-section / data-drill-sub.
+  document.querySelectorAll(".metric-card[data-drill-section]").forEach((tile) => {
+    tile.addEventListener("click", () => {
+      const section = tile.dataset.drillSection;
+      const sub = tile.dataset.drillSub;
+      setActiveTab("home");
+      setActiveHomeSection(section);
+      if (sub) setActiveSubsection(section, sub);
+      // Land the user on the content, not the chip strip.
+      setTimeout(() => {
+        const target = document.querySelector(`[data-home-subsection="${sub}"]:not(.subsection-hidden)`)
+          || document.querySelector(`.home-subchips[data-home-section="${section}"]`);
+        if (target) target.scrollIntoView({ block: "start", behavior: "smooth" });
+      }, 80);
+    });
+  });
+
   function setActiveTab(tabName) {
     const panels = [...document.querySelectorAll("[data-tab-panel]")];
     const targetName = panels.some((panel) => panel.dataset.tabPanel === tabName) ? tabName : "home";

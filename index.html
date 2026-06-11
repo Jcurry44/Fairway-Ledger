@@ -15,9 +15,9 @@
     <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
          icon, theme color in the browser chrome, and a standalone display
          mode instead of a tab. -->
-    <link rel="manifest" href="./manifest.json?v=2026-06-06f">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-06-06f">
-    <link rel="apple-touch-icon" href="./icon.svg?v=2026-06-06f">
+    <link rel="manifest" href="./manifest.json?v=2026-06-06g">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-06-06g">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-06-06g">
     <meta name="theme-color" content="#1f7a59">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -32,12 +32,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap">
 
-    <link rel="stylesheet" href="./styles.css?v=2026-06-06f">
-    <script src="./data/courses.js?v=2026-06-06f" defer></script>
-    <script src="./lib/golf-math.js?v=2026-06-06f" defer></script>
-    <script src="./lib/shapes.js?v=2026-06-06f" defer></script>
-    <script src="./lib/games.js?v=2026-06-06f" defer></script>
-    <script src="./app.js?v=2026-06-06f" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-06-06g">
+    <script src="./data/courses.js?v=2026-06-06g" defer></script>
+    <script src="./lib/golf-math.js?v=2026-06-06g" defer></script>
+    <script src="./lib/shapes.js?v=2026-06-06g" defer></script>
+    <script src="./lib/games.js?v=2026-06-06g" defer></script>
+    <script src="./app.js?v=2026-06-06g" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -150,36 +150,39 @@
             </div>
           </section>
 
+          <!-- Every tile drills somewhere: tiles with data-drill-section
+               jump to that Home section (and sub-chip); the Best round tile
+               opens the round's scorecard sheet directly. -->
           <section class="metrics-grid" data-home-section="overview" aria-label="Score summary">
-            <article class="metric-card">
-              <span>Rounds</span>
+            <button type="button" class="metric-card metric-card-tappable has-round" data-drill-section="trends" data-drill-sub="recent-rounds" aria-label="Rounds — tap to see the scoring trend">
+              <span>Rounds <span class="metric-tap-hint" aria-hidden="true">›</span></span>
               <strong id="metricRounds">0</strong>
-            </article>
-            <article class="metric-card">
-              <span>Avg score</span>
+            </button>
+            <button type="button" class="metric-card metric-card-tappable has-round" data-drill-section="trends" data-drill-sub="recent-rounds" aria-label="Average score — tap to see the scoring trend">
+              <span>Avg score <span class="metric-tap-hint" aria-hidden="true">›</span></span>
               <strong id="metricAverageScore">--</strong>
               <small id="metricAverageScoreNote" class="metric-card-note" hidden></small>
-            </article>
-            <article class="metric-card">
-              <span>Avg to par</span>
+            </button>
+            <button type="button" class="metric-card metric-card-tappable has-round" data-drill-section="trends" data-drill-sub="recent-rounds" aria-label="Average to par — tap to see the scoring trend">
+              <span>Avg to par <span class="metric-tap-hint" aria-hidden="true">›</span></span>
               <strong id="metricAveragePar">--</strong>
-            </article>
+            </button>
             <button type="button" class="metric-card metric-card-tappable" id="metricBestRoundCard" aria-label="Best round — tap to view the scorecard">
               <span>Best round <span class="metric-tap-hint" aria-hidden="true">›</span></span>
               <strong id="metricBestRound">--</strong>
             </button>
-            <article class="metric-card">
-              <span>GIR</span>
+            <button type="button" class="metric-card metric-card-tappable has-round" data-drill-section="holes" data-drill-sub="heatmap" aria-label="Greens in regulation — tap to see the hole map">
+              <span>GIR <span class="metric-tap-hint" aria-hidden="true">›</span></span>
               <strong id="metricGir">--</strong>
-            </article>
-            <article class="metric-card">
-              <span>Avg SG</span>
+            </button>
+            <button type="button" class="metric-card metric-card-tappable has-round" data-drill-section="trends" data-drill-sub="strokes-gained" aria-label="Strokes gained — tap to see the strokes gained trend">
+              <span>Avg SG <span class="metric-tap-hint" aria-hidden="true">›</span></span>
               <strong id="metricSg">--</strong>
-            </article>
-            <article class="metric-card handicap-card">
-              <span>Handicap est.</span>
+            </button>
+            <button type="button" class="metric-card metric-card-tappable has-round handicap-card" data-drill-section="trends" data-drill-sub="handicap-calculator" aria-label="Handicap estimate — tap to see the handicap detail">
+              <span>Handicap est. <span class="metric-tap-hint" aria-hidden="true">›</span></span>
               <strong id="metricHandicap">--</strong>
-            </article>
+            </button>
           </section>
 
           <section id="homeInsights" class="home-insights" data-home-section="overview" aria-label="Key insights"></section>

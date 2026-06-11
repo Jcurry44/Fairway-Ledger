@@ -7068,11 +7068,11 @@ summary:focus-visible {
     border-radius: 12px;
   }
 
-  /* Preference radio rows (Scorecard flow / Entry mode default): the
-     radio itself is 13px — give the whole label a comfortable tap area. */
+  /* Preference radio rows (Scorecard flow / Entry mode default): keep a
+     comfortable tap area. Horizontal padding stays — these rows have a
+     border + background, so text must not touch the edge. */
   .card-flow-option {
-    padding: 10px 0;
-    align-items: center;
+    padding: 10px 12px;
     min-height: 44px;
   }
 
@@ -7112,7 +7112,6 @@ summary:focus-visible {
    what Jeff saw on the Profile preference rows on his iPhone while desktop
    Chrome wrapped the same text fine. min-width: 0 restores normal
    wrapping. Applied to every flex row that carries a text span. */
-.card-flow-option > span,
 .game-setup-toggle > span,
 .completion-banner > div,
 .bucket-row-main,
@@ -7121,9 +7120,47 @@ summary:focus-visible {
   min-width: 0;
 }
 
+/* Preference rows rebuilt as GRID, not flex. minmax(0, 1fr) cannot fall
+   into the WebKit min-width:auto trap at all — the text column is
+   structurally incapable of exceeding the row. The descriptor also moves
+   to its own line, so the longest single line is just the option name. */
+.card-flow-option {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 10px;
+}
+
+.card-flow-option input {
+  margin-top: 4px;
+  justify-self: center;
+}
+
 .card-flow-option > span {
-  flex: 1 1 0;
-  overflow-wrap: anywhere;
+  display: block;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.card-flow-option .option-hint {
+  display: block;
+  margin-top: 1px;
+}
+
+/* Belt-and-suspenders for any device state I can't reproduce: nothing may
+   extend the page horizontally on a phone. `clip` (not `hidden`) so
+   position:sticky on the tab bar keeps working — clip doesn't create a
+   scroll container. */
+@media (max-width: 760px) {
+  html, body {
+    overflow-x: clip;
+  }
+
+  .panel {
+    overflow-x: clip;
+    max-width: 100%;
+  }
 }
 
 /* Best round tile is a real button now — reset button chrome so it looks
