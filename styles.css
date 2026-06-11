@@ -7219,3 +7219,43 @@ summary:focus-visible {
 .round-detail-subtitle .link-course {
   color: inherit;
 }
+
+/* Course-search additions: setup notice in the lookup results + the
+   Profile key row. */
+.lookup-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  border: 1px dashed var(--gold-soft, #d9c08a);
+  border-radius: 10px;
+  background: #fdfbf2;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.lookup-notice a {
+  color: var(--green-dark, #15573c);
+  font-weight: 700;
+}
+
+.course-api-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.course-api-row input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+}
+
+.course-api-row .primary-button {
+  flex-shrink: 0;
+}

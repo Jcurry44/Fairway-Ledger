@@ -659,6 +659,10 @@
     courseLookupForm: document.getElementById("courseLookupForm"),
     courseLookupQuery: document.getElementById("courseLookupQuery"),
     courseLookupResults: document.getElementById("courseLookupResults"),
+    courseApiPanel: document.getElementById("courseApiPanel"),
+    courseApiKeyInput: document.getElementById("courseApiKeyInput"),
+    courseApiKeySave: document.getElementById("courseApiKeySave"),
+    courseApiKeyStatus: document.getElementById("courseApiKeyStatus"),
     courseList: document.getElementById("courseList"),
     courseDetail: document.getElementById("courseDetail"),
     loadSampleButton: document.getElementById("loadSampleButton"),
@@ -7543,22 +7547,128 @@
     `;
   }
 
+  // ---- Online course search (GolfCourseAPI) -------------------------------
+  //
+  // Searches ~30k real courses with full per-tee scorecards (par, yardage,
+  // handicap, rating, slope) via golfcourseapi.com. Free tier is 50
+  // requests/day with an email-only signup; the key lives in localStorage
+  // and every request goes straight from the browser to the API — no
+  // backend, consistent with the rest of the app.
+
+  const COURSE_API_KEY_STORAGE = "fairwayLedger.courseApiKey.v1";
+  const COURSE_API_BASE = "https://api.golfcourseapi.com";
+
+  function getCourseApiKey() {
+    try { return localStorage.getItem(COURSE_API_KEY_STORAGE) || ""; } catch { return ""; }
+  }
+
+  function setCourseApiKey(key) {
+    try {
+      if (key) localStorage.setItem(COURSE_API_KEY_STORAGE, key);
+      else localStorage.removeItem(COURSE_API_KEY_STORAGE);
+    } catch {}
+  }
+
+  function courseSlug(text) {
+    return String(text).toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60);
+  }
+
+  // Map one GolfCourseAPI course → one catalog entry per tee set (matches
+  // how the built-in catalog models tee variants: Harvest Hill has five
+  // entries sharing a name). Female tee sets get the tee name suffixed so
+  // "White" men's and "White" women's don't collide.
+  function normalizeApiCourse(api) {
+    const clubName = (api.club_name || "").trim();
+    const courseName = (api.course_name || "").trim();
+    const displayName = !courseName || courseName === clubName
+      ? clubName
+      : `${clubName} — ${courseName}`;
+    if (!displayName) return null;
+    const location = [api.location && api.location.city, api.location && api.location.state]
+      .filter(Boolean).join(", ");
+    const entries = [];
+    const buildEntries = (sets, suffix) => {
+      (Array.isArray(sets) ? sets : []).forEach((tee) => {
+        if (!tee || !Array.isArray(tee.holes) || !tee.holes.length) return;
+        const teeName = `${tee.tee_name || "Standard"}${suffix}`;
+        entries.push({
+          id: `${courseSlug(displayName)}-${courseSlug(teeName)}`,
+          name: displayName,
+          tee: teeName,
+          rating: Number.isFinite(tee.course_rating) ? tee.course_rating : null,
+          slope: Number.isFinite(tee.slope_rating) ? tee.slope_rating : null,
+          holes: tee.holes.map((hole, index) => ({
+            number: index + 1,
+            par: Number.isFinite(hole.par) ? hole.par : 4,
+            yards: Number.isFinite(hole.yardage) ? hole.yardage : 0,
+            hcp: Number.isFinite(hole.handicap) ? hole.handicap : null
+          }))
+        });
+      });
+    };
+    buildEntries(api.tees && api.tees.male, "");
+    buildEntries(api.tees && api.tees.female, " (W)");
+    if (!entries.length) return null;
+    const first = entries[0];
+    const par = first.holes.reduce((sum, hole) => sum + hole.par, 0);
+    const yards = first.holes.reduce((sum, hole) => sum + Number(hole.yards || 0), 0);
+    return {
+      id: `api-${api.id}`,
+      name: displayName,
+      location,
+      summary: `${first.holes.length} holes · par ${par}${yards ? ` · ${yards} yds` : ""} · ${entries.length} tee set${entries.length === 1 ? "" : "s"}`,
+      kind: "api",
+      courses: entries
+    };
+  }
+
+  // findCourses returns { results, notice } — notice is a user-readable
+  // string explaining why online results may be missing (no key, bad key,
+  // rate limit, network). Catalog matches always append.
   async function findCourses(query) {
-    const apiResults = await findCoursesFromApi(query);
-    if (apiResults.length) return apiResults;
-    return findCoursesFromCatalog(query);
+    const { results: apiResults, notice } = await findCoursesFromApi(query);
+    const catalogResults = findCoursesFromCatalog(query);
+    // Drop catalog hits that duplicate an API hit by name.
+    const apiNames = new Set(apiResults.map((r) => r.name.toLowerCase()));
+    const merged = [
+      ...apiResults,
+      ...catalogResults.filter((r) => !apiNames.has((r.name || "").toLowerCase()))
+    ];
+    return { results: merged, notice };
   }
 
   async function findCoursesFromApi(query) {
-    if (window.location.protocol === "file:") return [];
+    const key = getCourseApiKey();
+    if (!key) {
+      return {
+        results: [],
+        notice: "needs-key"
+      };
+    }
     try {
-      const response = await fetch(`/api/course-search?q=${encodeURIComponent(query)}`);
-      if (!response.ok) return [];
+      const response = await fetch(`${COURSE_API_BASE}/v1/search?search_query=${encodeURIComponent(query)}`, {
+        headers: { Authorization: `Key ${key}` }
+      });
+      if (response.status === 401 || response.status === 403) {
+        return { results: [], notice: "That API key was rejected — double-check it in Profile → Course search." };
+      }
+      if (response.status === 429) {
+        return { results: [], notice: "Daily search limit reached (50/day on the free plan). Try again tomorrow." };
+      }
+      if (!response.ok) {
+        return { results: [], notice: `Course service error (${response.status}). Try again in a minute.` };
+      }
       const payload = await response.json();
-      if (!payload || !Array.isArray(payload.courses)) return [];
-      return payload.courses.map(normalizeLookupResult).filter(Boolean);
+      const list = payload && Array.isArray(payload.courses) ? payload.courses : [];
+      return { results: list.map(normalizeApiCourse).filter(Boolean).slice(0, 12), notice: null };
     } catch (error) {
-      return [];
+      return {
+        results: [],
+        notice: "Couldn't reach the course service — check your connection. Saved-course search still works below."
+      };
     }
   }
 
@@ -7618,19 +7728,33 @@
     };
   }
 
-  function renderCourseLookupResults(results, query) {
+  function renderCourseLookupResults(results, query, notice) {
+    // "needs-key" is the one-time setup callout; anything else is a plain
+    // status line (rate limit, bad key, offline).
+    const noticeHtml = notice === "needs-key"
+      ? `<div class="lookup-notice">
+          <strong>Search 30,000 real courses with full scorecards.</strong>
+          <span>One-time setup: grab a free API key (email only, ~30 seconds) at
+          <a href="https://golfcourseapi.com" target="_blank" rel="noopener">golfcourseapi.com</a>,
+          then paste it in <button type="button" class="link-course" data-go-course-key="1">Profile → Course search</button>.
+          Until then, search covers your saved courses only.</span>
+        </div>`
+      : notice
+        ? `<div class="lookup-notice"><span>${escapeHtml(notice)}</span></div>`
+        : "";
+
     if (!results.length) {
-      els.courseLookupResults.innerHTML = emptyState(`No automatic scorecard match for "${escapeHtml(query)}".`);
+      els.courseLookupResults.innerHTML = noticeHtml + emptyState(`No scorecard match for "${escapeHtml(query)}".`);
       return;
     }
 
-    els.courseLookupResults.innerHTML = results.map((result) => `
+    els.courseLookupResults.innerHTML = noticeHtml + results.map((result) => `
       <div class="lookup-row">
         <div>
           <strong>${escapeHtml(result.name)}</strong>
           <span class="subtext">${escapeHtml([result.location, result.summary].filter(Boolean).join(" | "))}</span>
         </div>
-        <button type="button" data-lookup-course="${escapeHtml(result.id)}">Use</button>
+        <button type="button" data-lookup-course="${escapeHtml(result.id)}">${result.kind === "api" ? "Add" : "Use"}</button>
       </div>
     `).join("");
 
@@ -8799,6 +8923,15 @@
   // One global handler for every course-name link in the app. Also closes
   // whichever sheet/overlay the link was inside, so the jump lands clean.
   document.addEventListener("click", (event) => {
+    const keyLink = event.target.closest("[data-go-course-key]");
+    if (keyLink) {
+      setActiveTab("profile");
+      setTimeout(() => {
+        els.courseApiPanel?.scrollIntoView({ block: "start", behavior: "smooth" });
+        els.courseApiKeyInput?.focus();
+      }, 80);
+      return;
+    }
     const link = event.target.closest("[data-open-course-name]");
     if (!link) return;
     const name = link.dataset.openCourseName;
@@ -8810,6 +8943,25 @@
     document.body.classList.remove("hole-picker-open");
     openCourseDetailForName(name);
   });
+
+  // Course-search API key management (Profile → Course search).
+  function renderCourseApiKeyStatus() {
+    if (!els.courseApiKeyStatus) return;
+    const key = getCourseApiKey();
+    els.courseApiKeyStatus.textContent = key
+      ? `Key saved (…${key.slice(-4)}). Online search is on — try the Courses tab.`
+      : "No key yet — search covers your saved courses only.";
+  }
+  renderCourseApiKeyStatus();
+  if (els.courseApiKeySave) {
+    els.courseApiKeySave.addEventListener("click", () => {
+      const value = (els.courseApiKeyInput?.value || "").trim();
+      setCourseApiKey(value);
+      if (els.courseApiKeyInput) els.courseApiKeyInput.value = "";
+      renderCourseApiKeyStatus();
+      showToast(value ? "Course search key saved." : "Course search key cleared.");
+    });
+  }
 
   // Every other Overview metric tile drills into the section that explains
   // it: Rounds / Avg score / Avg to par → the scoring trend chart, Avg SG →
@@ -9701,8 +9853,8 @@
     const query = els.courseLookupQuery.value.trim();
     if (!query) return;
     els.courseLookupResults.innerHTML = emptyState("Searching...");
-    const results = await findCourses(query);
-    renderCourseLookupResults(results, query);
+    const { results, notice } = await findCourses(query);
+    renderCourseLookupResults(results, query, notice);
   });
 
   function applySampleData() {
