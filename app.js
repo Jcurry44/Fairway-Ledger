@@ -546,6 +546,7 @@
     metricAverageScoreNote: document.getElementById("metricAverageScoreNote"),
     metricAveragePar: document.getElementById("metricAveragePar"),
     metricBestRound: document.getElementById("metricBestRound"),
+    metricBestRoundCard: document.getElementById("metricBestRoundCard"),
     metricGir: document.getElementById("metricGir"),
     metricSg: document.getElementById("metricSg"),
     metricHandicap: document.getElementById("metricHandicap"),
@@ -3763,6 +3764,18 @@
     els.metricAverageScore.textContent = Number.isFinite(fullAvg) ? fullAvg.toFixed(1) : "--";
     els.metricAveragePar.textContent = formatSigned(fullToPar);
     els.metricBestRound.textContent = best ? `${roundTotals(best).gross} (${formatSigned(roundTotals(best).toPar, 0)})` : "--";
+    // The Best round tile is tappable — stash the round id so the click
+    // handler can open that round's scorecard sheet. No best round (no
+    // 18-hole rounds yet) → tile renders but does nothing on tap.
+    if (els.metricBestRoundCard) {
+      if (best) {
+        els.metricBestRoundCard.dataset.roundId = best.id;
+        els.metricBestRoundCard.classList.add("has-round");
+      } else {
+        delete els.metricBestRoundCard.dataset.roundId;
+        els.metricBestRoundCard.classList.remove("has-round");
+      }
+    }
     els.metricGir.textContent = percentage(girMade, girTotal);
     els.metricSg.textContent = Number.isFinite(avgSg) ? formatSigned(avgSg) : "--";
     els.metricHandicap.textContent = handicap.index === null ? "--" : handicap.index.toFixed(1);
@@ -8740,6 +8753,18 @@
   if (els.gamesRoot) {
     els.gamesRoot.addEventListener("click", handleGamesClick);
     renderGames();
+  }
+
+  // Best round tile on Home → open that round's read-only scorecard sheet.
+  // Same showRoundDetail path as Trophy Room and Recent Scorecards, per the
+  // "every open-a-round affordance converges on the detail sheet" rule.
+  if (els.metricBestRoundCard) {
+    els.metricBestRoundCard.addEventListener("click", () => {
+      const id = els.metricBestRoundCard.dataset.roundId;
+      if (!id) return;
+      const round = state.rounds.find((r) => r.id === id);
+      if (round) showRoundDetail(round);
+    });
   }
 
   function setActiveTab(tabName) {

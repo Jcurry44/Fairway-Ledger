@@ -7105,3 +7105,51 @@ summary:focus-visible {
   font-weight: 500;
   font-size: 0.84rem;
 }
+
+/* iOS Safari flex hardening. WebKit resolves a flex item's min-width:auto
+   to max-content in nested flex layouts, so a long text span inside a flex
+   row REFUSES to wrap and runs off the right edge of the screen — exactly
+   what Jeff saw on the Profile preference rows on his iPhone while desktop
+   Chrome wrapped the same text fine. min-width: 0 restores normal
+   wrapping. Applied to every flex row that carries a text span. */
+.card-flow-option > span,
+.game-setup-toggle > span,
+.completion-banner > div,
+.bucket-row-main,
+.game-card-main,
+.brand > div {
+  min-width: 0;
+}
+
+.card-flow-option > span {
+  flex: 1 1 0;
+  overflow-wrap: anywhere;
+}
+
+/* Best round tile is a real button now — reset button chrome so it looks
+   identical to its sibling metric cards, plus a quiet affordance. */
+.metric-card-tappable {
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+}
+
+.metric-card-tappable:not(.has-round) {
+  cursor: default;
+}
+
+.metric-card-tappable.has-round:active {
+  transform: translateY(1px);
+}
+
+.metric-tap-hint {
+  color: var(--gold);
+  font-weight: 900;
+  margin-left: 2px;
+}
+
+.metric-card-tappable:not(.has-round) .metric-tap-hint {
+  visibility: hidden;
+}
