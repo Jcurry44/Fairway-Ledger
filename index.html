@@ -15,9 +15,9 @@
     <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
          icon, theme color in the browser chrome, and a standalone display
          mode instead of a tab. -->
-    <link rel="manifest" href="./manifest.json?v=2026-06-11a">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-06-11a">
-    <link rel="apple-touch-icon" href="./icon.svg?v=2026-06-11a">
+    <link rel="manifest" href="./manifest.json?v=2026-06-11b">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-06-11b">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-06-11b">
     <meta name="theme-color" content="#1f7a59">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -32,12 +32,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap">
 
-    <link rel="stylesheet" href="./styles.css?v=2026-06-11a">
-    <script src="./data/courses.js?v=2026-06-11a" defer></script>
-    <script src="./lib/golf-math.js?v=2026-06-11a" defer></script>
-    <script src="./lib/shapes.js?v=2026-06-11a" defer></script>
-    <script src="./lib/games.js?v=2026-06-11a" defer></script>
-    <script src="./app.js?v=2026-06-11a" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-06-11b">
+    <script src="./data/courses.js?v=2026-06-11b" defer></script>
+    <script src="./lib/golf-math.js?v=2026-06-11b" defer></script>
+    <script src="./lib/shapes.js?v=2026-06-11b" defer></script>
+    <script src="./lib/games.js?v=2026-06-11b" defer></script>
+    <script src="./app.js?v=2026-06-11b" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -150,6 +150,11 @@
             </div>
           </section>
 
+          <!-- Hero stat: the one number that matters, big, on deep green,
+               with the scoring sparkline built in. Rendered by
+               renderHeroStat — hidden until there's at least one round. -->
+          <section class="home-hero-stat" id="homeHeroStat" data-home-section="overview" aria-label="Headline stat" hidden></section>
+
           <!-- Every tile drills somewhere: tiles with data-drill-section
                jump to that Home section (and sub-chip); the Best round tile
                opens the round's scorecard sheet directly. -->
@@ -178,10 +183,6 @@
             <button type="button" class="metric-card metric-card-tappable has-round" data-drill-section="trends" data-drill-sub="strokes-gained" aria-label="Strokes gained — tap to see the strokes gained trend">
               <span>Avg SG <span class="metric-tap-hint" aria-hidden="true">›</span></span>
               <strong id="metricSg">--</strong>
-            </button>
-            <button type="button" class="metric-card metric-card-tappable has-round handicap-card" data-drill-section="trends" data-drill-sub="handicap-calculator" aria-label="Handicap estimate — tap to see the handicap detail">
-              <span>Handicap est. <span class="metric-tap-hint" aria-hidden="true">›</span></span>
-              <strong id="metricHandicap">--</strong>
             </button>
           </section>
 

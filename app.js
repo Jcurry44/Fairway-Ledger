@@ -3764,6 +3764,7 @@
     const fullAvg = average(fullTotals.map((item) => item.gross));
     const fullToPar = average(fullTotals.map((item) => item.toPar));
 
+    renderHeroStat(rounds, handicap, eighteenHoleRounds);
     els.metricRounds.textContent = String(rounds.length);
     els.metricAverageScore.textContent = Number.isFinite(fullAvg) ? fullAvg.toFixed(1) : "--";
     els.metricAveragePar.textContent = formatSigned(fullToPar);
@@ -3782,7 +3783,12 @@
     }
     els.metricGir.textContent = percentage(girMade, girTotal);
     els.metricSg.textContent = Number.isFinite(avgSg) ? formatSigned(avgSg) : "--";
-    els.metricHandicap.textContent = handicap.index === null ? "--" : handicap.index.toFixed(1);
+    // Handicap tile moved into the hero stat — the element no longer exists
+    // in the metrics grid, but keep the guard in case a future layout
+    // brings it back.
+    if (els.metricHandicap) {
+      els.metricHandicap.textContent = handicap.index === null ? "--" : handicap.index.toFixed(1);
+    }
     // Tell the user when 9-hole rounds are excluded from the headline so the
     // numbers don't quietly under- or over-state things.
     if (els.metricAverageScoreNote) {
@@ -3791,6 +3797,87 @@
         : "";
       els.metricAverageScoreNote.textContent = note;
       els.metricAverageScoreNote.hidden = !note;
+    }
+  }
+
+  // The Home hero: ONE number, huge, on deep clubhouse green, with the
+  // 18-hole gross sparkline built into the same moment. Composition answer
+  // to "seven equal tiles = zero important things." Handicap leads when we
+  // have one; otherwise the latest round's gross takes the spot so new
+  // users still get a hero from round one.
+  function renderHeroStat(rounds, handicap, eighteenHoleRounds) {
+    const hero = document.getElementById("homeHeroStat");
+    if (!hero) return;
+    if (!rounds.length) {
+      hero.hidden = true;
+      hero.innerHTML = "";
+      return;
+    }
+    const lastRound = [...rounds].sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0];
+    const lastTotals = lastRound ? roundTotals(lastRound) : null;
+    const hasIndex = handicap && handicap.index !== null && Number.isFinite(handicap.index);
+
+    const eyebrow = hasIndex ? "Handicap index · estimate" : "Latest round";
+    const number = hasIndex
+      ? handicap.index.toFixed(1)
+      : `${lastTotals.gross}`;
+    const numberSuffix = hasIndex ? "" : ` <span class="hero-number-sub">(${formatSigned(lastTotals.toPar, 0)})</span>`;
+
+    const subline = hasIndex && lastRound
+      ? `<button type="button" class="hero-last-round" data-hero-round="${escapeHtml(lastRound.id)}">
+          Last round: ${lastTotals.gross} (${formatSigned(lastTotals.toPar, 0)}) · ${escapeHtml(physicalCourseName(lastRound.courseId))} <span aria-hidden="true">›</span>
+        </button>`
+      : lastRound
+        ? `<button type="button" class="hero-last-round" data-hero-round="${escapeHtml(lastRound.id)}">
+            ${escapeHtml(physicalCourseName(lastRound.courseId))} · ${escapeHtml(lastRound.date || "")} <span aria-hidden="true">›</span>
+          </button>`
+        : "";
+
+    // Sparkline: last 10 18-hole gross scores. Area gradient + a gold dot
+    // on the most recent point. Skipped below 2 points.
+    const series = [...eighteenHoleRounds]
+      .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
+      .slice(-10)
+      .map((r) => roundTotals(r).gross);
+    let spark = "";
+    if (series.length >= 2) {
+      const w = 220, h = 56, pad = 6;
+      const min = Math.min(...series), max = Math.max(...series);
+      const span = Math.max(1, max - min);
+      const x = (i) => pad + (i * (w - pad * 2)) / (series.length - 1);
+      const y = (v) => pad + ((max - v) * (h - pad * 2)) / span;
+      const pts = series.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+      const lastX = x(series.length - 1).toFixed(1);
+      const lastY = y(series[series.length - 1]).toFixed(1);
+      spark = `
+        <svg class="hero-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="heroSparkFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#d9c08a" stop-opacity="0.45"/>
+              <stop offset="100%" stop-color="#d9c08a" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <path d="M${pts[0]} L${pts.join(" L")} L${lastX},${h - 1} L${pts[0].split(",")[0]},${h - 1} Z" fill="url(#heroSparkFill)"/>
+          <polyline points="${pts.join(" ")}" fill="none" stroke="#f2ead3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="${lastX}" cy="${lastY}" r="3.4" fill="#d9c08a"/>
+        </svg>
+        <div class="hero-spark-caption">Last ${series.length} rounds · ${series[series.length - 1]} latest</div>`;
+    }
+
+    hero.hidden = false;
+    hero.innerHTML = `
+      <div class="hero-stat-main">
+        <p class="hero-eyebrow">${eyebrow}</p>
+        <div class="hero-number">${number}${numberSuffix}</div>
+        ${subline}
+      </div>
+      <div class="hero-stat-side${spark ? "" : " empty"}">${spark}</div>`;
+    const lastBtn = hero.querySelector("[data-hero-round]");
+    if (lastBtn) {
+      lastBtn.addEventListener("click", () => {
+        const round = state.rounds.find((r) => r.id === lastBtn.dataset.heroRound);
+        if (round) showRoundDetail(round);
+      });
     }
   }
 
@@ -7798,12 +7885,15 @@
 
     const values = ordered.map((round) => roundTotals(round).toPar);
     const maxAbs = Math.max(4, ...values.map((value) => Math.abs(value)));
-    const bars = ordered.map((round) => {
+    const bars = ordered.map((round, index) => {
       const total = roundTotals(round);
       const height = Math.max(4, Math.round((Math.abs(total.toPar) / maxAbs) * 124));
       const goodClass = total.toPar <= 0 ? "good" : "";
+      // The most recent round is THE bar the user came to see — give it
+      // the emphasis treatment (gold cap + bolder label via CSS).
+      const latestClass = index === ordered.length - 1 ? " is-latest" : "";
       return `
-        <div class="trend-item">
+        <div class="trend-item${latestClass}">
           <div class="trend-value">${formatSigned(total.toPar, 0)}</div>
           <div class="trend-column"><div class="trend-bar ${goodClass}" style="height:${height}px"></div></div>
           <div class="trend-date">${round.date.slice(5)}<br>${total.gross}</div>
