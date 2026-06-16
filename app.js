@@ -1822,6 +1822,16 @@
     return els.roundCourse && els.roundCourse.value === DEERWOOD_COURSE_ID;
   }
 
+  function hasSetupRowSelection(rowId, validValues) {
+    if (setupChipRowsTapped.has(rowId)) return true;
+    const select = document.getElementById(rowId);
+    if (!select) return false;
+    const value = select.value;
+    return Array.isArray(validValues)
+      ? validValues.includes(value)
+      : value !== "";
+  }
+
   // Conditions that must be met before Start Round enables. Returns an
   // explanatory hint string when not ready, or "" when ready to start.
   function getStartRoundBlocker() {
@@ -1830,13 +1840,13 @@
     }
     if (isCourseDeerwoodSelected()) {
       if (!setupChipRowsTapped.has("roundHoleCount")) return "Pick 9 or 18 holes.";
-      if (!setupChipRowsTapped.has("roundTee")) return "Pick your tee box.";
+      if (!hasSetupRowSelection("roundTee", DEERWOOD_TEE_OPTIONS)) return "Pick your tee box.";
       const isNineHole = els.roundHoleCount.value === "9";
       if (isNineHole) {
-        if (!setupChipRowsTapped.has("roundLayout")) return "Pick which nine you're playing.";
+        if (!hasSetupRowSelection("roundLayout", DEERWOOD_NINE_IDS)) return "Pick which nine you're playing.";
       } else {
-        if (!setupChipRowsTapped.has("roundFrontNine")) return "Pick your front 9.";
-        if (!setupChipRowsTapped.has("roundBackNine")) return "Pick your back 9.";
+        if (!hasSetupRowSelection("roundFrontNine", DEERWOOD_NINE_IDS)) return "Pick your front 9.";
+        if (!hasSetupRowSelection("roundBackNine", DEERWOOD_NINE_IDS)) return "Pick your back 9.";
       }
       return "";
     }
@@ -9174,6 +9184,7 @@
     renderScorecard(getSelectedRoundCourse());
     renderHandicapPanel();
     renderCourseBrief();
+    applyRoundStartedUi();
   }
 
   // Re-render the round setup + scorecard while preserving entered data for
@@ -9191,6 +9202,7 @@
     renderScorecard(getSelectedRoundCourse());
     renderHandicapPanel();
     renderCourseBrief();
+    applyRoundStartedUi();
     // Re-apply the preserved holes' score/putts/fairway/gir/pen/firstPutt.
     const preservedSnap = new Map();
     snapshot.forEach((values, holeNumber) => {
