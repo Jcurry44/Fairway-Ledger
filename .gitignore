@@ -6,6 +6,7 @@ Thumbs.db
 
 # Personal data exports (don't accidentally publish your rounds)
 fairway-ledger-*.json
+data/golf-lab/
 
 # Editor / IDE
 .vscode/

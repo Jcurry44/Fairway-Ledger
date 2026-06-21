@@ -32,12 +32,16 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap">
 
-    <link rel="stylesheet" href="./styles.css?v=2026-06-16a">
-    <script src="./data/courses.js?v=2026-06-16a" defer></script>
-    <script src="./lib/golf-math.js?v=2026-06-16a" defer></script>
-    <script src="./lib/shapes.js?v=2026-06-16a" defer></script>
-    <script src="./lib/games.js?v=2026-06-16a" defer></script>
-    <script src="./app.js?v=2026-06-16a" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-06-19j">
+    <script src="./data/courses.js?v=2026-06-19j" defer></script>
+    <script src="./lib/golf-math.js?v=2026-06-19j" defer></script>
+    <script src="./lib/shapes.js?v=2026-06-19j" defer></script>
+    <script src="./lib/games.js?v=2026-06-19j" defer></script>
+    <script src="./lib/golf-lab.js?v=2026-06-19j" defer></script>
+    <script src="./lib/golf-lab-warehouse.js?v=2026-06-19j" defer></script>
+    <script src="./lib/golf-lab-sources.js?v=2026-06-19j" defer></script>
+    <script src="./lib/golf-lab-model.js?v=2026-06-19j" defer></script>
+    <script src="./app.js?v=2026-06-19j" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -98,6 +102,10 @@
           <button class="tab-button" type="button" data-tab-target="courses" aria-selected="false">
             <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 21V4"/><path d="M7 5l9 2.8L7 10.6"/><path d="M4 21h9"/><circle cx="17.5" cy="19.5" r="1.5"/></svg>
             <span class="tab-label">Courses</span>
+          </button>
+          <button class="tab-button" type="button" data-tab-target="golf-lab" aria-selected="false">
+            <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="M6.5 16.5 10 8l3 5 2.5-7 2 10.5"/><circle cx="10" cy="8" r="1.2"/><circle cx="13" cy="13" r="1.2"/><circle cx="15.5" cy="6" r="1.2"/></svg>
+            <span class="tab-label">Golf Lab</span>
           </button>
           <button class="tab-button" type="button" data-tab-target="games" aria-selected="false">
             <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v4a4 4 0 0 1-8 0V4z"/><path d="M8 5H5.5a2.6 2.6 0 0 0 2.8 4M16 5h2.5a2.6 2.6 0 0 1-2.8 4"/><path d="M12 12v4"/><path d="M8.5 20h7M10 16.5h4"/></svg>
@@ -601,6 +609,537 @@
             </div>
             <div id="courseDetail" class="course-detail"></div>
           </article>
+          </section>
+        </section>
+
+        <section class="tab-panel" data-tab-panel="golf-lab">
+          <section class="golf-lab-hero" id="golfLabHero">
+            <div class="golf-lab-hero-copy">
+              <p class="eyebrow">Professional golf analytics</p>
+              <h2>Golf Lab</h2>
+              <p id="golfLabStatus">No professional golf data loaded.</p>
+            </div>
+            <div class="golf-lab-actions">
+              <div class="golf-lab-control-grid">
+                <label class="golf-lab-field" for="golfLabModelEventSelect">
+                  <span>Model Event</span>
+                  <select id="golfLabModelEventSelect"></select>
+                </label>
+                <label class="golf-lab-field" for="golfLabModelPreset">
+                  <span>Profile</span>
+                  <select id="golfLabModelPreset"></select>
+                </label>
+                <label class="golf-lab-field" for="golfLabMarketFilter">
+                  <span>Market</span>
+                  <select id="golfLabMarketFilter"></select>
+                </label>
+                <label class="golf-lab-field" for="golfLabWeatherScenario">
+                  <span>Weather</span>
+                  <select id="golfLabWeatherScenario"></select>
+                </label>
+                <label class="golf-lab-field golf-lab-range-field" for="golfLabEdgeThreshold">
+                  <span>Edge <b id="golfLabEdgeThresholdValue">1 pp</b></span>
+                  <input id="golfLabEdgeThreshold" type="range" min="0" max="8" step="0.5" value="1">
+                </label>
+              </div>
+              <div class="golf-lab-model-weights" id="golfLabModelWeights"></div>
+              <div class="golf-lab-sync-row">
+                <button type="button" class="primary-button" id="golfLabRunModel">Run Owned Model</button>
+                <span id="golfLabModelStatus">Import source-backed fields, rounds, odds, and weather.</span>
+              </div>
+              <div class="golf-lab-import-row">
+                <label class="file-button">
+                  Import Golf Lab Data
+                  <input id="golfLabImportInput" type="file" accept="application/json,.json,text/csv,.csv" multiple>
+                </label>
+                <span id="golfLabSourceStatus"></span>
+              </div>
+            </div>
+          </section>
+
+          <section class="golf-lab-lanes" id="golfLabLanes" aria-label="Golf Lab workspaces"></section>
+
+          <section class="golf-lab-workspace">
+            <article class="panel wide-panel golf-lab-command-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Decision hub</p>
+                  <h2>Tournament Command Center</h2>
+                </div>
+              </div>
+              <div id="golfLabCommandCenterBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-activation-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Tournament activation</p>
+                  <h2>Activation Plan</h2>
+                </div>
+                <button type="button" class="ghost-button" id="golfLabActivationPacketButton">Packet</button>
+              </div>
+              <div id="golfLabActivationPlanBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-warehouse-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Owned database</p>
+                  <h2>Warehouse Workbench</h2>
+                </div>
+                <div class="golf-lab-panel-actions">
+                  <button type="button" class="ghost-button" id="golfLabExportButton">Export</button>
+                  <button type="button" class="ghost-button" id="golfLabTemplateButton">Template</button>
+                </div>
+              </div>
+              <div id="golfLabWarehouseWorkbench"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-coverage-map-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Database coverage</p>
+                  <h2>Warehouse Coverage Map</h2>
+                </div>
+              </div>
+              <div id="golfLabCoverageMapBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-source-audit-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Data trust</p>
+                  <h2>Source Audit Board</h2>
+                </div>
+              </div>
+              <div id="golfLabSourceAuditBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-lineage-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Chain of custody</p>
+                  <h2>Source Lineage</h2>
+                </div>
+              </div>
+              <div id="golfLabSourceLineageBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-source-ops-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Source operations</p>
+                  <h2>Source Ops Board</h2>
+                </div>
+              </div>
+              <div id="golfLabSourceOpsBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-data-intake-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Source adapters</p>
+                  <h2>Data Intake</h2>
+                </div>
+                <button type="button" class="ghost-button" id="golfLabDataIntakePacketButton">Packet</button>
+              </div>
+              <div id="golfLabDataIntakeBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-source-catalog-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Acquisition manifest</p>
+                  <h2>Source Catalog</h2>
+                </div>
+              </div>
+              <div id="golfLabSourceCatalogBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-backfill-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Training data roadmap</p>
+                  <h2>Historical Backfill</h2>
+                </div>
+                <button type="button" class="ghost-button" id="golfLabBackfillPacketButton">Packet</button>
+              </div>
+              <div id="golfLabHistoricalBackfillBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-source-plan-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Source playbook</p>
+                  <h2>Research Queue</h2>
+                </div>
+                <button type="button" class="ghost-button" id="golfLabResearchPacketButton">Packet</button>
+              </div>
+              <div id="golfLabSourcePlan"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-identity-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Entity resolution</p>
+                  <h2>Player Identity</h2>
+                </div>
+              </div>
+              <div id="golfLabPlayerIdentityBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-course-setup-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Tournament setup</p>
+                  <h2>Course Setup Lab</h2>
+                </div>
+              </div>
+              <div id="golfLabCourseSetupBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-player-split-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Field split intelligence</p>
+                  <h2>Player Split Lab</h2>
+                </div>
+              </div>
+              <div id="golfLabPlayerSplitLabBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-feature-store-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Model feature trust</p>
+                  <h2>Feature Store Audit</h2>
+                </div>
+              </div>
+              <div id="golfLabFeatureStoreBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-prep-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Prediction command gate</p>
+                  <h2>Prediction Prep</h2>
+                </div>
+              </div>
+              <div id="golfLabPredictionPrepBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-field-readiness-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Field readiness</p>
+                  <h2>Field Readiness Matrix</h2>
+                </div>
+              </div>
+              <div id="golfLabFieldReadinessBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-field-intel-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Tournament model desk</p>
+                  <h2>Field Intelligence</h2>
+                </div>
+              </div>
+              <div id="golfLabFieldIntelligenceBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-consensus-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Model desk</p>
+                  <h2>Consensus Board</h2>
+                </div>
+              </div>
+              <div id="golfLabConsensusBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-sensitivity-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Model stress test</p>
+                  <h2>Feature Sensitivity</h2>
+                </div>
+              </div>
+              <div id="golfLabFeatureSensitivityBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-course-difficulty-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Course database</p>
+                  <h2>Difficulty Board</h2>
+                </div>
+              </div>
+              <div id="golfLabCourseDifficultyBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-course-comp-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Course comps</p>
+                  <h2>Course Comp Board</h2>
+                </div>
+              </div>
+              <div id="golfLabCourseCompBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-player-index-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Roster intelligence</p>
+                  <h2>Player Index</h2>
+                </div>
+              </div>
+              <div id="golfLabPlayerIndexBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-player-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Scouting card</p>
+                  <h2>Player Scorecard</h2>
+                </div>
+                <select id="golfLabPlayerSelect" aria-label="Player"></select>
+              </div>
+              <div id="golfLabPlayerScorecard"></div>
+            </article>
+
+            <article class="panel golf-lab-side-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">This week</p>
+                  <h2>Tournament Board</h2>
+                </div>
+              </div>
+              <div id="golfLabTournamentBoard"></div>
+            </article>
+
+            <article class="panel golf-lab-side-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Model room</p>
+                  <h2>Fit Board</h2>
+                </div>
+              </div>
+              <div id="golfLabFitBoard"></div>
+            </article>
+
+            <article class="panel golf-lab-side-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Weather model</p>
+                  <h2>Scenario Board</h2>
+                </div>
+              </div>
+              <div id="golfLabScenarioBoard"></div>
+            </article>
+
+            <article class="panel golf-lab-side-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Weather fit</p>
+                  <h2>Weather Matrix</h2>
+                </div>
+              </div>
+              <div id="golfLabWeatherMatrixBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-weather-draw-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Weather draw</p>
+                  <h2>Tee-Time Waves</h2>
+                </div>
+              </div>
+              <div id="golfLabWeatherDrawBoard"></div>
+            </article>
+
+            <article class="panel golf-lab-side-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Course fit</p>
+                  <h2>Course Scorecard</h2>
+                </div>
+                <select id="golfLabCourseSelect" aria-label="Course"></select>
+              </div>
+              <div id="golfLabCourseScorecard"></div>
+            </article>
+
+            <article class="panel golf-lab-side-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Player splits</p>
+                  <h2>Split Leaders</h2>
+                </div>
+              </div>
+              <div id="golfLabSplitLeaders"></div>
+            </article>
+
+            <article class="panel golf-lab-side-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Model audit</p>
+                  <h2>Prediction Ledger</h2>
+                </div>
+              </div>
+              <div id="golfLabPredictionLedger"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-run-audit-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Prediction control</p>
+                  <h2>Run Audit</h2>
+                </div>
+              </div>
+              <div id="golfLabPredictionRunAuditBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-run-history-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Model memory</p>
+                  <h2>Run History</h2>
+                </div>
+              </div>
+              <div id="golfLabModelRunHistoryBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-projected-standings-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Tournament forecast</p>
+                  <h2>Projected Standings</h2>
+                </div>
+              </div>
+              <div id="golfLabProjectedStandingsBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-results-summary-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Results review</p>
+                  <h2>Why It Worked</h2>
+                </div>
+              </div>
+              <div id="golfLabResultsSummaryBoard"></div>
+            </article>
+
+            <article class="panel golf-lab-side-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Odds desk</p>
+                  <h2>Market Coverage</h2>
+                </div>
+              </div>
+              <div id="golfLabMarketCoverageBoard"></div>
+            </article>
+
+            <article class="panel golf-lab-side-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Market tape</p>
+                  <h2>Odds Movement</h2>
+                </div>
+              </div>
+              <div id="golfLabOddsMovementBoard"></div>
+            </article>
+
+            <article class="panel golf-lab-side-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Line shopping</p>
+                  <h2>Best Price Board</h2>
+                </div>
+              </div>
+              <div id="golfLabOddsShoppingBoard"></div>
+            </article>
+
+            <article class="panel golf-lab-side-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Market edge</p>
+                  <h2>Edge Board</h2>
+                </div>
+              </div>
+              <div id="golfLabEdgeBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-portfolio-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Betting framework</p>
+                  <h2>Bet Portfolio</h2>
+                </div>
+              </div>
+              <div id="golfLabBetPortfolioBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-model-explainer-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Model audit</p>
+                  <h2>Model Explainer</h2>
+                </div>
+              </div>
+              <div id="golfLabModelExplainerBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-settlement-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Results desk</p>
+                  <h2>Settlement Board</h2>
+                </div>
+              </div>
+              <div id="golfLabSettlementBoard"></div>
+            </article>
+
+            <article class="panel golf-lab-side-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Backtest</p>
+                  <h2>Model Results</h2>
+                </div>
+                <button type="button" class="ghost-button" id="golfLabGradePredictions">Grade</button>
+              </div>
+              <div id="golfLabBacktestPanel"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-training-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Model training</p>
+                  <h2>Training Dataset</h2>
+                </div>
+              </div>
+              <div id="golfLabTrainingDatasetBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-calibration-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Probability audit</p>
+                  <h2>Model Calibration</h2>
+                </div>
+              </div>
+              <div id="golfLabModelCalibrationBoard"></div>
+            </article>
+
+            <article class="panel wide-panel golf-lab-tuning-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Model improvement</p>
+                  <h2>Model Tuning Lab</h2>
+                </div>
+              </div>
+              <div id="golfLabModelTuningBoard"></div>
+            </article>
           </section>
         </section>
 
