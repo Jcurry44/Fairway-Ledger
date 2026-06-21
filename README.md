@@ -126,6 +126,13 @@ The Tournament Board becomes an event dossier when a tournament is selected: fie
 
 The Split Leaders panel ranks players globally by imported performance on tough courses, easy courses, wind, rain, and calm conditions, giving the database the fast "who fits this setup?" view that sits between raw scorecards and full model runs.
 
+The no-import production lane is `scripts/golf-lab-refresh-public.ps1`. It refreshes the source-backed PGA warehouse, replays the owned derived scoring/model steps, uses the sibling MLB framework `.env` for `THE_ODDS_API_KEY` when present, and republishes `data/golf-lab-showcase.js` for the app. The coordinator is scale-safe for the large 2002-2026 public warehouse: it filters the app seed by selected event, model players, recent scorecards, course context, weather, odds, and source proof instead of loading every historical row into the browser bundle. Outside an active tournament window it automatically falls back to publish-only mode so recurring runs do not burn odds calls or append duplicate model runs.
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\golf-lab-refresh-public.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\golf-lab-refresh-public.ps1 -PublishOnly
+```
+
 For bulk work outside the browser, the local builder can combine a folder of source-backed files:
 
 ```

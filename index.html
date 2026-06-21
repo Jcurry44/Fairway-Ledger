@@ -32,16 +32,17 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap">
 
-    <link rel="stylesheet" href="./styles.css?v=2026-06-19j">
-    <script src="./data/courses.js?v=2026-06-19j" defer></script>
-    <script src="./lib/golf-math.js?v=2026-06-19j" defer></script>
-    <script src="./lib/shapes.js?v=2026-06-19j" defer></script>
-    <script src="./lib/games.js?v=2026-06-19j" defer></script>
-    <script src="./lib/golf-lab.js?v=2026-06-19j" defer></script>
-    <script src="./lib/golf-lab-warehouse.js?v=2026-06-19j" defer></script>
-    <script src="./lib/golf-lab-sources.js?v=2026-06-19j" defer></script>
-    <script src="./lib/golf-lab-model.js?v=2026-06-19j" defer></script>
-    <script src="./app.js?v=2026-06-19j" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-06-21a">
+    <script src="./data/courses.js?v=2026-06-21a" defer></script>
+    <script src="./lib/golf-math.js?v=2026-06-21a" defer></script>
+    <script src="./lib/shapes.js?v=2026-06-21a" defer></script>
+    <script src="./lib/games.js?v=2026-06-21a" defer></script>
+    <script src="./lib/golf-lab.js?v=2026-06-21a" defer></script>
+    <script src="./lib/golf-lab-warehouse.js?v=2026-06-21a" defer></script>
+    <script src="./lib/golf-lab-sources.js?v=2026-06-21a" defer></script>
+    <script src="./lib/golf-lab-model.js?v=2026-06-21a" defer></script>
+    <script src="./data/golf-lab-showcase.js?v=2026-06-21a" defer></script>
+    <script src="./app.js?v=2026-06-21a" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -72,8 +73,8 @@
             </svg>
           </div>
           <div>
-            <p class="eyebrow">Personal golf analytics</p>
-            <h1>Fairway Ledger</h1>
+            <p class="eyebrow" id="appEyebrow">Personal golf analytics</p>
+            <h1 id="appTitle">Fairway Ledger</h1>
           </div>
         </div>
         <div class="header-actions" id="headerActions">
@@ -616,8 +617,9 @@
           <section class="golf-lab-hero" id="golfLabHero">
             <div class="golf-lab-hero-copy">
               <p class="eyebrow">Professional golf analytics</p>
-              <h2>Golf Lab</h2>
+              <h2>Golf Lab Pro Intelligence</h2>
               <p id="golfLabStatus">No professional golf data loaded.</p>
+              <div class="golf-lab-hero-proof" id="golfLabHeroProof"></div>
             </div>
             <div class="golf-lab-actions">
               <div class="golf-lab-control-grid">
@@ -645,19 +647,26 @@
               <div class="golf-lab-model-weights" id="golfLabModelWeights"></div>
               <div class="golf-lab-sync-row">
                 <button type="button" class="primary-button" id="golfLabRunModel">Run Owned Model</button>
-                <span id="golfLabModelStatus">Import source-backed fields, rounds, odds, and weather.</span>
+                <span id="golfLabModelStatus">Live source-backed warehouse ready.</span>
               </div>
-              <div class="golf-lab-import-row">
-                <label class="file-button">
-                  Import Golf Lab Data
-                  <input id="golfLabImportInput" type="file" accept="application/json,.json,text/csv,.csv" multiple>
-                </label>
+              <div class="golf-lab-source-row">
                 <span id="golfLabSourceStatus"></span>
               </div>
+              <input id="golfLabImportInput" type="file" accept="application/json,.json,text/csv,.csv" multiple hidden>
+              <button type="button" class="ghost-button golf-lab-showcase-button" id="golfLabShowcaseButton" hidden>Refresh Public Warehouse</button>
             </div>
           </section>
 
           <section class="golf-lab-lanes" id="golfLabLanes" aria-label="Golf Lab workspaces"></section>
+
+          <nav class="golf-lab-modebar" id="golfLabModebar" aria-label="Golf Lab sections">
+            <button class="active" type="button" data-golf-lab-view="overview">Overview</button>
+            <button type="button" data-golf-lab-view="players">Player Cards</button>
+            <button type="button" data-golf-lab-view="tournament">Tournament Desk</button>
+            <button type="button" data-golf-lab-view="courses">Course Lab</button>
+            <button type="button" data-golf-lab-view="markets">Markets & Model</button>
+            <button type="button" data-golf-lab-view="data">Data Room</button>
+          </nav>
 
           <section class="golf-lab-workspace">
             <article class="panel wide-panel golf-lab-command-panel">

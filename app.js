@@ -156,6 +156,7 @@
   const VIEW_MODE_KEY = "fairwayLedger.viewMode.v1";
   const IN_PROGRESS_KEY = "fairwayLedger.inProgressRound.v1";
   const GOLF_LAB_MODEL_SETTINGS_KEY = "fairwayLedger.golfLabModelSettings.v1";
+  const GOLF_LAB_VIEW_KEY = "fairwayLedger.golfLabView.v1";
   // Card scorecard sectioning preference. "narrative" reorders the per-hole
   // inputs to match how you experience the hole (tee → approach → green →
   // score). "default" is the original outcome-first layout. As of the
@@ -264,7 +265,7 @@
     { value: "make cut", label: "Make cut" }
   ]);
   const GOLF_LAB_WEATHER_SCENARIOS = Object.freeze(Object.entries(GOLF_LAB_MODEL_WEATHER_SCENARIOS || {
-    baseline: { label: "Imported forecast" },
+    baseline: { label: "Live forecast" },
     calm: { label: "Calm scoring" },
     wind: { label: "Wind test" },
     rain: { label: "Rain draw" },
@@ -281,6 +282,8 @@
   let selectedGolfLabCourseId = null;
   let golfLabModelSettings = readInitialGolfLabModelSettings();
   let golfLabModelInFlight = false;
+  let golfLabViewMode = readInitialGolfLabViewMode();
+  let golfLabShowcaseSessionOnly = false;
   let editingRoundId = null;
   let viewMode = readInitialViewMode();
 
@@ -742,7 +745,9 @@
     reviewPreview: document.getElementById("reviewPreview"),
     gamesRoot: document.getElementById("gamesRoot"),
     golfLabStatus: document.getElementById("golfLabStatus"),
+    golfLabHeroProof: document.getElementById("golfLabHeroProof"),
     golfLabLanes: document.getElementById("golfLabLanes"),
+    golfLabModebar: document.getElementById("golfLabModebar"),
     golfLabModelEventSelect: document.getElementById("golfLabModelEventSelect"),
     golfLabModelPreset: document.getElementById("golfLabModelPreset"),
     golfLabMarketFilter: document.getElementById("golfLabMarketFilter"),
@@ -754,6 +759,7 @@
     golfLabModelStatus: document.getElementById("golfLabModelStatus"),
     golfLabSourceStatus: document.getElementById("golfLabSourceStatus"),
     golfLabImportInput: document.getElementById("golfLabImportInput"),
+    golfLabShowcaseButton: document.getElementById("golfLabShowcaseButton"),
     golfLabExportButton: document.getElementById("golfLabExportButton"),
     golfLabTemplateButton: document.getElementById("golfLabTemplateButton"),
     golfLabCommandCenterBoard: document.getElementById("golfLabCommandCenterBoard"),
@@ -1269,8 +1275,25 @@
   }
 
   function saveState() {
-    const json = JSON.stringify(state);
-    localStorage.setItem(STORAGE_KEY, json);
+    let json = JSON.stringify(state);
+    try {
+      localStorage.setItem(STORAGE_KEY, json);
+    } catch (error) {
+      const trimmed = {
+        ...state,
+        golfLab: blankGolfLabState()
+      };
+      json = JSON.stringify(trimmed);
+      try {
+        localStorage.setItem(STORAGE_KEY, json);
+      } catch (trimError) {
+        console.warn("Could not persist trimmed Fairway Ledger state", trimError);
+        showToast("Could not save locally. Export a backup before leaving.");
+        return;
+      }
+      golfLabShowcaseSessionOnly = true;
+      showToast("Personal rounds saved. Golf Lab public warehouse will reload automatically next visit.");
+    }
     // Best-effort autosave snapshot. Throttled + deduped inside takeSnapshot
     // so this stays cheap even on a per-keystroke save path.
     takeSnapshot("autosave", { json });
@@ -8303,8 +8326,129 @@
   // ---- Golf Lab ----------------------------------------------------------
   //
   // Professional golf analytics live in state.golfLab and route through
-  // lib/golf-lab.js. The UI below renders source-backed owned data only; no
-  // sample pro players, fake tournaments, or placeholder betting cards.
+  // lib/golf-lab.js. The UI below renders source-backed owned data only. The
+  // bundled GolfLabPublicShowcase is a compact public-history subset generated
+  // from the local warehouse, not invented demo data.
+
+  const GOLF_LAB_PANEL_VIEWS = [
+    { selector: ".golf-lab-command-panel", views: ["overview", "tournament", "data"] },
+    { selector: ".golf-lab-player-panel", views: ["overview", "players"] },
+    { selector: ".golf-lab-player-index-panel", views: ["overview", "players"] },
+    { selector: ".golf-lab-projected-standings-panel", views: ["overview", "tournament", "markets"] },
+    { selector: ".golf-lab-results-summary-panel", views: ["overview", "markets"] },
+    { selector: ".golf-lab-course-difficulty-panel", views: ["overview", "courses"] },
+    { selector: ".golf-lab-model-explainer-panel", views: ["overview", "markets"] },
+    { selector: ".golf-lab-player-split-panel", views: ["players", "tournament"] },
+    { selector: "#golfLabTournamentBoard", views: ["tournament"] },
+    { selector: "#golfLabFitBoard", views: ["tournament", "players"] },
+    { selector: "#golfLabScenarioBoard", views: ["tournament", "courses"] },
+    { selector: "#golfLabWeatherMatrixBoard", views: ["tournament", "courses"] },
+    { selector: "#golfLabCourseScorecard", views: ["courses"] },
+    { selector: "#golfLabSplitLeaders", views: ["players", "courses"] },
+    { selector: "#golfLabPredictionLedger", views: ["markets"] },
+    { selector: "#golfLabMarketCoverageBoard", views: ["markets"] },
+    { selector: "#golfLabOddsMovementBoard", views: ["markets"] },
+    { selector: "#golfLabOddsShoppingBoard", views: ["markets"] },
+    { selector: "#golfLabEdgeBoard", views: ["markets"] },
+    { selector: "#golfLabBacktestPanel", views: ["markets"] },
+    { selector: ".golf-lab-fit-panel", views: ["tournament", "players"] },
+    { selector: ".golf-lab-field-readiness-panel", views: ["tournament", "data"] },
+    { selector: ".golf-lab-field-intel-panel", views: ["tournament"] },
+    { selector: ".golf-lab-consensus-panel", views: ["tournament", "markets"] },
+    { selector: ".golf-lab-sensitivity-panel", views: ["tournament", "markets"] },
+    { selector: ".golf-lab-prep-panel", views: ["tournament", "data"] },
+    { selector: ".golf-lab-weather-draw-panel", views: ["tournament", "courses"] },
+    { selector: ".golf-lab-course-setup-panel", views: ["courses", "tournament"] },
+    { selector: ".golf-lab-course-comp-panel", views: ["courses", "players"] },
+    { selector: ".golf-lab-run-audit-panel", views: ["markets", "data"] },
+    { selector: ".golf-lab-run-history-panel", views: ["markets", "data"] },
+    { selector: ".golf-lab-portfolio-panel", views: ["markets"] },
+    { selector: ".golf-lab-settlement-panel", views: ["markets"] },
+    { selector: ".golf-lab-training-panel", views: ["data"] },
+    { selector: ".golf-lab-calibration-panel", views: ["markets", "data"] },
+    { selector: ".golf-lab-tuning-panel", views: ["markets", "data"] },
+    { selector: ".golf-lab-activation-panel", views: ["data"] },
+    { selector: ".golf-lab-warehouse-panel", views: ["data"] },
+    { selector: ".golf-lab-coverage-map-panel", views: ["data"] },
+    { selector: ".golf-lab-source-audit-panel", views: ["data"] },
+    { selector: ".golf-lab-lineage-panel", views: ["data"] },
+    { selector: ".golf-lab-source-ops-panel", views: ["data"] },
+    { selector: ".golf-lab-data-intake-panel", views: ["data"] },
+    { selector: ".golf-lab-source-catalog-panel", views: ["data"] },
+    { selector: ".golf-lab-backfill-panel", views: ["data"] },
+    { selector: ".golf-lab-source-plan-panel", views: ["data"] },
+    { selector: ".golf-lab-identity-panel", views: ["data"] },
+    { selector: ".golf-lab-feature-store-panel", views: ["data", "tournament"] }
+  ];
+
+  function readInitialGolfLabViewMode() {
+    try {
+      const saved = localStorage.getItem(GOLF_LAB_VIEW_KEY);
+      if (["overview", "players", "tournament", "courses", "markets", "data"].includes(saved)) return saved;
+    } catch {}
+    return "overview";
+  }
+
+  function updateGolfLabViewMode(nextMode) {
+    if (!["overview", "players", "tournament", "courses", "markets", "data"].includes(nextMode)) return;
+    golfLabViewMode = nextMode;
+    try { localStorage.setItem(GOLF_LAB_VIEW_KEY, nextMode); } catch {}
+    applyGolfLabViewMode();
+  }
+
+  function applyGolfLabViewMode() {
+    if (!els.golfLabModebar) return;
+    els.golfLabModebar.querySelectorAll("[data-golf-lab-view]").forEach((button) => {
+      const active = button.dataset.golfLabView === golfLabViewMode;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-current", active ? "page" : "false");
+    });
+    GOLF_LAB_PANEL_VIEWS.forEach(({ selector, views }) => {
+      document.querySelectorAll(selector).forEach((node) => {
+        const panel = node.tagName === "ARTICLE" ? node : node.closest("article");
+        if (!panel) return;
+        panel.hidden = !views.includes(golfLabViewMode);
+      });
+    });
+  }
+
+  function golfLabShowcasePayload() {
+    const payload = window.GolfLabPublicShowcase;
+    if (!payload || !payload.golfLab || typeof payload.golfLab !== "object") return null;
+    return payload;
+  }
+
+  function pickGolfLabShowcasePlayer(lab) {
+    const ranked = lab.modelPredictions
+      .filter((row) => row.eventId === getSelectedGolfLabEventId() && row.market === "winner" && Number.isFinite(row.rank))
+      .sort((a, b) => a.rank - b.rank)[0];
+    if (ranked && ranked.playerId && lab.players.some((player) => player.id === ranked.playerId)) return ranked.playerId;
+    const sgLeader = [...lab.players].map((player) => buildPlayerScorecard(lab, player.id))
+      .filter(Boolean)
+      .sort((a, b) => (Number.isFinite(b.skills.sgTotal) ? b.skills.sgTotal : -99) - (Number.isFinite(a.skills.sgTotal) ? a.skills.sgTotal : -99))[0];
+    return sgLeader ? sgLeader.player.id : (lab.players[0] && lab.players[0].id) || "";
+  }
+
+  function applyGolfLabShowcaseSeed(options = {}) {
+    const payload = golfLabShowcasePayload();
+    if (!payload) return false;
+    const seed = normalizeGolfLabState(payload.golfLab);
+    if (!hasGolfLabData(seed)) return false;
+    state.golfLab = mergeGolfLabStates(state.golfLab, seed);
+    const normalized = normalizeGolfLabState(state.golfLab);
+    selectedGolfLabPlayerId = selectedGolfLabPlayerId || pickGolfLabShowcasePlayer(normalized);
+    const firstCourse = normalized.courses[0];
+    if (!selectedGolfLabCourseId && firstCourse) selectedGolfLabCourseId = firstCourse.id;
+    golfLabShowcaseSessionOnly = !options.persist;
+    if (options.persist) saveState();
+    renderGolfLab();
+    return true;
+  }
+
+  function primeGolfLabShowcaseIfEmpty() {
+    if (hasGolfLabData(state.golfLab)) return;
+    applyGolfLabShowcaseSeed({ persist: false });
+  }
 
   function normalizeGolfLabMarketKey(value) {
     return String(value || "")
@@ -8394,7 +8538,7 @@
 
   function getGolfLabWeatherScenarioLabel() {
     const scenario = GOLF_LAB_WEATHER_SCENARIOS.find((item) => item.value === golfLabModelSettings.weatherScenario);
-    return scenario ? scenario.label : "Imported forecast";
+    return scenario ? scenario.label : "Live forecast";
   }
 
   function getGolfLabEdgeThresholdProbability() {
@@ -8536,14 +8680,41 @@
   function renderGolfLabSourceStatus(summary) {
     if (!els.golfLabSourceStatus) return;
     if (!summary || !summary.hasData) {
-      els.golfLabSourceStatus.textContent = "Owned warehouse empty";
+      els.golfLabSourceStatus.textContent = "Public warehouse warming up";
       return;
     }
     const sourceCount = summary.counts.sourceFetches || 0;
     const weatherCount = summary.counts.weatherSnapshots || 0;
     const sourceText = sourceCount === 1 ? "1 source row" : `${sourceCount} source rows`;
     const weatherText = weatherCount === 1 ? "1 weather snapshot" : `${weatherCount} weather snapshots`;
-    els.golfLabSourceStatus.textContent = `${sourceText} | ${weatherText}`;
+    els.golfLabSourceStatus.textContent = `Auto warehouse | ${sourceText} | ${weatherText}`;
+  }
+
+  function renderGolfLabHeroProof(summary, warehouseReport) {
+    if (!els.golfLabHeroProof) return;
+    if (!summary || !summary.hasData) {
+      els.golfLabHeroProof.innerHTML = `
+        <span><b>Source-backed only</b><em>public warehouse loading</em></span>
+        <span><b>No fake players</b><em>waiting on verified data</em></span>
+      `;
+      return;
+    }
+    const payload = golfLabShowcasePayload();
+    const lab = normalizeGolfLabState(state.golfLab);
+    const selectedEventId = getSelectedGolfLabEventId();
+    const selectedEvent = selectedEventId ? lab.events.find((event) => event.id === selectedEventId) : null;
+    const sourceQuality = warehouseReport && warehouseReport.sourceFreshness && Number.isFinite(warehouseReport.sourceFreshness.qualityScore)
+      ? `${warehouseReport.sourceFreshness.qualityScore}%`
+      : (payload && payload.report && Number.isFinite(payload.report.sourceQualityScore) ? `${payload.report.sourceQualityScore}%` : "--");
+    const grade = warehouseReport && warehouseReport.grade
+      ? warehouseReport.grade
+      : (payload && payload.report && payload.report.grade) || "building";
+    const sessionNote = golfLabShowcaseSessionOnly ? "public warehouse" : "saved warehouse";
+    els.golfLabHeroProof.innerHTML = `
+      <span><b>${escapeHtml(sessionNote)}</b><em>${summary.counts.players} players | ${summary.counts.rounds} rounds</em></span>
+      <span><b>${escapeHtml(grade)}</b><em>${sourceQuality} source quality</em></span>
+      <span><b>${escapeHtml(selectedEvent ? selectedEvent.name : "Model desk")}</b><em>${escapeHtml(selectedEvent ? (selectedEvent.courseName || selectedEvent.startDate || "selected event") : "select an event")}</em></span>
+    `;
   }
 
   function renderGolfLabModelEventSelect(lab) {
@@ -8555,7 +8726,7 @@
       return aDate.localeCompare(bDate) || (a.name || a.id).localeCompare(b.name || b.id);
     });
     if (!events.length) {
-      els.golfLabModelEventSelect.innerHTML = `<option value="">No events imported</option>`;
+      els.golfLabModelEventSelect.innerHTML = `<option value="">Waiting for events</option>`;
       els.golfLabModelEventSelect.disabled = true;
       if (els.golfLabRunModel) els.golfLabRunModel.disabled = true;
       return;
@@ -8563,7 +8734,11 @@
     els.golfLabModelEventSelect.disabled = false;
     if (els.golfLabRunModel && !golfLabModelInFlight) els.golfLabRunModel.disabled = false;
     const currentValue = els.golfLabModelEventSelect.value;
-    const nextEvent = events.find((event) => !event.startDate || event.startDate >= todayIso) || events[0];
+    const payload = golfLabShowcasePayload();
+    const showcaseEvent = payload && payload.selectedEventId
+      ? events.find((event) => event.id === payload.selectedEventId)
+      : null;
+    const nextEvent = showcaseEvent || events.find((event) => !event.startDate || event.startDate >= todayIso) || events[0];
     const selectedValue = currentValue && events.some((event) => event.id === currentValue) ? currentValue : nextEvent.id;
     els.golfLabModelEventSelect.innerHTML = events.map((event) => {
       const label = [event.name || event.id, event.startDate, event.courseName].filter(Boolean).join(" | ");
@@ -8619,7 +8794,7 @@
         activationPlan: launchPlan
       });
       if (!snapshot.predictions.length) {
-        throw new Error((snapshot.warnings && snapshot.warnings[0]) || "Import event, field, player, and round data before modeling.");
+        throw new Error((snapshot.warnings && snapshot.warnings[0]) || "Refresh event, field, player, and round data before modeling.");
       }
       applyGolfLabDataMerge(snapshot.golfLab, "Owned model run saved.");
       const eventName = snapshot.event ? snapshot.event.name || snapshot.event.id : "event";
@@ -8745,7 +8920,7 @@
     if (!els.golfLabCommandCenterBoard) return;
     const center = buildGolfLabCommandCenter(lab, warehouseReport);
     if (!center) {
-      els.golfLabCommandCenterBoard.innerHTML = emptyState("Import or select a tournament to unlock the command center.");
+      els.golfLabCommandCenterBoard.innerHTML = emptyState("Select a tournament after the public warehouse refreshes to unlock the command center.");
       return;
     }
     const blockers = center.blockers.slice(0, 4).map((blocker) =>
@@ -8833,7 +9008,7 @@
       return;
     }
     if (!lab.events.length) {
-      els.golfLabActivationPlanBoard.innerHTML = emptyState("Import a tournament schedule row to build an activation plan.");
+      els.golfLabActivationPlanBoard.innerHTML = emptyState("Waiting on the tournament schedule feed to build an activation plan.");
       return;
     }
     const board = buildTournamentActivationPlan(lab, {
@@ -8928,14 +9103,18 @@
     const warehouseReport = typeof buildWarehouseReport === "function" ? buildWarehouseReport(lab) : null;
     renderGolfLabSourceStatus(summary);
     renderGolfLabModelEventSelect(lab);
+    renderGolfLabHeroProof(summary, warehouseReport);
     syncGolfLabModelSettingsControls();
+    if (els.golfLabShowcaseButton) {
+      els.golfLabShowcaseButton.hidden = summary.hasData || !golfLabShowcasePayload();
+    }
 
     if (els.golfLabStatus) {
       if (summary.hasData) {
         const fetchText = summary.latestFetch ? ` Last refresh ${summary.latestFetch}.` : "";
         els.golfLabStatus.textContent = `${summary.counts.players} players, ${summary.counts.events} events, ${summary.counts.rounds} pro rounds loaded.${fetchText}`;
       } else {
-        els.golfLabStatus.textContent = "No professional golf data loaded.";
+        els.golfLabStatus.textContent = "Syncing the public professional golf warehouse.";
       }
     }
 
@@ -8987,6 +9166,7 @@
     renderGolfLabTrainingDatasetBoard(lab);
     renderGolfLabModelCalibrationBoard(lab);
     renderGolfLabModelTuningBoard(lab);
+    applyGolfLabViewMode();
   }
 
   function renderGolfLabLanes(summary) {
@@ -9050,7 +9230,7 @@
   function renderGolfLabWarehouseWorkbench(lab, report) {
     if (!els.golfLabWarehouseWorkbench) return;
     if (!report || !hasGolfLabData(lab)) {
-      els.golfLabWarehouseWorkbench.innerHTML = emptyState("Import source-backed collections to start the owned warehouse.");
+      els.golfLabWarehouseWorkbench.innerHTML = emptyState("Waiting on source-backed collections to start the owned warehouse.");
       return;
     }
     const collectionKeys = ["players", "events", "courses", "fields", "rounds", "strokesGained", "weatherSnapshots", "oddsSnapshots", "sourceFetches"];
@@ -9072,7 +9252,7 @@
         </div>
         <em>${event.readinessScore}%</em>
       </div>
-    `).join("") || emptyState("No event rows imported yet.");
+    `).join("") || emptyState("No event rows synced yet.");
     const gaps = report.gaps.slice(0, 5).map((gap) => `
       <div class="golf-lab-gap-row golf-lab-gap-${escapeHtml(gap.severity)}">
         <strong>${escapeHtml(gap.label)}</strong>
@@ -9137,7 +9317,7 @@
       return;
     }
     if (!hasGolfLabData(lab)) {
-      els.golfLabCoverageMapBoard.innerHTML = emptyState("Import source-backed rows to map database coverage.");
+      els.golfLabCoverageMapBoard.innerHTML = emptyState("Waiting on source-backed rows to map database coverage.");
       return;
     }
     const board = buildWarehouseCoverageMap(lab, {
@@ -9173,7 +9353,7 @@
         </div>
         <b>${row.readinessScore}%</b>
       </div>
-    `).join("") || emptyState("No events imported yet.");
+    `).join("") || emptyState("No events synced yet.");
     const playerRows = board.playerRows.slice(0, 5).map((row) => `
       <div class="golf-lab-coverage-entity golf-lab-coverage-entity-${escapeHtml(row.status)}">
         <div>
@@ -9183,7 +9363,7 @@
         </div>
         <b>${row.score}%</b>
       </div>
-    `).join("") || emptyState("No player rows imported yet.");
+    `).join("") || emptyState("No player rows synced yet.");
     const courseRows = board.courseRows.slice(0, 4).map((row) => `
       <div class="golf-lab-coverage-entity golf-lab-coverage-entity-${escapeHtml(row.status)}">
         <div>
@@ -9193,7 +9373,7 @@
         </div>
         <b>${row.score}%</b>
       </div>
-    `).join("") || emptyState("No course rows imported yet.");
+    `).join("") || emptyState("No course rows synced yet.");
     els.golfLabCoverageMapBoard.innerHTML = `
       <section class="golf-lab-coverage-map">
         <div class="golf-lab-kpi-grid golf-lab-coverage-kpis">
@@ -9229,13 +9409,13 @@
     if (!els.golfLabSourceAuditBoard) return;
     const freshness = report && report.sourceFreshness;
     if (!report || !freshness || !hasGolfLabData(lab)) {
-      els.golfLabSourceAuditBoard.innerHTML = emptyState("Import source-backed rows to audit freshness and provenance.");
+      els.golfLabSourceAuditBoard.innerHTML = emptyState("Waiting on source-backed rows to audit freshness and provenance.");
       return;
     }
 
     const staleSignals = (freshness.staleProviderCount || 0) + (freshness.staleCollectionCount || 0) + (freshness.unverifiedCollectionCount || 0);
     const providerRows = freshness.providers.slice(0, 6).map((provider) => {
-      const endpointText = provider.endpoints && provider.endpoints.length ? provider.endpoints.join(", ") : "manual-import";
+      const endpointText = provider.endpoints && provider.endpoints.length ? provider.endpoints.join(", ") : "source-adapter";
       const ageText = formatGolfLabSourceAge(provider.latestAgeDays);
       return `<div class="golf-lab-source-audit-row">
         <div>
@@ -9247,7 +9427,7 @@
           <em>${escapeHtml(ageText)} | ${provider.rowCount || 0} rows</em>
         </div>
       </div>`;
-    }).join("") || emptyState("No provider fetch rows imported yet.");
+    }).join("") || emptyState("No provider fetch rows synced yet.");
 
     const collectionRows = freshness.collections
       .filter((row) => row.rowCount > 0)
@@ -9293,7 +9473,7 @@
       return;
     }
     if (!hasGolfLabData(lab)) {
-      els.golfLabSourceLineageBoard.innerHTML = emptyState("Import source-backed rows to trace provider, collection, and event lineage.");
+      els.golfLabSourceLineageBoard.innerHTML = emptyState("Waiting on source-backed rows to trace provider, collection, and event lineage.");
       return;
     }
     const board = buildSourceLineageBoard(lab, { eventId: getSelectedGolfLabEventId() });
@@ -9309,7 +9489,7 @@
     `).join("") || `<span class="golf-lab-lineage-blocker golf-lab-lineage-blocker-clear"><b>Lineage clean</b><em>Provider, collection, and event chains are traceable.</em></span>`;
     const eventContext = selected
       ? [selected.startDate, selected.courseName].filter(Boolean).join(" | ")
-      : "Select or import a tournament";
+      : "Select a tournament";
     const selectedGaps = selected && selected.gaps.length
       ? selected.gaps.slice(0, 3).join(", ")
       : "Event proof chain ready";
@@ -9333,7 +9513,7 @@
       const eventText = row.events.length
         ? `${row.events.length} linked event${row.events.length === 1 ? "" : "s"}`
         : "No event link";
-      const endpointText = row.endpoints && row.endpoints.length ? row.endpoints.slice(0, 2).join(", ") : row.sourceUrl || "manual import";
+      const endpointText = row.endpoints && row.endpoints.length ? row.endpoints.slice(0, 2).join(", ") : row.sourceUrl || "source adapter";
       return `
         <article class="golf-lab-lineage-row golf-lab-lineage-row-${escapeHtml(row.status || row.freshness || "unknown")}">
           <div>
@@ -9347,7 +9527,7 @@
           </div>
         </article>
       `;
-    }).join("") || emptyState("No provider lineage rows imported yet.");
+    }).join("") || emptyState("No provider lineage rows synced yet.");
     const collectionRows = board.collectionRows
       .filter((row) => row.rowCount > 0)
       .sort((a, b) => a.proofScore - b.proofScore || b.rowCount - a.rowCount)
@@ -9389,7 +9569,7 @@
           </div>
         </article>
       `;
-    }).join("") || emptyState("No event lineage rows imported yet.");
+    }).join("") || emptyState("No event lineage rows synced yet.");
 
     els.golfLabSourceLineageBoard.innerHTML = `
       <section class="golf-lab-lineage">
@@ -9430,7 +9610,7 @@
       recentRows: 6
     });
     if (!board.event) {
-      els.golfLabSourceOpsBoard.innerHTML = emptyState("Import or select a tournament to run source ops.");
+      els.golfLabSourceOpsBoard.innerHTML = emptyState("Select a tournament after the source warehouse refreshes to run source ops.");
       return;
     }
     const alertRows = board.alerts.slice(0, 5).map((alert) => `
@@ -9461,11 +9641,11 @@
       <div class="golf-lab-source-ops-fetch">
         <div>
           <strong>${escapeHtml(row.provider)}</strong>
-          <span>${escapeHtml(row.endpoint || row.sourceUrl || "manual import")}</span>
+          <span>${escapeHtml(row.endpoint || row.sourceUrl || "source adapter")}</span>
         </div>
         <em>${escapeHtml(row.fetchedAt ? formatGolfLabSourceAge(row.ageDays) : "no timestamp")} | ${escapeHtml(row.status)} | ${row.rowCount || 0} rows</em>
       </div>
-    `).join("") || emptyState("No source ledger rows imported yet.");
+    `).join("") || emptyState("No source ledger rows synced yet.");
     els.golfLabSourceOpsBoard.innerHTML = `
       <section class="golf-lab-source-ops">
         <div class="golf-lab-kpi-grid golf-lab-source-ops-kpis">
@@ -9518,7 +9698,7 @@
     const board = buildDataIntakeBoard(lab, { eventId: getSelectedGolfLabEventId() });
     const eventLabel = board.event
       ? [board.event.name || board.event.id, board.event.startDate, board.event.courseName].filter(Boolean).join(" | ")
-      : "Select or import a tournament";
+      : "Select a tournament";
     const actions = board.priorityRows.slice(0, 5).map((row) => `
       <span class="golf-lab-intake-action golf-lab-intake-action-${escapeHtml(row.priority)}">
         <b>${escapeHtml(row.label)}</b>
@@ -9541,7 +9721,7 @@
       const headers = row.requiredHeaders.length
         ? row.requiredHeaders.slice(0, 6).map((header) => `<span>${escapeHtml(header)}</span>`).join("")
         : `<span>${escapeHtml(row.collectionFiles)}</span>`;
-      const command = row.command || `Fill ${row.collectionFiles} manually, then import the CSV files.`;
+      const command = row.command || `Refresh ${row.collectionFiles} through the source adapter.`;
       const recipe = row.sourceRecipe || {};
       const gateText = recipe.qualityGates && recipe.qualityGates.length
         ? recipe.qualityGates[0]
@@ -9663,7 +9843,7 @@
     }
     const board = buildHistoricalBackfillBoard(lab, { limit: 8 });
     if (!board.rows.length) {
-      els.golfLabHistoricalBackfillBoard.innerHTML = emptyState("Import a source-backed event schedule to start historical backfill planning.");
+      els.golfLabHistoricalBackfillBoard.innerHTML = emptyState("Waiting on a source-backed event schedule to start historical backfill planning.");
       return;
     }
     const actionRows = board.nextActions.slice(0, 5).map((row) => `
@@ -9693,7 +9873,7 @@
           <div class="golf-lab-backfill-head">
             <div>
               <strong>${escapeHtml(row.eventName)}</strong>
-              <span>${escapeHtml(context || "Imported tournament")}</span>
+              <span>${escapeHtml(context || "Synced tournament")}</span>
             </div>
             <b>${row.priorityScore}</b>
           </div>
@@ -9835,7 +10015,7 @@
       return;
     }
     if (!hasGolfLabData(lab)) {
-      els.golfLabPlayerIdentityBoard.innerHTML = emptyState("Import source-backed player and tournament rows to audit identity matching.");
+      els.golfLabPlayerIdentityBoard.innerHTML = emptyState("Waiting on source-backed player and tournament rows to audit identity matching.");
       return;
     }
     const board = buildPlayerIdentityBoard(lab, { eventId: getSelectedGolfLabEventId() });
@@ -9868,7 +10048,7 @@
             </div>
           </article>
         `;
-      }).join("") || emptyState("No player-linked collections imported yet.");
+      }).join("") || emptyState("No player-linked collections synced yet.");
     const unresolvedRows = board.unresolvedRows.slice(0, 7).map((row) => {
       const rawName = [row.playerName, row.playerId].filter(Boolean).join(" | ") || row.rowId;
       const suggestion = row.suggestedPlayerName
@@ -9939,12 +10119,12 @@
   function renderGolfLabPlayerIndexBoard(lab) {
     if (!els.golfLabPlayerIndexBoard) return;
     if (typeof buildPlayerIndexBoard !== "function" || !lab.players.length) {
-      els.golfLabPlayerIndexBoard.innerHTML = emptyState("Import source-backed pro player, scoring, and skill rows to build the player index.");
+      els.golfLabPlayerIndexBoard.innerHTML = emptyState("Waiting on source-backed pro player, scoring, and skill rows to build the player index.");
       return;
     }
     const board = buildPlayerIndexBoard(lab, { limit: 8, eventId: getSelectedGolfLabEventId() });
     if (!board.rows.length) {
-      els.golfLabPlayerIndexBoard.innerHTML = emptyState("Import source-backed pro player, scoring, and skill rows to build the player index.");
+      els.golfLabPlayerIndexBoard.innerHTML = emptyState("Waiting on source-backed pro player, scoring, and skill rows to build the player index.");
       return;
     }
     const summary = board.summary;
@@ -9988,7 +10168,7 @@
           <div class="golf-lab-player-index-main">
             <div class="golf-lab-player-index-title">
               <strong>${escapeHtml(row.playerName)}</strong>
-              <span>${escapeHtml(rankBits || "Imported player")}</span>
+              <span>${escapeHtml(rankBits || "Synced player")}</span>
             </div>
             <div class="golf-lab-player-index-tags">${tags}</div>
             <div class="golf-lab-player-index-courses">
@@ -10032,7 +10212,7 @@
     if (!players.length) {
       els.golfLabPlayerSelect.hidden = true;
       els.golfLabPlayerSelect.innerHTML = "";
-      els.golfLabPlayerScorecard.innerHTML = emptyState("Import source-backed pro data to populate player scorecards.");
+      els.golfLabPlayerScorecard.innerHTML = emptyState("Waiting on source-backed pro data to populate player scorecards.");
       return;
     }
     els.golfLabPlayerSelect.hidden = false;
@@ -10045,10 +10225,99 @@
     renderGolfLabPlayerScorecard(lab, selectedGolfLabPlayerId);
   }
 
+  function golfLabPlayerPrediction(lab, playerId) {
+    const eventId = getSelectedGolfLabEventId();
+    const market = golfLabModelSettings.marketFilter === "all" ? "winner" : golfLabModelSettings.marketFilter;
+    const matches = lab.modelPredictions
+      .filter((row) => row.playerId === playerId && (!eventId || row.eventId === eventId))
+      .filter((row) => golfLabMarketMatchesFilter(row.market, market));
+    if (matches.length) {
+      return matches.sort((a, b) =>
+        (Number.isFinite(a.rank) ? a.rank : 9999) - (Number.isFinite(b.rank) ? b.rank : 9999) ||
+        cleanDateSortValue(b.createdAt).localeCompare(cleanDateSortValue(a.createdAt))
+      )[0];
+    }
+    return lab.modelPredictions
+      .filter((row) => row.playerId === playerId && (!eventId || row.eventId === eventId))
+      .sort((a, b) =>
+        (Number.isFinite(a.rank) ? a.rank : 9999) - (Number.isFinite(b.rank) ? b.rank : 9999) ||
+        cleanDateSortValue(b.createdAt).localeCompare(cleanDateSortValue(a.createdAt))
+      )[0] || null;
+  }
+
+  function cleanDateSortValue(value) {
+    return String(value || "");
+  }
+
+  function renderGolfLabModelCase(lab, card) {
+    const prediction = golfLabPlayerPrediction(lab, card.player.id);
+    if (!prediction) {
+      return `<section class="golf-lab-player-model-case golf-lab-player-model-case-empty">
+        <div>
+          <span>Model case</span>
+          <strong>No selected-event projection yet.</strong>
+          <em>Refresh the source warehouse or run the tournament model to attach Blue Line-style reasoning to this card.</em>
+        </div>
+      </section>`;
+    }
+    const features = [
+      ["Skill", prediction.skill, "baseline scoring and strokes-gained profile"],
+      ["Recent form", prediction.recentForm, "what the latest scorecards are saying"],
+      ["Course fit", prediction.courseFit, "history on similar courses and setups"],
+      ["Difficulty fit", prediction.difficultyFit, "hard-course versus scoring-course profile"],
+      ["Weather fit", prediction.weatherFit, "source-backed wind, rain, heat, cold and calm splits"],
+      ["Live state", prediction.liveState, "current position and strokes-back context"]
+    ].filter((row) => Number.isFinite(row[1]));
+    const strengths = features
+      .filter((row) => row[1] > 0.25)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+    const concerns = features
+      .filter((row) => row[1] < 0.15)
+      .sort((a, b) => a[1] - b[1])
+      .slice(0, 3);
+    const strengthHtml = strengths.length
+      ? strengths.map(([label, value, detail]) => `<li><b>${escapeHtml(label)}</b><span>${escapeHtml(detail)} | ${formatLabNumber(value, 2, true)}</span></li>`).join("")
+      : `<li><b>Balanced case</b><span>No single feature is carrying the projection.</span></li>`;
+    const concernHtml = concerns.length
+      ? concerns.map(([label, value, detail]) => `<li><b>${escapeHtml(label)}</b><span>${escapeHtml(detail)} | ${formatLabNumber(value, 2, true)}</span></li>`).join("")
+      : `<li><b>Clean read</b><span>No obvious feature drag in the selected model profile.</span></li>`;
+    const rankText = Number.isFinite(prediction.rank) ? `#${prediction.rank}` : "--";
+    const probabilityText = formatLabPercent(prediction.probability);
+    const edgeText = Number.isFinite(prediction.edge) ? formatLabEdge(prediction.edge) : "model-only";
+    const fairText = prediction.fairOddsAmerican == null ? "--" : formatGolfLabOdds(prediction.fairOddsAmerican);
+    const marketText = prediction.marketOddsAmerican == null ? "no market" : formatGolfLabOdds(prediction.marketOddsAmerican);
+    const event = lab.events.find((row) => row.id === prediction.eventId);
+    const eventLine = event ? [event.name, event.courseName || event.startDate].filter(Boolean).join(" | ") : prediction.eventId;
+    return `<section class="golf-lab-player-model-case">
+      <div class="golf-lab-player-model-case-hero">
+        <div>
+          <span>Model case</span>
+          <strong>${escapeHtml(rankText)} ${escapeHtml(golfLabMarketFilterLabel(prediction.market))}</strong>
+          <em>${escapeHtml(eventLine || "selected tournament")} | ${escapeHtml(prediction.modelProfile || getGolfLabModelPreset().label)}</em>
+        </div>
+        <div class="golf-lab-player-model-case-price">
+          <b>${probabilityText}</b>
+          <small>fair ${escapeHtml(fairText)} | market ${escapeHtml(marketText)} | edge ${escapeHtml(edgeText)}</small>
+        </div>
+      </div>
+      <div class="golf-lab-player-model-case-grid">
+        <section>
+          <h4>Why the model likes him</h4>
+          <ul>${strengthHtml}</ul>
+        </section>
+        <section>
+          <h4>Risk flags</h4>
+          <ul>${concernHtml}</ul>
+        </section>
+      </div>
+    </section>`;
+  }
+
   function renderGolfLabPlayerScorecard(lab, playerId) {
     const card = buildPlayerScorecard(lab, playerId, { eventId: getSelectedGolfLabEventId() });
     if (!card) {
-      els.golfLabPlayerScorecard.innerHTML = emptyState("Select a player with imported scorecard data.");
+      els.golfLabPlayerScorecard.innerHTML = emptyState("Select a player with synced scorecard data.");
       return;
     }
     const { player, skills, sample, bestCourses, worstCourses, multiCourseEvents, difficultySplits, weatherSplits, weatherDna, equipment, accomplishments, profile, sourceCoverage, eventFit, snapshot } = card;
@@ -10064,7 +10333,7 @@
             ${player.photoUrl ? `<img src="${escapeHtml(player.photoUrl)}" alt="">` : `<span>${escapeHtml((player.name || "?").slice(0, 2).toUpperCase())}</span>`}
           </div>
           <div>
-            <p class="eyebrow">${escapeHtml(rankBits || "Imported player")}</p>
+            <p class="eyebrow">${escapeHtml(rankBits || "Synced player")}</p>
             <h3>${escapeHtml(player.name || player.id)}</h3>
             <p>${escapeHtml([player.country, player.college, player.turnedPro ? `Pro ${player.turnedPro}` : ""].filter(Boolean).join(" | "))}</p>
           </div>
@@ -10076,6 +10345,7 @@
           ${renderGolfLabKpi("Accuracy", formatLabPercent(skills.accuracy), "fairways")}
         </div>
         ${renderGolfLabPlayerSnapshot(snapshot)}
+        ${renderGolfLabModelCase(lab, card)}
         ${renderGolfLabPlayerProfile(profile, sourceCoverage, eventFit)}
         <div class="golf-lab-scorecard-grid">
           ${renderGolfLabSkillDNA(skills)}
@@ -10098,7 +10368,7 @@
     if (!courses.length) {
       els.golfLabCourseSelect.hidden = true;
       els.golfLabCourseSelect.innerHTML = "";
-      els.golfLabCourseScorecard.innerHTML = emptyState("Import source-backed course data to populate course scorecards.");
+      els.golfLabCourseScorecard.innerHTML = emptyState("Waiting on source-backed course data to populate course scorecards.");
       return;
     }
     els.golfLabCourseSelect.hidden = false;
@@ -10114,7 +10384,7 @@
   function renderGolfLabCourseScorecard(lab, courseId) {
     const card = buildCourseScorecard(lab, courseId);
     if (!card) {
-      els.golfLabCourseScorecard.innerHTML = emptyState("Select a course with imported history.");
+      els.golfLabCourseScorecard.innerHTML = emptyState("Select a course with synced history.");
       return;
     }
     const { course, difficulty, sample, weather, topFits, toughFits, events } = card;
@@ -10134,7 +10404,7 @@
           ${renderGolfLabKpi("Events", String(sample.events), "history")}
         </div>
         ${renderGolfLabCourseFitList("Top Fits", topFits, "No player-course fit history yet.")}
-        ${renderGolfLabCourseFitList("Tough Fits", toughFits, "No tough-course splits imported yet.")}
+        ${renderGolfLabCourseFitList("Tough Fits", toughFits, "No tough-course splits synced yet.")}
         ${renderGolfLabCourseEvents(events)}
       </section>
     `;
@@ -10159,12 +10429,12 @@
   function renderGolfLabCourseDifficultyBoard(lab) {
     if (!els.golfLabCourseDifficultyBoard) return;
     if (typeof buildCourseDifficultyBoard !== "function" || !lab.courses.length) {
-      els.golfLabCourseDifficultyBoard.innerHTML = emptyState("Import source-backed course and scoring data to rank course difficulty.");
+      els.golfLabCourseDifficultyBoard.innerHTML = emptyState("Waiting on source-backed course and scoring data to rank course difficulty.");
       return;
     }
     const board = buildCourseDifficultyBoard(lab, { limit: 8 });
     if (!board.rows.length) {
-      els.golfLabCourseDifficultyBoard.innerHTML = emptyState("Import source-backed course and scoring data to rank course difficulty.");
+      els.golfLabCourseDifficultyBoard.innerHTML = emptyState("Waiting on source-backed course and scoring data to rank course difficulty.");
       return;
     }
     const summary = board.summary;
@@ -10235,7 +10505,7 @@
   function renderGolfLabCourseSetupBoard(lab) {
     if (!els.golfLabCourseSetupBoard) return;
     if (typeof buildCourseSetupBoard !== "function" || !lab.events.length) {
-      els.golfLabCourseSetupBoard.innerHTML = emptyState("Import a tournament, course setup, scoring history, and source proof to profile setup pressure.");
+      els.golfLabCourseSetupBoard.innerHTML = emptyState("Waiting on tournament setup, scoring history, and source proof to profile setup pressure.");
       return;
     }
     const board = buildCourseSetupBoard(lab, {
@@ -10244,7 +10514,7 @@
       playerLimit: 6
     });
     if (!board || !board.course) {
-      els.golfLabCourseSetupBoard.innerHTML = emptyState("Select a tournament with an imported course profile to build the setup lab.");
+      els.golfLabCourseSetupBoard.innerHTML = emptyState("Select a tournament with a synced course profile to build the setup lab.");
       return;
     }
     const readinessKey = String(board.readiness || "thin").toLowerCase().replace(/[^a-z0-9]+/g, "-") || "thin";
@@ -10332,7 +10602,7 @@
           <div>
             <p class="eyebrow">${escapeHtml(eventLine || "Selected tournament")}</p>
             <h3>${escapeHtml(coursePool ? `${coursePool.courseCount}-Course Pool` : board.course.courseName)}</h3>
-            <p>${escapeHtml(courseLine || "Imported course profile")}</p>
+            <p>${escapeHtml(courseLine || "Synced course profile")}</p>
           </div>
           <div class="golf-lab-course-setup-verdict">
             ${renderGolfLabDifficultyBadge(board.difficulty.bucket)}
@@ -10362,11 +10632,11 @@
           </section>
           <section class="golf-lab-course-setup-block">
             <h4>Closest Course Comps</h4>
-            <div class="golf-lab-course-setup-list">${compRows || emptyState("Import more course profiles to identify setup comps.")}</div>
+            <div class="golf-lab-course-setup-list">${compRows || emptyState("Waiting on more course profiles to identify setup comps.")}</div>
           </section>
           <section class="golf-lab-course-setup-block">
             <h4>Player Setup Fits</h4>
-            <div class="golf-lab-course-setup-list">${playerRows || emptyState("Import player rounds on comp courses to rank setup fits.")}</div>
+            <div class="golf-lab-course-setup-list">${playerRows || emptyState("Waiting on player rounds on comp courses to rank setup fits.")}</div>
           </section>
         </div>
       </section>
@@ -10400,7 +10670,7 @@
   function renderGolfLabPlayerSplitLab(lab) {
     if (!els.golfLabPlayerSplitLabBoard) return;
     if (typeof buildPlayerSplitLab !== "function" || !lab.events.length || !lab.players.length) {
-      els.golfLabPlayerSplitLabBoard.innerHTML = emptyState("Import players, tournaments, course context, and scoring splits to build player split intelligence.");
+      els.golfLabPlayerSplitLabBoard.innerHTML = emptyState("Waiting on players, tournaments, course context, and scoring splits to build player split intelligence.");
       return;
     }
     const board = buildPlayerSplitLab(lab, {
@@ -10460,7 +10730,7 @@
           <div>
             <p class="eyebrow">${escapeHtml([board.event.name, board.event.startDate].filter(Boolean).join(" | ") || "Selected event")}</p>
             <h3>${escapeHtml(targetLine || "Split Intelligence")}</h3>
-            <p>${escapeHtml(board.target.fieldMode === "selected-field" ? "Ranking selected-field players" : "Ranking all imported players")}</p>
+            <p>${escapeHtml(board.target.fieldMode === "selected-field" ? "Ranking selected-field players" : "Ranking all synced players")}</p>
           </div>
           <div class="golf-lab-player-split-verdict">
             ${renderGolfLabDifficultyBadge(board.target.difficulty.bucket)}
@@ -10482,7 +10752,7 @@
           ${renderGolfLabPlayerSplitLeader("Target Weather", board.leaders.weather, "targetWeather")}
           ${renderGolfLabPlayerSplitLeader("Course Comps", board.leaders.comp, "comp")}
         </div>
-        <div class="golf-lab-player-split-list">${rows || emptyState("Import field-player scoring splits to populate the lab.")}</div>
+        <div class="golf-lab-player-split-list">${rows || emptyState("Waiting on field-player scoring splits to populate the lab.")}</div>
       </section>
     `;
   }
@@ -10498,7 +10768,7 @@
   function renderGolfLabFeatureStoreBoard(lab) {
     if (!els.golfLabFeatureStoreBoard) return;
     if (typeof buildFeatureStoreAuditBoard !== "function" || !lab.events.length) {
-      els.golfLabFeatureStoreBoard.innerHTML = emptyState("Import a tournament field and model inputs to audit the feature store.");
+      els.golfLabFeatureStoreBoard.innerHTML = emptyState("Waiting on the tournament field and model inputs to audit the feature store.");
       return;
     }
     const board = buildFeatureStoreAuditBoard(lab, {
@@ -10574,7 +10844,7 @@
         </div>
         <div class="golf-lab-feature-store-blockers">${blockers}</div>
         <div class="golf-lab-feature-store-gates">${gateRows}</div>
-        <div class="golf-lab-feature-store-list">${playerRows || emptyState("Import field players to audit feature rows.")}</div>
+        <div class="golf-lab-feature-store-list">${playerRows || emptyState("Waiting on field players to audit feature rows.")}</div>
       </section>
     `;
   }
@@ -10598,12 +10868,12 @@
   function renderGolfLabCourseCompBoard(lab) {
     if (!els.golfLabCourseCompBoard) return;
     if (typeof buildCourseCompBoard !== "function" || !lab.courses.length) {
-      els.golfLabCourseCompBoard.innerHTML = emptyState("Import course profiles and scoring history to build source-backed course comps.");
+      els.golfLabCourseCompBoard.innerHTML = emptyState("Waiting on course profiles and scoring history to build source-backed course comps.");
       return;
     }
     const board = buildCourseCompBoard(lab, getGolfLabCourseCompOptions());
     if (!board) {
-      els.golfLabCourseCompBoard.innerHTML = emptyState("Select a course or tournament with an imported course profile.");
+      els.golfLabCourseCompBoard.innerHTML = emptyState("Select a course or tournament with a synced course profile.");
       return;
     }
     const target = board.targetCourse;
@@ -10654,16 +10924,16 @@
         </div>
         <div class="golf-lab-course-comp-target">
           <strong>${escapeHtml(target.courseName)}</strong>
-          <span>${escapeHtml(targetMeta || "Imported course profile")}</span>
+          <span>${escapeHtml(targetMeta || "Synced course profile")}</span>
         </div>
         <div class="golf-lab-course-comp-grid">
           <section>
             <h4>Closest Courses</h4>
-            <div class="golf-lab-course-comp-list">${compRows || emptyState("Import more course profiles to identify comps.")}</div>
+            <div class="golf-lab-course-comp-list">${compRows || emptyState("Waiting on more course profiles to identify comps.")}</div>
           </section>
           <section>
             <h4>Player Comp Fits</h4>
-            <div class="golf-lab-course-comp-list">${playerRows || emptyState("Import player rounds on comp courses to rank fits.")}</div>
+            <div class="golf-lab-course-comp-list">${playerRows || emptyState("Waiting on player rounds on comp courses to rank fits.")}</div>
           </section>
         </div>
       </section>
@@ -10689,7 +10959,7 @@
 
   function renderGolfLabCourseEvents(events) {
     if (!events.length) {
-      return `<article class="golf-lab-card"><h4>Event History</h4>${emptyState("No events imported for this course yet.")}</article>`;
+      return `<article class="golf-lab-card"><h4>Event History</h4>${emptyState("No events synced for this course yet.")}</article>`;
     }
     return `<article class="golf-lab-card">
       <h4>Event History</h4>
@@ -10748,7 +11018,7 @@
       : "";
     const eventLine = eventFit && eventFit.event
       ? [eventFit.event.name, eventFit.course ? eventFit.course.courseName : eventFit.event.courseName, eventFit.event.startDate].filter(Boolean).join(" | ")
-      : "Select/import a tournament";
+      : "Select a tournament";
     const weatherLine = eventFit && eventFit.targetWeather
       ? [eventFit.targetWeather.bucket, Number.isFinite(eventFit.targetWeather.windMph) ? `${formatLabNumber(eventFit.targetWeather.windMph, 0)} mph` : ""].filter(Boolean).join(" | ")
       : "No event weather";
@@ -10765,7 +11035,7 @@
           <div>
             <span>Player Type</span>
             <strong>${escapeHtml(profile ? profile.archetype : "Needs profile")}</strong>
-            <em>${escapeHtml(profile && profile.primarySkill ? `Primary signal: ${profile.primarySkill}` : "Imported source profile")}</em>
+            <em>${escapeHtml(profile && profile.primarySkill ? `Primary signal: ${profile.primarySkill}` : "Synced source profile")}</em>
           </div>
           <div class="golf-lab-player-profile-tags">${tags}</div>
         </div>
@@ -10785,11 +11055,11 @@
         <div class="golf-lab-player-profile-grid">
           <article class="golf-lab-player-profile-block">
             <h4>Strengths</h4>
-            <div>${renderGolfLabPlayerSignalRows(profile ? profile.strengths : [], "No positive signal imported yet.")}</div>
+            <div>${renderGolfLabPlayerSignalRows(profile ? profile.strengths : [], "No positive signal synced yet.")}</div>
           </article>
           <article class="golf-lab-player-profile-block">
             <h4>Risks</h4>
-            <div>${renderGolfLabPlayerSignalRows(profile ? profile.risks : [], "No risk flags from imported data.")}</div>
+            <div>${renderGolfLabPlayerSignalRows(profile ? profile.risks : [], "No risk flags from synced data.")}</div>
           </article>
           <article class="golf-lab-player-profile-block golf-lab-player-profile-source golf-lab-player-profile-source-${escapeHtml(sourceStatus)}">
             <h4>Source Coverage</h4>
@@ -10825,7 +11095,7 @@
   }
 
   function renderGolfLabPlayerSnapshotCourse(row, fallback) {
-    if (!row) return `<strong>${escapeHtml(fallback)}</strong><span>No imported course split</span>`;
+    if (!row) return `<strong>${escapeHtml(fallback)}</strong><span>No synced course split</span>`;
     const score = Number.isFinite(row.avgSg)
       ? `${formatLabNumber(row.avgSg, 2, true)} SG`
       : `${formatLabNumber(row.avgToPar, 1, true)} to par`;
@@ -10836,13 +11106,13 @@
     if (!snapshot) return "";
     const topSkill = snapshot.topSkill
       ? `<strong>${escapeHtml(snapshot.topSkill.label)}</strong><span>${formatLabNumber(snapshot.topSkill.value, 2, true)} per round</span>`
-      : `<strong>Skill building</strong><span>No SG sample imported</span>`;
+      : `<strong>Skill building</strong><span>No SG sample synced</span>`;
     const equipment = snapshot.equipment
       ? `<strong>${escapeHtml(snapshot.equipment.primaryValue)}</strong><span>${escapeHtml(snapshot.equipment.primaryLabel)}${snapshot.equipment.capturedDate ? ` | ${escapeHtml(snapshot.equipment.capturedDate)}` : ""}</span>`
       : `<strong>Bag needed</strong><span>No equipment snapshot</span>`;
     const accomplishment = snapshot.accomplishment
       ? `<strong>${escapeHtml(snapshot.accomplishment.label)}</strong><span>${escapeHtml([snapshot.accomplishment.season, snapshot.accomplishment.type].filter(Boolean).join(" | ") || snapshot.accomplishment.date || "Accomplishment")}</span>`
-      : `<strong>Resume needed</strong><span>No accomplishments imported</span>`;
+      : `<strong>Resume needed</strong><span>No accomplishments synced</span>`;
     return `
       <section class="golf-lab-player-snapshot">
         <article class="golf-lab-player-snapshot-hero">
@@ -10861,7 +11131,7 @@
 
   function renderGolfLabCourseTable(title, rows, tone) {
     if (!rows.length) {
-      return `<article class="golf-lab-card"><h4>${escapeHtml(title)}</h4>${emptyState("No course history imported yet.")}</article>`;
+      return `<article class="golf-lab-card"><h4>${escapeHtml(title)}</h4>${emptyState("No course history synced yet.")}</article>`;
     }
     return `<article class="golf-lab-card golf-lab-card-${escapeHtml(tone)}">
       <h4>${escapeHtml(title)}</h4>
@@ -10902,7 +11172,7 @@
 
   function renderGolfLabDifficultySplits(rows) {
     if (!rows || !rows.length) {
-      return `<article class="golf-lab-card"><h4>Difficulty Splits</h4>${emptyState("No difficulty-tagged scoring history imported yet.")}</article>`;
+      return `<article class="golf-lab-card"><h4>Difficulty Splits</h4>${emptyState("No difficulty-tagged scoring history synced yet.")}</article>`;
     }
     return `<article class="golf-lab-card">
       <h4>Difficulty Splits</h4>
@@ -10919,7 +11189,7 @@
 
   function renderGolfLabWeatherSplits(rows) {
     if (!rows || !rows.length) {
-      return `<article class="golf-lab-card"><h4>Weather Splits</h4>${emptyState("No weather-linked scoring history imported yet.")}</article>`;
+      return `<article class="golf-lab-card"><h4>Weather Splits</h4>${emptyState("No weather-linked scoring history synced yet.")}</article>`;
     }
     return `<article class="golf-lab-card">
       <h4>Weather Splits</h4>
@@ -10943,7 +11213,7 @@
 
   function renderGolfLabWeatherDna(dna) {
     if (!dna || !dna.rows || !dna.rows.length) {
-      return `<article class="golf-lab-card golf-lab-weather-dna-card"><h4>Weather DNA</h4>${emptyState("No weather-linked scoring history imported yet.")}</article>`;
+      return `<article class="golf-lab-card golf-lab-weather-dna-card"><h4>Weather DNA</h4>${emptyState("No weather-linked scoring history synced yet.")}</article>`;
     }
     const target = dna.target || {};
     const targetScore = Number.isFinite(target.score) ? `${target.score}%` : "--";
@@ -10997,7 +11267,7 @@
 
   function renderGolfLabAccomplishments(accomplishments) {
     if (!accomplishments.length) {
-      return `<article class="golf-lab-card"><h4>Accomplishments</h4>${emptyState("No accomplishments imported yet.")}</article>`;
+      return `<article class="golf-lab-card"><h4>Accomplishments</h4>${emptyState("No accomplishments synced yet.")}</article>`;
     }
     return `<article class="golf-lab-card">
       <h4>Accomplishments</h4>
@@ -11009,7 +11279,7 @@
 
   function renderGolfLabEquipment(equipment) {
     if (!equipment) {
-      return `<article class="golf-lab-card"><h4>Bag Snapshot</h4>${emptyState("No source-backed equipment snapshot imported yet.")}</article>`;
+      return `<article class="golf-lab-card"><h4>Bag Snapshot</h4>${emptyState("No source-backed equipment snapshot synced yet.")}</article>`;
     }
     const rows = [
       ["Driver", equipment.driver],
@@ -11023,7 +11293,7 @@
     return `<article class="golf-lab-card">
       <h4>Bag Snapshot</h4>
       <div class="golf-lab-stat-list">
-        ${rows.length ? rows.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("") : `<div><span>Snapshot</span><strong>${escapeHtml(equipment.capturedDate || "Imported")}</strong></div>`}
+        ${rows.length ? rows.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("") : `<div><span>Snapshot</span><strong>${escapeHtml(equipment.capturedDate || "Synced")}</strong></div>`}
       </div>
       ${equipment.sourceUrl ? `<a class="golf-lab-source-link" href="${escapeHtml(equipment.sourceUrl)}" target="_blank" rel="noopener">Source</a>` : ""}
     </article>`;
@@ -11049,7 +11319,7 @@
   function renderGolfLabSplitLeaders(lab) {
     if (!els.golfLabSplitLeaders) return;
     if (typeof buildPlayerSplitLeaderboards !== "function" || !hasGolfLabData(lab)) {
-      els.golfLabSplitLeaders.innerHTML = emptyState("Import scoring and weather rows to rank player splits.");
+      els.golfLabSplitLeaders.innerHTML = emptyState("Waiting on scoring and weather rows to rank player splits.");
       return;
     }
     const leaders = buildPlayerSplitLeaderboards(lab, { limit: 4 });
@@ -11077,7 +11347,7 @@
       .sort((a, b) => (a.startDate || "").localeCompare(b.startDate || ""))
       .slice(0, 5);
     if (!upcoming.length) {
-      els.golfLabTournamentBoard.innerHTML = emptyState("No tournaments imported yet.");
+      els.golfLabTournamentBoard.innerHTML = emptyState("No tournaments synced yet.");
       return;
     }
     const dossier = typeof buildEventDossier === "function"
@@ -11129,7 +11399,7 @@
         <div class="golf-lab-dossier-split">
           <section>
             <h4>${predictions ? "Winner Board" : "Field Preview"}</h4>
-            <div class="golf-lab-stack">${predictions || fieldRows || emptyState("Import the field list to populate this event.")}</div>
+            <div class="golf-lab-stack">${predictions || fieldRows || emptyState("Waiting on the field list to populate this event.")}</div>
           </section>
         </div>
       </section>
@@ -11208,11 +11478,11 @@
       limit: 8
     });
     if (!board) {
-      els.golfLabFieldReadinessBoard.innerHTML = emptyState("Import or select a tournament to audit field readiness.");
+      els.golfLabFieldReadinessBoard.innerHTML = emptyState("Select a tournament after the field feed refreshes to audit readiness.");
       return;
     }
     if (!board.rows.length) {
-      els.golfLabFieldReadinessBoard.innerHTML = emptyState("Import the tournament field to audit player-level data readiness.");
+      els.golfLabFieldReadinessBoard.innerHTML = emptyState("Waiting on the tournament field to audit player-level data readiness.");
       return;
     }
     const gapSummary = board.summary.topGaps.length
@@ -11289,11 +11559,11 @@
       minEdge: getGolfLabEdgeThresholdProbability()
     });
     if (!board.event) {
-      els.golfLabFieldIntelligenceBoard.innerHTML = emptyState("Import or select a tournament to build field intelligence.");
+      els.golfLabFieldIntelligenceBoard.innerHTML = emptyState("Select a tournament after the field feed refreshes to build field intelligence.");
       return;
     }
     if (!board.rows.length) {
-      els.golfLabFieldIntelligenceBoard.innerHTML = emptyState("Import the tournament field and matched player data to rank every player.");
+      els.golfLabFieldIntelligenceBoard.innerHTML = emptyState("Waiting on the tournament field and matched player data to rank every player.");
       return;
     }
     const specialists = [
@@ -11362,11 +11632,11 @@
       maxRows: 8
     });
     if (!board.event) {
-      els.golfLabConsensusBoard.innerHTML = emptyState("Import or select a tournament to compare model profiles.");
+      els.golfLabConsensusBoard.innerHTML = emptyState("Select a tournament after the model warehouse refreshes to compare profiles.");
       return;
     }
     if (!board.rows.length) {
-      els.golfLabConsensusBoard.innerHTML = emptyState("Import matched field and scoring data to build model consensus.");
+      els.golfLabConsensusBoard.innerHTML = emptyState("Waiting on matched field and scoring data to build model consensus.");
       return;
     }
     const top = board.summary.topConsensus;
@@ -11436,11 +11706,11 @@
       maxRows: 8
     });
     if (!board.event) {
-      els.golfLabFeatureSensitivityBoard.innerHTML = emptyState("Import or select a tournament to test model feature sensitivity.");
+      els.golfLabFeatureSensitivityBoard.innerHTML = emptyState("Select a tournament after the model warehouse refreshes to test feature sensitivity.");
       return;
     }
     if (!board.rows.length) {
-      els.golfLabFeatureSensitivityBoard.innerHTML = emptyState("Import matched field and scoring data to measure feature sensitivity.");
+      els.golfLabFeatureSensitivityBoard.innerHTML = emptyState("Waiting on matched field and scoring data to measure feature sensitivity.");
       return;
     }
     const topDependency = board.summary.topDependency;
@@ -11505,11 +11775,11 @@
       weatherScenario: golfLabModelSettings.weatherScenario
     });
     if (!board.event) {
-      els.golfLabFitBoard.innerHTML = emptyState("Import or select a tournament to build the fit board.");
+      els.golfLabFitBoard.innerHTML = emptyState("Select a tournament after the field feed refreshes to build the fit board.");
       return;
     }
     if (!board.rows.length) {
-      els.golfLabFitBoard.innerHTML = emptyState("Import matched field and player data to rank tournament fits.");
+      els.golfLabFitBoard.innerHTML = emptyState("Waiting on matched field and player data to rank tournament fits.");
       return;
     }
     const topRows = board.rows.slice(0, 5);
@@ -11557,11 +11827,11 @@
       maxRows: 3
     });
     if (!board.event) {
-      els.golfLabScenarioBoard.innerHTML = emptyState("Import or select a tournament to compare weather scenarios.");
+      els.golfLabScenarioBoard.innerHTML = emptyState("Select a tournament after the weather feed refreshes to compare scenarios.");
       return;
     }
     if (!board.scenarios.length || !board.summary.players) {
-      els.golfLabScenarioBoard.innerHTML = emptyState("Import matched field and scoring data to compare scenario movement.");
+      els.golfLabScenarioBoard.innerHTML = emptyState("Waiting on matched field and scoring data to compare scenario movement.");
       return;
     }
     const topMover = board.summary.topMover;
@@ -11601,11 +11871,11 @@
       limit: 5
     });
     if (!board) {
-      els.golfLabWeatherMatrixBoard.innerHTML = emptyState("Import or select a tournament to build a weather matrix.");
+      els.golfLabWeatherMatrixBoard.innerHTML = emptyState("Select a tournament after the weather feed refreshes to build a weather matrix.");
       return;
     }
     if (board.target.bucket === "No weather") {
-      els.golfLabWeatherMatrixBoard.innerHTML = emptyState("Import event weather snapshots to rank field-player weather fit.");
+      els.golfLabWeatherMatrixBoard.innerHTML = emptyState("Waiting on event weather snapshots to rank field-player weather fit.");
       return;
     }
     const conditionLine = [
@@ -11654,11 +11924,11 @@
       limit: 4
     });
     if (!board) {
-      els.golfLabWeatherDrawBoard.innerHTML = emptyState("Import or select a tournament to price the tee-time draw.");
+      els.golfLabWeatherDrawBoard.innerHTML = emptyState("Select a tournament after the tee-time feed refreshes to price the draw.");
       return;
     }
     if (!board.summary.fieldCount) {
-      els.golfLabWeatherDrawBoard.innerHTML = emptyState("Import a field list with tee times to split the draw.");
+      els.golfLabWeatherDrawBoard.innerHTML = emptyState("Waiting on a field list with tee times to split the draw.");
       return;
     }
     const eventLine = [
@@ -11776,7 +12046,7 @@
         <article>
           <span>Model</span>
           <strong>${escapeHtml(brief.modelProfile || "Owned model")}</strong>
-          <em>${escapeHtml(brief.weatherLabel || "Imported forecast")}</em>
+          <em>${escapeHtml(brief.weatherLabel || "Live forecast")}</em>
         </article>
         <article>
           <span>Market</span>
@@ -11817,7 +12087,7 @@
       weatherScenario: golfLabModelSettings.weatherScenario
     });
     if (!board.event) {
-      els.golfLabPredictionPrepBoard.innerHTML = emptyState("Import a tournament event to open Prediction Prep.");
+      els.golfLabPredictionPrepBoard.innerHTML = emptyState("Waiting on a tournament event to open Prediction Prep.");
       return;
     }
     const statusKey = String(board.status || "setup").toLowerCase().replace(/[^a-z0-9]+/g, "-") || "setup";
@@ -11935,7 +12205,7 @@
       minEdge: getGolfLabEdgeThresholdProbability()
     });
     if (!board.selectedEvent) {
-      els.golfLabPredictionRunAuditBoard.innerHTML = emptyState("Import a tournament event to audit prediction readiness.");
+      els.golfLabPredictionRunAuditBoard.innerHTML = emptyState("Waiting on a tournament event to audit prediction readiness.");
       return;
     }
     const eventLine = [
@@ -12015,7 +12285,7 @@
       maxRows: 6
     });
     if (!board.selectedEvent) {
-      els.golfLabModelRunHistoryBoard.innerHTML = emptyState("Import a tournament event to track model run history.");
+      els.golfLabModelRunHistoryBoard.innerHTML = emptyState("Waiting on a tournament event to track model run history.");
       return;
     }
     const latest = board.summary.latestRun;
@@ -12042,7 +12312,7 @@
         <div class="golf-lab-run-history-head">
           <div>
             <strong>${escapeHtml(row.modelProfile || "Owned model")}</strong>
-            <span>${escapeHtml(`${row.modelWeatherLabel || row.modelWeatherScenario || "Imported forecast"} | ${row.modelVersion || "model"} | ${row.createdAt || "unsaved time"}`)}</span>
+            <span>${escapeHtml(`${row.modelWeatherLabel || row.modelWeatherScenario || "Live forecast"} | ${row.modelVersion || "model"} | ${row.createdAt || "unsaved time"}`)}</span>
           </div>
           <b>${escapeHtml(row.statusLabel)}</b>
         </div>
@@ -12099,7 +12369,7 @@
       market: golfLabModelSettings.marketFilter
     });
     if (!board.selectedEvent) {
-      els.golfLabMarketCoverageBoard.innerHTML = emptyState("Import a tournament event, field, predictions, and odds to audit market coverage.");
+      els.golfLabMarketCoverageBoard.innerHTML = emptyState("Waiting on a tournament event, field, predictions, and odds to audit market coverage.");
       return;
     }
     const eventLine = [
@@ -12161,11 +12431,11 @@
       maxRows: 7
     });
     if (!board.selectedEvent) {
-      els.golfLabOddsMovementBoard.innerHTML = emptyState("Import a tournament event and timestamped odds snapshots to audit line movement.");
+      els.golfLabOddsMovementBoard.innerHTML = emptyState("Waiting on a tournament event and timestamped odds snapshots to audit line movement.");
       return;
     }
     if (!board.lineRows.length) {
-      els.golfLabOddsMovementBoard.innerHTML = emptyState(`Import multiple ${golfLabMarketOddsLabel(golfLabModelSettings.marketFilter)} odds snapshots to track steam and drift.`);
+      els.golfLabOddsMovementBoard.innerHTML = emptyState(`Waiting on multiple ${golfLabMarketOddsLabel(golfLabModelSettings.marketFilter)} odds snapshots to track steam and drift.`);
       return;
     }
     const eventLine = [
@@ -12239,11 +12509,11 @@
       maxRows: 6
     });
     if (!board.selectedEvent) {
-      els.golfLabOddsShoppingBoard.innerHTML = emptyState("Import a tournament event and odds snapshots to shop books.");
+      els.golfLabOddsShoppingBoard.innerHTML = emptyState("Waiting on a tournament event and odds snapshots to shop books.");
       return;
     }
     if (!board.lineRows.length) {
-      els.golfLabOddsShoppingBoard.innerHTML = emptyState(`Import multi-book ${golfLabMarketOddsLabel(golfLabModelSettings.marketFilter)} odds snapshots to compare best prices.`);
+      els.golfLabOddsShoppingBoard.innerHTML = emptyState(`Waiting on multi-book ${golfLabMarketOddsLabel(golfLabModelSettings.marketFilter)} odds snapshots to compare best prices.`);
       return;
     }
     const latestOdds = Number.isFinite(board.summary.latestAgeDays)
@@ -12310,7 +12580,7 @@
       market: golfLabModelSettings.marketFilter
     });
     if (!board.candidates.length) {
-      els.golfLabEdgeBoard.innerHTML = emptyState(`Run the model with imported ${golfLabMarketOddsLabel(golfLabModelSettings.marketFilter)} odds to surface edges.`);
+      els.golfLabEdgeBoard.innerHTML = emptyState(`Run the model with source-backed ${golfLabMarketOddsLabel(golfLabModelSettings.marketFilter)} odds to surface edges.`);
       return;
     }
     if (!board.playable.length) {
@@ -12386,7 +12656,7 @@
       minStakeUnits: 0.25
     });
     if (!board.summary.candidates) {
-      els.golfLabBetPortfolioBoard.innerHTML = emptyState(`Run the model with imported ${golfLabMarketOddsLabel(golfLabModelSettings.marketFilter)} odds to build a capped slate.`);
+      els.golfLabBetPortfolioBoard.innerHTML = emptyState(`Run the model with source-backed ${golfLabMarketOddsLabel(golfLabModelSettings.marketFilter)} odds to build a capped slate.`);
       return;
     }
     if (!board.summary.included) {
@@ -12579,7 +12849,7 @@
       maxRows: 12
     });
     if (!board.rows.length) {
-      els.golfLabResultsSummaryBoard.innerHTML = emptyState("Run the owned model and import tournament scoring to review why predictions worked or missed.");
+      els.golfLabResultsSummaryBoard.innerHTML = emptyState("Run the owned model and refresh tournament scoring to review why predictions worked or missed.");
       return;
     }
     const eventLine = board.event
@@ -12593,7 +12863,7 @@
       const outcomeKey = String(row.outcome || "pending").toLowerCase().replace(/[^a-z0-9]+/g, "-") || "pending";
       const actualLine = Number.isFinite(row.actualPosition)
         ? `Finish ${row.actualPositionLabel} | ${formatGolfLabProjectionToPar(row.actualToPar)} | ${row.roundsCompleted || 0} rounds`
-        : "No imported finish";
+        : "No synced finish";
       const modelLine = [
         `Model No. ${row.modelRank || "--"}`,
         `${formatLabPercent(row.winProbability)} win`,
@@ -12632,7 +12902,7 @@
           <div>
             <p class="eyebrow">${escapeHtml(eventLine)}</p>
             <h3>${escapeHtml(board.eventComplete ? "Prediction Results Review" : "Live Prediction Review")}</h3>
-            <p>${escapeHtml(board.eventComplete ? "Final scoring is imported, so the board explains which model reads worked, missed, or undercalled player upside." : `Tournament has ${board.summary.completedRounds || 0}/4 rounds imported, so this stays framed as a live read.`)}</p>
+            <p>${escapeHtml(board.eventComplete ? "Final scoring is refreshed, so the board explains which model reads worked, missed, or undercalled player upside." : `Tournament has ${board.summary.completedRounds || 0}/4 rounds synced, so this stays framed as a live read.`)}</p>
           </div>
           <div class="golf-lab-results-spotlight">
             <strong>${escapeHtml(spotlightText)}</strong>
@@ -12870,7 +13140,7 @@
       els.golfLabGradePredictions.disabled = !canGrade;
     }
     if (!backtest || !backtest.summary.total) {
-      els.golfLabBacktestPanel.innerHTML = emptyState("Run predictions and import tournament results to backtest the model.");
+      els.golfLabBacktestPanel.innerHTML = emptyState("Run predictions and refresh tournament results to backtest the model.");
       return;
     }
     const summary = backtest.summary;
@@ -12920,7 +13190,7 @@
       weatherScenario: golfLabModelSettings.weatherScenario
     });
     if (!board.rows.length) {
-      els.golfLabTrainingDatasetBoard.innerHTML = emptyState("Import completed tournament rounds to create model training examples.");
+      els.golfLabTrainingDatasetBoard.innerHTML = emptyState("Waiting on completed tournament rounds to create model training examples.");
       return;
     }
     const eventRows = board.eventRows.slice(0, 6).map((row) => `
@@ -13029,7 +13299,7 @@
       minSamples: 5
     });
     if (!board.summary.totalPredictions) {
-      els.golfLabModelCalibrationBoard.innerHTML = emptyState("Run predictions and import tournament results to calibrate model probabilities.");
+      els.golfLabModelCalibrationBoard.innerHTML = emptyState("Run predictions and refresh tournament results to calibrate model probabilities.");
       return;
     }
     if (!board.summary.settled) {
@@ -13038,7 +13308,7 @@
           ${renderGolfLabKpi("Predictions", String(board.summary.totalPredictions), golfLabMarketFilterLabel(board.marketFilter))}
           ${renderGolfLabKpi("Settled", "0", `${board.summary.pending} pending`)}
         </div>
-        ${emptyState("Import completed tournament rounds, then grade predictions to unlock calibration.")}
+        ${emptyState("Refresh completed tournament rounds, then grade predictions to unlock calibration.")}
       `;
       return;
     }
@@ -13116,7 +13386,7 @@
           ${renderGolfLabKpi("Predictions", String(board.summary.totalPredictions), golfLabMarketFilterLabel(board.marketFilter))}
           ${renderGolfLabKpi("Settled", "0", "needs graded results")}
         </div>
-        ${emptyState("Import completed tournament rounds, then grade predictions to start tuning the model.")}
+        ${emptyState("Refresh completed tournament rounds, then grade predictions to start tuning the model.")}
       `;
       return;
     }
@@ -13169,7 +13439,7 @@
     }
     const settled = backtest.graded.filter((row) => row.settled);
     if (!settled.length) {
-      showToast("Import completed tournament rounds before grading.");
+      showToast("Refresh completed tournament rounds before grading.");
       return;
     }
     applyGolfLabDataMerge({ predictionLedger: backtest.graded }, "Prediction ledger graded.");
@@ -14858,6 +15128,11 @@
     panels.forEach((panel) => {
       panel.classList.toggle("active", panel.dataset.tabPanel === targetName);
     });
+    document.body.classList.toggle("golf-lab-active", targetName === "golf-lab");
+    const appEyebrow = document.getElementById("appEyebrow");
+    const appTitle = document.getElementById("appTitle");
+    if (appEyebrow) appEyebrow.textContent = targetName === "golf-lab" ? "Professional golf intelligence" : "Personal golf analytics";
+    if (appTitle) appTitle.textContent = targetName === "golf-lab" ? "Golf Lab" : "Fairway Ledger";
     document.querySelectorAll("[data-tab-target]").forEach((button) => {
       const isActive = button.dataset.tabTarget === targetName;
       button.classList.toggle("active", isActive && button.classList.contains("tab-button"));
@@ -15918,6 +16193,25 @@
     });
   }
 
+  if (els.golfLabModebar) {
+    els.golfLabModebar.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-golf-lab-view]");
+      if (!button) return;
+      updateGolfLabViewMode(button.dataset.golfLabView);
+    });
+  }
+
+  if (els.golfLabShowcaseButton) {
+    els.golfLabShowcaseButton.addEventListener("click", () => {
+      if (applyGolfLabShowcaseSeed({ persist: true })) {
+        setGolfLabModelStatus("Public golf warehouse refreshed.");
+        showToast("Golf Lab public warehouse refreshed.");
+      } else {
+        showToast("Golf Lab public warehouse unavailable.");
+      }
+    });
+  }
+
   if (els.golfLabTemplateButton) {
     els.golfLabTemplateButton.addEventListener("click", () => {
       downloadGolfLabTemplate();
@@ -16083,6 +16377,7 @@
     // with a layout gap.
     initSelectChips();
     renderAll();
+    primeGolfLabShowcaseIfEmpty();
     setActiveTab(localStorage.getItem(ACTIVE_TAB_KEY) || "home");
     // Offer to restore any in-progress round entry that was interrupted
     // (page reload, phone restart, accidental tab close, etc).

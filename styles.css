@@ -54,6 +54,18 @@ button {
   cursor: pointer;
 }
 
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
 .app-shell {
   width: min(1480px, 100%);
   margin: 0 auto;
@@ -151,6 +163,10 @@ h2 {
   gap: 8px;
 }
 
+body.golf-lab-active .header-actions {
+  display: none;
+}
+
 .header-actions-list {
   display: flex;
   flex-wrap: wrap;
@@ -179,7 +195,7 @@ h2 {
 }
 
 /* Golf Lab: pro analytics command center. Source-backed only; empty states
-   stay polished until source-backed imported/model data exists. */
+   stay polished until source-backed warehouse/model data exists. */
 .golf-lab-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
@@ -215,9 +231,11 @@ h2 {
 .golf-lab-actions {
   display: grid;
   gap: 9px;
+  min-width: 0;
 }
 
 .golf-lab-actions label,
+.golf-lab-source-row span,
 .golf-lab-import-row span {
   color: rgba(255, 254, 250, 0.78);
   font-size: 0.78rem;
@@ -226,6 +244,7 @@ h2 {
 }
 
 .golf-lab-key-row,
+.golf-lab-source-row,
 .golf-lab-import-row {
   display: flex;
   align-items: center;
@@ -251,6 +270,7 @@ h2 {
 .golf-lab-field {
   display: grid;
   gap: 4px;
+  min-width: 0;
 }
 
 .golf-lab-field span {
@@ -305,6 +325,10 @@ h2 {
   color: rgba(255, 254, 250, 0.72);
   font-size: 0.82rem;
   line-height: 1.35;
+}
+
+.golf-lab-source-row {
+  justify-content: flex-end;
 }
 
 .golf-lab-import-row {
@@ -15880,6 +15904,357 @@ summary:focus-visible {
   font-weight: 700;
 }
 
+/* Golf Lab premium redesign: Blue Line-inspired hierarchy for the pro product.
+   The data room still exists; the first impression is now player intelligence,
+   tournament forecast, and plain-English model reasoning. */
+.tab-panel[data-tab-panel="golf-lab"] {
+  color: #17221d;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.golf-lab-hero {
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  gap: 20px;
+  min-width: 0;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  border-color: rgba(129, 181, 171, 0.28);
+  background:
+    linear-gradient(140deg, rgba(4, 18, 25, 0.98) 0%, rgba(8, 45, 39, 0.98) 46%, rgba(15, 40, 65, 0.98) 100%);
+  box-shadow: 0 18px 44px rgba(4, 18, 25, 0.25), inset 0 -1px 0 rgba(217, 192, 138, 0.34);
+}
+
+.golf-lab-hero-copy {
+  min-width: 0;
+}
+
+.golf-lab-hero h2 {
+  max-width: 760px;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(2rem, 4vw, 3.6rem);
+  font-weight: 900;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.golf-lab-hero p {
+  max-width: 720px;
+  font-size: 0.96rem;
+}
+
+.golf-lab-hero-proof {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.golf-lab-hero-proof span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.golf-lab-hero-proof b,
+.golf-lab-hero-proof em {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.golf-lab-hero-proof b {
+  color: #fffefa;
+  font-size: 0.86rem;
+  line-height: 1.15;
+}
+
+.golf-lab-hero-proof em {
+  color: rgba(255, 254, 250, 0.66);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.golf-lab-modebar {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 7px;
+  border: 1px solid rgba(17, 66, 44, 0.12);
+  border-radius: 10px;
+  background: rgba(250, 247, 236, 0.92);
+  box-shadow: 0 10px 26px rgba(25, 38, 30, 0.08);
+  backdrop-filter: blur(16px);
+}
+
+.golf-lab-modebar button {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.golf-lab-modebar button.active {
+  border-color: rgba(168, 133, 59, 0.38);
+  background: #112d28;
+  color: #fffefa;
+  box-shadow: inset 0 -2px 0 var(--gold);
+}
+
+.golf-lab-workspace {
+  grid-template-columns: minmax(0, 1.36fr) minmax(320px, 0.64fr);
+}
+
+.golf-lab-workspace > article {
+  border-radius: 10px;
+}
+
+.golf-lab-player-panel { order: 1; }
+.golf-lab-player-index-panel { order: 2; }
+.golf-lab-projected-standings-panel { order: 3; }
+.golf-lab-results-summary-panel { order: 5; }
+.golf-lab-course-difficulty-panel { order: 6; }
+.golf-lab-model-explainer-panel { order: 7; }
+.golf-lab-command-panel { order: 8; }
+
+.golf-lab-player-panel {
+  border-color: rgba(17, 66, 44, 0.2);
+  background:
+    linear-gradient(180deg, rgba(255, 254, 250, 0.98), rgba(246, 244, 234, 0.94)),
+    var(--panel);
+}
+
+.golf-lab-player-panel .panel-heading {
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(221, 216, 196, 0.86);
+}
+
+.golf-lab-player-panel .panel-heading h2 {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.35rem;
+  font-weight: 900;
+}
+
+.golf-lab-player-panel select {
+  min-height: 42px;
+  border-color: rgba(17, 66, 44, 0.2);
+  background: #fffefa;
+  font-weight: 800;
+}
+
+.golf-lab-player-card {
+  gap: 14px;
+}
+
+.golf-lab-player-hero {
+  padding: 18px;
+  border: 1px solid rgba(129, 181, 171, 0.22);
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, rgba(5, 23, 29, 0.96), rgba(13, 62, 49, 0.92)),
+    #102821;
+  color: #fffefa;
+}
+
+.golf-lab-player-hero .eyebrow,
+.golf-lab-player-hero p {
+  color: rgba(255, 254, 250, 0.68);
+}
+
+.golf-lab-player-hero h3 {
+  color: #fffefa;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(1.9rem, 3vw, 3.1rem);
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.golf-lab-player-avatar {
+  width: 86px;
+  height: 86px;
+  border-radius: 10px;
+  border-color: rgba(217, 192, 138, 0.46);
+  background: linear-gradient(180deg, rgba(255, 254, 250, 0.94), rgba(217, 192, 138, 0.86));
+}
+
+.golf-lab-player-card > .golf-lab-kpi-grid .golf-lab-kpi {
+  background: #fffefa;
+}
+
+.golf-lab-player-model-case {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(47, 111, 159, 0.2);
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, rgba(24, 52, 74, 0.08), rgba(255, 254, 250, 0.96)),
+    #fffefa;
+}
+
+.golf-lab-player-model-case-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, auto);
+  gap: 12px;
+  align-items: center;
+}
+
+.golf-lab-player-model-case span,
+.golf-lab-player-model-case strong,
+.golf-lab-player-model-case em,
+.golf-lab-player-model-case b,
+.golf-lab-player-model-case small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.golf-lab-player-model-case span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.golf-lab-player-model-case strong {
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 1.35rem;
+  line-height: 1.08;
+}
+
+.golf-lab-player-model-case em,
+.golf-lab-player-model-case small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-style: normal;
+  line-height: 1.28;
+}
+
+.golf-lab-player-model-case-price {
+  justify-self: end;
+  min-width: 160px;
+  padding: 10px;
+  border: 1px solid rgba(31, 122, 89, 0.16);
+  border-radius: 8px;
+  background: rgba(31, 122, 89, 0.07);
+  text-align: right;
+}
+
+.golf-lab-player-model-case-price b {
+  color: var(--green-dark);
+  font-size: 1.65rem;
+  line-height: 1;
+}
+
+.golf-lab-player-model-case-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.golf-lab-player-model-case-grid section {
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid rgba(221, 216, 196, 0.86);
+  border-radius: 8px;
+  background: rgba(255, 254, 250, 0.8);
+}
+
+.golf-lab-player-model-case-grid h4 {
+  margin: 0 0 8px;
+  font-size: 0.86rem;
+}
+
+.golf-lab-player-model-case-grid ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.golf-lab-player-model-case-grid li {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.golf-lab-player-model-case-grid li b {
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.golf-lab-player-model-case-grid li span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-transform: none;
+}
+
+.golf-lab-player-model-case-empty {
+  border-color: rgba(217, 154, 58, 0.24);
+  background: rgba(217, 154, 58, 0.07);
+}
+
+.golf-lab-showcase-button[hidden] {
+  display: none;
+}
+
+@media (max-width: 980px) {
+  .golf-lab-hero,
+  .golf-lab-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .golf-lab-modebar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .golf-lab-hero {
+    padding: 16px;
+  }
+
+  .golf-lab-hero-proof,
+  .golf-lab-player-model-case-grid,
+  .golf-lab-player-model-case-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .golf-lab-modebar {
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .golf-lab-modebar button {
+    flex: 0 0 auto;
+  }
+
+  .golf-lab-player-model-case-price {
+    justify-self: stretch;
+    text-align: left;
+  }
+}
+
 /* ===== Mobile polish ======================================================
    Round 2 of the phone pass, driven by Jeff's "mobile UI is not great"
    review. Measured problems at 375px: 136px masthead + 53px sticky tabs
@@ -17034,5 +17409,111 @@ summary:focus-visible {
   .golf-lab-side-panel select {
     width: 100%;
     max-width: none;
+  }
+}
+
+@media (max-width: 680px) {
+  .golf-lab-hero {
+    gap: 12px;
+    padding: 14px;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .golf-lab-hero h2 {
+    font-size: 1.78rem;
+    line-height: 0.98;
+  }
+
+  .golf-lab-hero p {
+    font-size: 0.86rem;
+    line-height: 1.35;
+  }
+
+  .golf-lab-hero-proof {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin-top: 10px;
+  }
+
+  .golf-lab-hero-proof span {
+    flex: 0 0 190px;
+    padding: 9px;
+  }
+
+  .golf-lab-control-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .golf-lab-control-grid .golf-lab-field:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .golf-lab-field select,
+  .golf-lab-field input,
+  .golf-lab-range-field input[type="range"] {
+    max-width: 100%;
+    min-height: 38px;
+    font-size: 0.8rem;
+  }
+
+  .golf-lab-range-field,
+  .golf-lab-model-weights,
+  .golf-lab-sync-row,
+  .golf-lab-source-row,
+  .golf-lab-import-row {
+    grid-column: 1 / -1;
+  }
+
+  .golf-lab-model-weights {
+    display: none;
+  }
+
+  .golf-lab-sync-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .golf-lab-sync-row .primary-button {
+    width: 100%;
+  }
+
+  .golf-lab-sync-row span {
+    font-size: 0.76rem;
+  }
+
+  .golf-lab-source-row {
+    justify-content: flex-start;
+  }
+
+  .golf-lab-source-row span {
+    font-size: 0.72rem;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .golf-lab-lanes {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .golf-lab-lane {
+    flex: 0 0 170px;
+    min-height: 76px;
+    padding: 12px;
+  }
+
+  .golf-lab-lane strong {
+    margin-top: 8px;
+    font-size: 1.55rem;
   }
 }

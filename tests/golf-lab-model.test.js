@@ -89,7 +89,7 @@ test("buildOwnedModelSnapshot: scores field with skill, course, weather, and mar
   assert.equal(winnerRows[0].rank, 1);
   assert.equal(winnerRows[0].modelProfile, "Major Test");
   assert.equal(winnerRows[0].modelWeatherScenario, "baseline");
-  assert.equal(winnerRows[0].modelWeatherLabel, "Imported forecast");
+  assert.equal(winnerRows[0].modelWeatherLabel, "Live forecast");
   assert.equal(snapshot.weatherScenario.key, "baseline");
   assert.ok(Number.isFinite(winnerRows[0].skill));
   assert.ok(Number.isFinite(winnerRows[0].recentForm));
@@ -367,7 +367,7 @@ test("buildPredictionResultsSummaryBoard: explains settled player hits, misses, 
     modelRunId: "model-run-event-1-balanced-baseline-test",
     modelProfile: "Balanced",
     modelWeatherScenario: "baseline",
-    modelWeatherLabel: "Imported forecast",
+    modelWeatherLabel: "Live forecast",
     modelVersion: M.MODEL_VERSION,
     createdAt: "2026-06-17T12:00:00Z",
     confidence: "high",
@@ -628,8 +628,8 @@ test("buildModelPerformanceBoard: groups settled prediction results by model dim
     predictionLedger: [
       { id: "p1", eventId: "event-1", playerId: "alpha", market: "winner", probability: 0.25, edge: 0.06, marketOddsAmerican: 500, createdAt: "2026-06-18T10:00:00Z", modelProfile: "Major Test", modelWeatherScenario: "wind", modelWeatherLabel: "Wind test", confidence: "high" },
       { id: "p2", eventId: "event-1", playerId: "beta", market: "winner", probability: 0.2, edge: 0.03, marketOddsAmerican: 400, createdAt: "2026-06-18T10:00:00Z", modelProfile: "Major Test", modelWeatherScenario: "wind", modelWeatherLabel: "Wind test", confidence: "medium" },
-      { id: "p3", eventId: "event-1", playerId: "beta", market: "top 20", probability: 0.7, edge: 0.015, marketOddsAmerican: -150, createdAt: "2026-06-18T10:00:00Z", modelProfile: "Balanced", modelWeatherScenario: "baseline", modelWeatherLabel: "Imported forecast", confidence: "medium" },
-      { id: "p4", eventId: "event-1", playerId: "gamma", market: "make cut", probability: 0.48, edge: -0.02, marketOddsAmerican: -110, createdAt: "2026-06-18T10:00:00Z", modelProfile: "Balanced", modelWeatherScenario: "baseline", modelWeatherLabel: "Imported forecast", confidence: "thin sample" }
+      { id: "p3", eventId: "event-1", playerId: "beta", market: "top 20", probability: 0.7, edge: 0.015, marketOddsAmerican: -150, createdAt: "2026-06-18T10:00:00Z", modelProfile: "Balanced", modelWeatherScenario: "baseline", modelWeatherLabel: "Live forecast", confidence: "medium" },
+      { id: "p4", eventId: "event-1", playerId: "gamma", market: "make cut", probability: 0.48, edge: -0.02, marketOddsAmerican: -110, createdAt: "2026-06-18T10:00:00Z", modelProfile: "Balanced", modelWeatherScenario: "baseline", modelWeatherLabel: "Live forecast", confidence: "thin sample" }
     ]
   }, { minEdge: 0, recentRows: 3 });
 
