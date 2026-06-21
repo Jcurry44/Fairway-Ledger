@@ -157,6 +157,7 @@
   const IN_PROGRESS_KEY = "fairwayLedger.inProgressRound.v1";
   const GOLF_LAB_MODEL_SETTINGS_KEY = "fairwayLedger.golfLabModelSettings.v1";
   const GOLF_LAB_VIEW_KEY = "fairwayLedger.golfLabView.v1";
+  const GOLF_LAB_SHOWCASE_SRC = "./data/golf-lab-showcase.js?v=2026-06-21b";
   // Card scorecard sectioning preference. "narrative" reorders the per-hole
   // inputs to match how you experience the hole (tee → approach → green →
   // score). "default" is the original outcome-first layout. As of the
@@ -695,6 +696,8 @@
 
   let sampleRounds = [];
   let state = { courses: [], rounds: [], profile: { bag: [] }, golfLab: blankGolfLabState() };
+  let golfLabShowcaseLoadPromise = null;
+  let golfLabRenderRunId = 0;
 
   const els = {
     metricRounds: document.getElementById("metricRounds"),
@@ -8393,7 +8396,7 @@
     if (!["overview", "players", "tournament", "courses", "markets", "data"].includes(nextMode)) return;
     golfLabViewMode = nextMode;
     try { localStorage.setItem(GOLF_LAB_VIEW_KEY, nextMode); } catch {}
-    applyGolfLabViewMode();
+    renderGolfLab();
   }
 
   function applyGolfLabViewMode() {
@@ -8416,6 +8419,28 @@
     const payload = window.GolfLabPublicShowcase;
     if (!payload || !payload.golfLab || typeof payload.golfLab !== "object") return null;
     return payload;
+  }
+
+  function loadGolfLabShowcaseScript() {
+    if (golfLabShowcasePayload()) return Promise.resolve(golfLabShowcasePayload());
+    if (golfLabShowcaseLoadPromise) return golfLabShowcaseLoadPromise;
+    golfLabShowcaseLoadPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = GOLF_LAB_SHOWCASE_SRC;
+      script.async = true;
+      script.onload = () => resolve(golfLabShowcasePayload());
+      script.onerror = () => reject(new Error("Could not load Golf Lab public warehouse."));
+      document.head.appendChild(script);
+    });
+    return golfLabShowcaseLoadPromise;
+  }
+
+  function scheduleIdleTask(callback) {
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(callback, { timeout: 2500 });
+      return;
+    }
+    setTimeout(callback, 120);
   }
 
   function pickGolfLabShowcasePlayer(lab) {
@@ -8441,13 +8466,26 @@
     if (!selectedGolfLabCourseId && firstCourse) selectedGolfLabCourseId = firstCourse.id;
     golfLabShowcaseSessionOnly = !options.persist;
     if (options.persist) saveState();
-    renderGolfLab();
+    if (options.render !== false) renderGolfLab();
     return true;
   }
 
-  function primeGolfLabShowcaseIfEmpty() {
-    if (hasGolfLabData(state.golfLab)) return;
-    applyGolfLabShowcaseSeed({ persist: false });
+  function primeGolfLabShowcaseIfEmpty(options = {}) {
+    if (hasGolfLabData(state.golfLab)) return Promise.resolve(false);
+    const run = () => loadGolfLabShowcaseScript()
+      .then(() => applyGolfLabShowcaseSeed({ persist: false, render: true }))
+      .catch((error) => {
+        console.warn("Could not load Golf Lab public warehouse", error);
+        if (els.golfLabStatus) els.golfLabStatus.textContent = "Golf Lab warehouse could not load. Personal tools are still available.";
+        if (els.golfLabSourceStatus) els.golfLabSourceStatus.textContent = "Public warehouse unavailable on this connection.";
+        return false;
+      });
+    if (options.immediate) return run();
+    return new Promise((resolve) => {
+      scheduleIdleTask(() => {
+        run().then(resolve);
+      });
+    });
   }
 
   function normalizeGolfLabMarketKey(value) {
@@ -8593,44 +8631,7 @@
     golfLabModelSettings = normalizeGolfLabModelSettings({ ...golfLabModelSettings, ...partial });
     saveGolfLabModelSettings();
     syncGolfLabModelSettingsControls();
-    const lab = normalizeGolfLabState(state.golfLab);
-    const warehouseReport = typeof buildWarehouseReport === "function" ? buildWarehouseReport(lab) : null;
-    renderGolfLabCommandCenter(lab, warehouseReport);
-    renderGolfLabActivationPlan(lab);
-    renderGolfLabCoverageMap(lab);
-    renderGolfLabSourceLineageBoard(lab);
-    renderGolfLabSourceOpsBoard(lab);
-    renderGolfLabDataIntakeBoard(lab);
-    renderGolfLabSourceCatalogBoard(lab);
-    renderGolfLabPlayerIdentityBoard(lab);
-    renderGolfLabCourseSetupBoard(lab);
-    renderGolfLabPlayerSplitLab(lab);
-    renderGolfLabFeatureStoreBoard(lab);
-    renderGolfLabFitBoard(lab);
-    renderGolfLabFieldReadinessBoard(lab);
-    renderGolfLabFieldIntelligenceBoard(lab);
-    renderGolfLabConsensusBoard(lab);
-    renderGolfLabFeatureSensitivityBoard(lab);
-    renderGolfLabScenarioBoard(lab);
-    renderGolfLabWeatherMatrixBoard(lab);
-    renderGolfLabWeatherDrawBoard(lab);
-    renderGolfLabPredictionLedger(lab);
-    renderGolfLabPredictionPrepBoard(lab);
-    renderGolfLabPredictionRunAuditBoard(lab);
-    renderGolfLabModelRunHistoryBoard(lab);
-    renderGolfLabMarketCoverageBoard(lab);
-    renderGolfLabOddsMovementBoard(lab);
-    renderGolfLabOddsShoppingBoard(lab);
-    renderGolfLabEdgeBoard(lab);
-    renderGolfLabBetPortfolioBoard(lab);
-    renderGolfLabProjectedStandingsBoard(lab);
-    renderGolfLabResultsSummaryBoard(lab);
-    renderGolfLabModelExplainerBoard(lab);
-    renderGolfLabSettlementBoard(lab);
-    renderGolfLabBacktestPanel(lab);
-    renderGolfLabTrainingDatasetBoard(lab);
-    renderGolfLabModelCalibrationBoard(lab);
-    renderGolfLabModelTuningBoard(lab);
+    renderGolfLab();
   }
 
   function setGolfLabModelStatus(message) {
@@ -9096,14 +9097,115 @@
     `;
   }
 
+  function isGolfLabActive() {
+    const panel = document.querySelector('[data-tab-panel="golf-lab"]');
+    return Boolean(panel && panel.classList.contains("active"));
+  }
+
+  function renderGolfLabVisibleBoards(lab, warehouseReport) {
+    const runId = ++golfLabRenderRunId;
+    const inView = (...views) => views.includes(golfLabViewMode);
+    const run = (views, callback) => {
+      if (runId !== golfLabRenderRunId || !views.includes(golfLabViewMode)) return;
+      callback();
+    };
+
+    if (inView("overview", "tournament", "data")) renderGolfLabCommandCenter(lab, warehouseReport);
+    if (inView("data")) {
+      renderGolfLabActivationPlan(lab);
+      renderGolfLabWarehouseWorkbench(lab, warehouseReport);
+      renderGolfLabCoverageMap(lab);
+      renderGolfLabSourceAuditBoard(lab, warehouseReport);
+      renderGolfLabSourceLineageBoard(lab);
+      renderGolfLabSourceOpsBoard(lab);
+      renderGolfLabDataIntakeBoard(lab);
+      renderGolfLabSourceCatalogBoard(lab);
+      renderGolfLabHistoricalBackfillBoard(lab);
+      renderGolfLabSourcePlan(lab);
+      renderGolfLabPlayerIdentityBoard(lab);
+      renderGolfLabFeatureStoreBoard(lab);
+      renderGolfLabPredictionPrepBoard(lab);
+      renderGolfLabPredictionRunAuditBoard(lab);
+      renderGolfLabModelRunHistoryBoard(lab);
+      renderGolfLabTrainingDatasetBoard(lab);
+      renderGolfLabModelCalibrationBoard(lab);
+      renderGolfLabModelTuningBoard(lab);
+    }
+
+    if (inView("overview", "players")) {
+      renderGolfLabPlayerIndexBoard(lab);
+      renderGolfLabPlayerSelect(lab);
+      renderGolfLabPlayerScorecard(lab, selectedGolfLabPlayerId);
+    }
+    if (inView("players", "tournament")) {
+      renderGolfLabPlayerSplitLab(lab);
+      renderGolfLabFitBoard(lab);
+    }
+    if (inView("players", "courses")) renderGolfLabSplitLeaders(lab);
+
+    if (inView("overview", "courses")) renderGolfLabCourseDifficultyBoard(lab);
+    if (inView("courses")) {
+      renderGolfLabCourseSelect(lab);
+      renderGolfLabCourseScorecard(lab, selectedGolfLabCourseId);
+      renderGolfLabCourseSetupBoard(lab);
+      renderGolfLabCourseCompBoard(lab);
+    }
+
+    if (inView("tournament")) {
+      renderGolfLabTournamentBoard(lab);
+      renderGolfLabFieldReadinessBoard(lab);
+      renderGolfLabFieldIntelligenceBoard(lab);
+      renderGolfLabConsensusBoard(lab);
+      renderGolfLabFeatureSensitivityBoard(lab);
+      renderGolfLabScenarioBoard(lab);
+      renderGolfLabWeatherMatrixBoard(lab);
+      renderGolfLabWeatherDrawBoard(lab);
+      renderGolfLabCourseSetupBoard(lab);
+      renderGolfLabPredictionPrepBoard(lab);
+    }
+
+    if (inView("overview", "tournament", "markets")) renderGolfLabProjectedStandingsBoard(lab);
+    if (inView("overview", "markets")) {
+      renderGolfLabResultsSummaryBoard(lab);
+      renderGolfLabModelExplainerBoard(lab);
+    }
+    if (inView("markets")) {
+      renderGolfLabPredictionLedger(lab);
+      renderGolfLabPredictionRunAuditBoard(lab);
+      renderGolfLabModelRunHistoryBoard(lab);
+      renderGolfLabMarketCoverageBoard(lab);
+      renderGolfLabOddsMovementBoard(lab);
+      renderGolfLabOddsShoppingBoard(lab);
+      renderGolfLabEdgeBoard(lab);
+      renderGolfLabBetPortfolioBoard(lab);
+      renderGolfLabSettlementBoard(lab);
+      renderGolfLabBacktestPanel(lab);
+      renderGolfLabModelCalibrationBoard(lab);
+      renderGolfLabModelTuningBoard(lab);
+      renderGolfLabConsensusBoard(lab);
+      renderGolfLabFeatureSensitivityBoard(lab);
+    }
+
+    applyGolfLabViewMode();
+    if (inView("overview")) {
+      scheduleIdleTask(() => {
+        run(["overview"], () => {
+          renderGolfLabFieldReadinessBoard(lab);
+          renderGolfLabMarketCoverageBoard(lab);
+          renderGolfLabOddsMovementBoard(lab);
+          applyGolfLabViewMode();
+        });
+      });
+    }
+  }
+
   function renderGolfLab() {
     const lab = normalizeGolfLabState(state.golfLab);
     state.golfLab = lab;
     const summary = summarizeGolfLabState(lab);
-    const warehouseReport = typeof buildWarehouseReport === "function" ? buildWarehouseReport(lab) : null;
+    const active = isGolfLabActive();
+    const warehouseReport = active && typeof buildWarehouseReport === "function" ? buildWarehouseReport(lab) : null;
     renderGolfLabSourceStatus(summary);
-    renderGolfLabModelEventSelect(lab);
-    renderGolfLabHeroProof(summary, warehouseReport);
     syncGolfLabModelSettingsControls();
     if (els.golfLabShowcaseButton) {
       els.golfLabShowcaseButton.hidden = summary.hasData || !golfLabShowcasePayload();
@@ -9119,54 +9221,11 @@
     }
 
     renderGolfLabLanes(summary);
-    renderGolfLabCommandCenter(lab, warehouseReport);
-    renderGolfLabActivationPlan(lab);
-    renderGolfLabWarehouseWorkbench(lab, warehouseReport);
-    renderGolfLabCoverageMap(lab);
-    renderGolfLabSourceAuditBoard(lab, warehouseReport);
-    renderGolfLabSourceLineageBoard(lab);
-    renderGolfLabSourceOpsBoard(lab);
-    renderGolfLabDataIntakeBoard(lab);
-    renderGolfLabSourceCatalogBoard(lab);
-    renderGolfLabHistoricalBackfillBoard(lab);
-    renderGolfLabSourcePlan(lab);
-    renderGolfLabPlayerIdentityBoard(lab);
-    renderGolfLabPlayerIndexBoard(lab);
-    renderGolfLabPlayerSelect(lab);
-    renderGolfLabCourseSelect(lab);
-    renderGolfLabCourseDifficultyBoard(lab);
-    renderGolfLabCourseSetupBoard(lab);
-    renderGolfLabPlayerSplitLab(lab);
-    renderGolfLabFeatureStoreBoard(lab);
-    renderGolfLabCourseCompBoard(lab);
-    renderGolfLabSplitLeaders(lab);
-    renderGolfLabTournamentBoard(lab);
-    renderGolfLabFitBoard(lab);
-    renderGolfLabFieldReadinessBoard(lab);
-    renderGolfLabFieldIntelligenceBoard(lab);
-    renderGolfLabConsensusBoard(lab);
-    renderGolfLabFeatureSensitivityBoard(lab);
-    renderGolfLabScenarioBoard(lab);
-    renderGolfLabWeatherMatrixBoard(lab);
-    renderGolfLabWeatherDrawBoard(lab);
-    renderGolfLabPredictionLedger(lab);
-    renderGolfLabPredictionPrepBoard(lab);
-    renderGolfLabPredictionRunAuditBoard(lab);
-    renderGolfLabModelRunHistoryBoard(lab);
-    renderGolfLabMarketCoverageBoard(lab);
-    renderGolfLabOddsMovementBoard(lab);
-    renderGolfLabOddsShoppingBoard(lab);
-    renderGolfLabEdgeBoard(lab);
-    renderGolfLabBetPortfolioBoard(lab);
-    renderGolfLabProjectedStandingsBoard(lab);
-    renderGolfLabResultsSummaryBoard(lab);
-    renderGolfLabModelExplainerBoard(lab);
-    renderGolfLabSettlementBoard(lab);
-    renderGolfLabBacktestPanel(lab);
-    renderGolfLabTrainingDatasetBoard(lab);
-    renderGolfLabModelCalibrationBoard(lab);
-    renderGolfLabModelTuningBoard(lab);
     applyGolfLabViewMode();
+    if (!active) return;
+    renderGolfLabModelEventSelect(lab);
+    renderGolfLabHeroProof(summary, warehouseReport);
+    renderGolfLabVisibleBoards(lab, warehouseReport);
   }
 
   function renderGolfLabLanes(summary) {
@@ -15145,6 +15204,10 @@
     // Refresh the snapshot panel on Profile entry so timestamps don't drift
     // (e.g. "2 min ago" should re-evaluate without a full reload).
     if (targetName === "profile") renderSnapshotPanel();
+    if (targetName === "golf-lab") {
+      primeGolfLabShowcaseIfEmpty({ immediate: true });
+      renderGolfLab();
+    }
   }
 
   function refreshRoundSetup() {
@@ -16250,40 +16313,7 @@
 
   if (els.golfLabModelEventSelect) {
     els.golfLabModelEventSelect.addEventListener("change", () => {
-      const lab = normalizeGolfLabState(state.golfLab);
-      const warehouseReport = typeof buildWarehouseReport === "function" ? buildWarehouseReport(lab) : null;
-      renderGolfLabCommandCenter(lab, warehouseReport);
-      renderGolfLabActivationPlan(lab);
-      renderGolfLabSourceLineageBoard(lab);
-      renderGolfLabSourceOpsBoard(lab);
-      renderGolfLabDataIntakeBoard(lab);
-      renderGolfLabSourceCatalogBoard(lab);
-      renderGolfLabSourcePlan(lab);
-      renderGolfLabPlayerIdentityBoard(lab);
-      renderGolfLabCourseSetupBoard(lab);
-      renderGolfLabPlayerSplitLab(lab);
-      renderGolfLabFeatureStoreBoard(lab);
-      renderGolfLabTournamentBoard(lab);
-      renderGolfLabPredictionPrepBoard(lab);
-      renderGolfLabPlayerIndexBoard(lab);
-      renderGolfLabPlayerScorecard(lab, selectedGolfLabPlayerId);
-      renderGolfLabFitBoard(lab);
-      renderGolfLabFieldReadinessBoard(lab);
-      renderGolfLabFieldIntelligenceBoard(lab);
-      renderGolfLabScenarioBoard(lab);
-      renderGolfLabWeatherMatrixBoard(lab);
-      renderGolfLabWeatherDrawBoard(lab);
-      renderGolfLabCourseCompBoard(lab);
-      renderGolfLabPredictionRunAuditBoard(lab);
-      renderGolfLabMarketCoverageBoard(lab);
-      renderGolfLabOddsMovementBoard(lab);
-      renderGolfLabEdgeBoard(lab);
-      renderGolfLabBetPortfolioBoard(lab);
-      renderGolfLabProjectedStandingsBoard(lab);
-      renderGolfLabResultsSummaryBoard(lab);
-      renderGolfLabModelExplainerBoard(lab);
-      renderGolfLabSettlementBoard(lab);
-      renderGolfLabModelCalibrationBoard(lab);
+      renderGolfLab();
     });
   }
 
@@ -16377,7 +16407,6 @@
     // with a layout gap.
     initSelectChips();
     renderAll();
-    primeGolfLabShowcaseIfEmpty();
     setActiveTab(localStorage.getItem(ACTIVE_TAB_KEY) || "home");
     // Offer to restore any in-progress round entry that was interrupted
     // (page reload, phone restart, accidental tab close, etc).
