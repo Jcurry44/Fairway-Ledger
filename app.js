@@ -6913,6 +6913,25 @@
   }
 
   function renderRecentRounds() {
+    // Score badge context (2026-07-06): each round leads with a tone-coded
+    // badge judged against the player's OWN average for that round length —
+    // celebrate (green when you beat your average, gold for the personal
+    // best), never scold: an ordinary round stays neutral cream.
+    const toParByLen = {};
+    state.rounds.forEach((r) => {
+      const len = Array.isArray(r.holes) ? r.holes.length : 0;
+      (toParByLen[len] = toParByLen[len] || []).push(roundTotals(r).toPar);
+    });
+    const bestToPar18 = Math.min(...state.rounds
+      .filter((r) => Array.isArray(r.holes) && r.holes.length === 18)
+      .map((r) => roundTotals(r).toPar));
+    const fmtRowDate = (iso) => {
+      try {
+        const d = new Date(`${iso}T12:00:00`);
+        if (Number.isNaN(d.getTime())) return iso;
+        return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+      } catch { return iso; }
+    };
     const rows = [...state.rounds]
       .sort((a, b) => b.date.localeCompare(a.date))
       .slice(0, 7)
@@ -6920,10 +6939,21 @@
         const course = getCourse(round.courseId);
         const totals = roundTotals(round);
         const sg = roundStrokesGained(round);
-        const sgLabel = sg ? ` | SG ${formatSigned(sg.total)}` : "";
-        const windLabel = round.wind ? ` | ${escapeHtml(formatWind(round.wind))}` : "";
         const tagBadge = round.tag ? ` <span class="round-tag-badge round-tag-${escapeHtml(round.tag)}">${escapeHtml(formatRoundTag(round.tag))}</span>` : "";
         const editingBadge = editingRoundId === round.id ? ' <span class="editing-pill">editing</span>' : "";
+        const len = Array.isArray(round.holes) ? round.holes.length : 0;
+        const peerAvg = average(toParByLen[len] || []);
+        const beat = Number.isFinite(peerAvg) && (toParByLen[len] || []).length >= 3
+          ? peerAvg - totals.toPar : NaN;
+        const isBest = len === 18 && Number.isFinite(bestToPar18) && totals.toPar === bestToPar18
+          && (toParByLen[18] || []).length >= 3;
+        const badgeTone = isBest ? " tone-gold" : (Number.isFinite(beat) && beat >= 0.5 ? " tone-good" : "");
+        const context = [];
+        if (isBest) context.push('<span class="round-context-best">personal best</span>');
+        else if (Number.isFinite(beat) && beat >= 0.5) context.push(`<span class="round-context-good">beat your average by ${beat.toFixed(1)}</span>`);
+        if (sg) context.push(`SG ${formatSigned(sg.total)}`);
+        if (round.wind) context.push(escapeHtml(formatWind(round.wind)));
+        if (len && len !== 18) context.push(`${len} holes`);
         // Always regenerate the narrative — it depends on every other round
         // ("vs your recent average" shifts as you add rounds), so a stored
         // string would go stale. The narrative.split / wrap-in-<p> dance
@@ -6936,15 +6966,19 @@
         const scorecardHtml = `<details class="round-row-scorecard"><summary>Scorecard</summary>${renderRoundScorecard(round)}</details>`;
         return `
           <div class="round-row${editingRoundId === round.id ? " editing" : ""}">
+            <div class="round-badge${badgeTone}" aria-hidden="true">
+              <strong>${totals.gross}</strong>
+              <span>${formatSigned(totals.toPar, 0)}</span>
+            </div>
             <div class="round-row-main">
-              <strong>${totals.gross} (${formatSigned(totals.toPar, 0)})${editingBadge}${tagBadge}</strong>
-              <span class="subtext">${round.date} | <button type="button" class="link-course" data-open-course-name="${escapeHtml(physicalCourseName(round.courseId))}">${escapeHtml(course ? course.name : "Unknown")}</button>${windLabel}${sgLabel}</span>
+              <strong class="round-row-head"><span>${fmtRowDate(round.date)}</span><button type="button" class="link-course" data-open-course-name="${escapeHtml(physicalCourseName(round.courseId))}">${escapeHtml(course ? course.name : "Unknown")}</button>${editingBadge}${tagBadge}</strong>
+              ${context.length ? `<span class="subtext round-row-context">${context.join(" · ")}</span>` : ""}
               ${narrativeHtml}
               ${scorecardHtml}
             </div>
             <div class="row-actions">
               <button type="button" data-view-round="${round.id}">View</button>
-              <button type="button" data-delete-round="${round.id}">Delete</button>
+              <button type="button" class="row-delete" data-delete-round="${round.id}" aria-label="Delete round">Delete</button>
             </div>
           </div>`;
       }).join("");

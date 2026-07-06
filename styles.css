@@ -7619,3 +7619,60 @@ summary:focus-visible {
   background: linear-gradient(170deg, rgba(217, 192, 138, 0.14), var(--panel) 60%);
   border-color: rgba(168, 133, 59, 0.35);
 }
+
+/* Scorecard rows (2026-07-06): each round leads with a tone-coded score
+   badge -- gold for the personal best, green when it beat your average,
+   neutral cream otherwise. Delete recedes to a quiet text action so the
+   destructive path never sits shoulder-to-shoulder with View. */
+.round-row {
+  align-items: flex-start;
+  gap: 12px;
+}
+.round-badge {
+  flex: 0 0 auto;
+  width: 54px;
+  min-height: 54px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel-soft);
+  display: grid;
+  place-content: center;
+  gap: 1px;
+  text-align: center;
+  padding: 6px 4px;
+}
+.round-badge strong {
+  font-size: 1.25rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.round-badge span {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--muted);
+}
+.round-badge.tone-good {
+  border-color: rgba(30, 107, 74, 0.4);
+  background: linear-gradient(170deg, rgba(30, 107, 74, 0.1), var(--panel-soft) 70%);
+}
+.round-badge.tone-good strong { color: var(--green); }
+.round-badge.tone-gold {
+  border-color: rgba(168, 133, 59, 0.5);
+  background: linear-gradient(170deg, rgba(217, 192, 138, 0.25), var(--panel-soft) 70%);
+  box-shadow: 0 0 12px rgba(217, 192, 138, 0.35);
+}
+.round-badge.tone-gold strong { color: var(--gold); }
+.round-row-head { font-size: 0.95rem; }
+.round-row-context .round-context-best { color: var(--gold); font-weight: 800; }
+.round-row-context .round-context-good { color: var(--green); font-weight: 800; }
+.round-row .row-actions .row-delete {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  min-height: 34px;
+}
+.round-row .row-actions .row-delete:hover { color: var(--red); text-decoration: underline; }
+
+.round-row .row-actions .row-delete { border-color: transparent; }
+.round-row-main strong.round-row-head { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: center; }
