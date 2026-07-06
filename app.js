@@ -3808,6 +3808,37 @@
       els.metricAverageScoreNote.textContent = note;
       els.metricAverageScoreNote.hidden = !note;
     }
+
+    // Trend ticks (2026-07-06): the tiles judge by DIRECTION, never by level —
+    // a +14 golfer improving is a green story, and a naked level can't say
+    // that. Last-5 vs prior-5, shown only when both windows have 3+ rounds
+    // (an honest trend or none at all). Arrow = which way the number moved;
+    // color = whether that direction is good for THIS metric.
+    const byDate = [...rounds].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    const totals18 = byDate.filter((r) => Array.isArray(r.holes) && r.holes.length === 18).map(roundTotals);
+    const windowDelta = (values) => {
+      const recent5 = values.slice(0, 5);
+      const prior5 = values.slice(5, 10);
+      if (recent5.length < 3 || prior5.length < 3) return NaN;
+      return average(recent5) - average(prior5);
+    };
+    const setTrend = (id, delta, higherIsBetter, unit) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (!Number.isFinite(delta) || Math.abs(delta) < 0.05) {
+        el.hidden = true;
+        el.textContent = "";
+        el.className = "metric-trend";
+        return;
+      }
+      const improving = higherIsBetter ? delta > 0 : delta < 0;
+      el.hidden = false;
+      el.className = `metric-trend ${improving ? "trend-good" : "trend-warn"}`;
+      el.textContent = `${delta < 0 ? "▾" : "▴"} ${Math.abs(delta).toFixed(1)}${unit || ""} vs prior 5`;
+    };
+    setTrend("metricParTrend", windowDelta(totals18.map((t) => t.toPar)), false);
+    setTrend("metricGirTrend", windowDelta(byDate.map(roundTotals).map((t) => (t.girTotal ? (100 * t.girMade) / t.girTotal : NaN)).filter(Number.isFinite)), true, "%");
+    setTrend("metricSgTrend", windowDelta(byDate.map(roundStrokesGained).filter(Boolean).map((s) => s.total)), true);
   }
 
   // The Home hero: ONE number, huge, on deep clubhouse green, with the
@@ -3918,26 +3949,40 @@
     })).sort((a, b) => b.avgToPar - a.avgToPar)[0];
 
     const handicap = calculateHandicapEstimate(state.rounds);
+    // Tone layer (2026-07-06): every card carries its meaning. Form is judged
+    // by TREND (improving/steady/rising — never by the raw level, which would
+    // shout at a perfectly normal +14 golfer); the leak is always the amber
+    // card; the handicap void is an honest pending state, not a dark box
+    // with two dashes.
+    const formTone = !Number.isFinite(formDelta) ? ""
+      : formDelta <= -0.5 ? " tone-good" : formDelta >= 0.5 ? " tone-warn" : "";
+    const formTick = !Number.isFinite(formDelta) ? "Last 5 rounds"
+      : formDelta <= -0.5 ? `▾ ${Math.abs(formDelta).toFixed(1)} better than the prior 5`
+      : formDelta >= 0.5 ? `▴ ${formDelta.toFixed(1)} over the prior 5`
+      : "holding steady vs the prior 5";
+    const hasIndex = handicap.index !== null;
     els.homeInsights.innerHTML = `
-      <article class="insight-card">
+      <article class="insight-card${formTone}">
         <span>Current form</span>
         <strong>${formatSigned(recentAvg)}</strong>
-        <small>${Number.isFinite(formDelta) ? `${formatSigned(formDelta)} vs prior 5` : "Last 5 rounds"}</small>
+        <small class="insight-tick">${formTick}</small>
       </article>
-      <article class="insight-card">
+      <article class="insight-card tone-good">
         <span>Best course fit</span>
         <strong>${escapeHtml(bestCourse && bestCourse.course ? bestCourse.course.name.replace("Deerwood Golf Course - ", "") : "--")}</strong>
-        <small>${bestCourse ? `${formatSigned(bestCourse.avgToPar)} avg to par | ${bestCourse.rounds} rounds` : "--"}</small>
+        <small>${bestCourse ? `${formatSigned(bestCourse.avgToPar)} avg to par · ${bestCourse.rounds} round${bestCourse.rounds === 1 ? "" : "s"}` : "--"}</small>
       </article>
-      <article class="insight-card">
+      <article class="insight-card tone-warn">
         <span>Biggest leak</span>
-        <strong>${weakestPar ? `Par ${weakestPar.par}` : "--"}</strong>
-        <small>${weakestPar ? `${formatSigned(weakestPar.avgToPar)} per hole | ${weakestPar.count} holes` : "--"}</small>
+        <strong>${weakestPar ? `Par ${weakestPar.par}s` : "--"}</strong>
+        <small>${weakestPar ? `${formatSigned(weakestPar.avgToPar)} per hole · ${weakestPar.count} holes played` : "--"}</small>
       </article>
-      <article class="insight-card dark">
+      <article class="insight-card ${hasIndex ? "dark" : "pending"}">
         <span>Handicap signal</span>
-        <strong>${handicap.index === null ? "--" : handicap.index.toFixed(1)}</strong>
-        <small>${handicap.approximateNineCount || 0} nine-hole estimates included</small>
+        <strong>${hasIndex ? handicap.index.toFixed(1) : "Building"}</strong>
+        <small>${hasIndex
+          ? `${handicap.approximateNineCount || 0} nine-hole estimate${(handicap.approximateNineCount || 0) === 1 ? "" : "s"} included`
+          : "unlocks with rated 18-hole rounds — 9-holers pair up as estimates"}</small>
       </article>
     `;
   }

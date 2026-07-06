@@ -7568,3 +7568,54 @@ summary:focus-visible {
   color: var(--green-dark);
   font-weight: 800;
 }
+
+/* ============================================================ */
+/* Tone layer (2026-07-06): numbers carry their meaning.        */
+/* Insight cards get a colored accent bar + tinted wash by what */
+/* they SAY (good / watch / pending), metric tiles get trend    */
+/* ticks judged by direction, and the best-round tile reads as  */
+/* the trophy it is. Clubhouse palette only -- green for good,  */
+/* brass-amber for watch, never a red wall on a scorecard.      */
+/* ============================================================ */
+
+.insight-card { position: relative; overflow: hidden; }
+.insight-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 3px;
+  background: var(--line);
+}
+.insight-card.tone-good::before { background: var(--green); }
+.insight-card.tone-good { background: linear-gradient(170deg, rgba(30, 107, 74, 0.06), #fffefa 55%); }
+.insight-card.tone-good .insight-tick { color: var(--green); }
+.insight-card.tone-warn::before { background: var(--gold); }
+.insight-card.tone-warn { background: linear-gradient(170deg, rgba(168, 133, 59, 0.08), #fffefa 55%); }
+.insight-card.tone-warn .insight-tick { color: #8a6a2f; }
+.insight-card.dark::before { background: var(--gold-soft); }
+
+/* Handicap building: an honest pending state, not a dark void. */
+.insight-card.pending {
+  background: var(--panel-soft);
+  border-style: dashed;
+  box-shadow: none;
+}
+.insight-card.pending strong { color: var(--muted); font-size: 1.15rem; }
+.insight-card.pending::before { background: var(--gold-soft); opacity: 0.6; }
+
+/* Metric tiles: trend ticks + the trophy tile. */
+.metric-trend {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+.metric-trend.trend-good { color: var(--green); }
+.metric-trend.trend-warn { color: #8a6a2f; }
+.metric-card.tone-gold strong { color: var(--gold); }
+.metric-card.tone-gold {
+  background: linear-gradient(170deg, rgba(217, 192, 138, 0.14), var(--panel) 60%);
+  border-color: rgba(168, 133, 59, 0.35);
+}
