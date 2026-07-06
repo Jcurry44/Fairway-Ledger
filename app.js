@@ -6965,14 +6965,35 @@
         showRoundDetail(round);
       });
     });
+    // Deleting a round is DESTRUCTIVE in a localStorage-only app — it goes
+    // through the same confirm modal as every other wipe path (P0 fix
+    // 2026-07-06: this button used to delete on a single tap, no confirm,
+    // one thumb-width from View), and snapshots first so Profile › Backups
+    // can undo a change of heart.
     els.recentRounds.querySelectorAll("[data-delete-round]").forEach((button) => {
       button.addEventListener("click", () => {
         const targetId = button.dataset.deleteRound;
-        state.rounds = state.rounds.filter((round) => round.id !== targetId);
-        if (editingRoundId === targetId) clearEditState({ rerender: true });
-        saveState();
-        renderAll();
-        showToast("Round deleted.");
+        const round = state.rounds.find((candidate) => candidate.id === targetId);
+        if (!round) return;
+        const course = getCourse(round.courseId);
+        const totals = roundTotals(round);
+        openDestructiveConfirm({
+          title: "Delete this round?",
+          message: "This removes the round from every stat, trend, and record.",
+          facts: [
+            `${round.date} · ${course ? course.name : "Unknown course"}`,
+            `${totals.gross} (${formatSigned(totals.toPar, 0)})${round.holes ? ` · ${round.holes.length} holes` : ""}`
+          ],
+          confirmLabel: "Delete round",
+          onConfirm: () => {
+            takeSnapshot("before-round-delete", { force: true });
+            state.rounds = state.rounds.filter((candidate) => candidate.id !== targetId);
+            if (editingRoundId === targetId) clearEditState({ rerender: true });
+            saveState();
+            renderAll();
+            showToast("Round deleted. A snapshot was saved first (Profile › Backups).");
+          }
+        });
       });
     });
   }
