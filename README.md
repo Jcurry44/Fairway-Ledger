@@ -12,6 +12,12 @@ Open `index.html` locally to run it directly from the filesystem.
 - **`app.js`** — ~5.7k lines, one IIFE. Handles UI rendering, state, persistence, event wiring.
 - **`lib/golf-math.js`** — pure math (Strokes Gained, round totals, score classification, hole identity, handicap helpers, geo). Zero DOM/state. Imported in the browser as `window.GolfMath` and required in Node tests.
 - **`lib/shapes.js`** — canonical `Round` and `Hole` field definitions. `makeRound` / `makeHole` / `normalizeRound` builders that every read/write path routes through, so adding a new per-hole field is a one-line change.
+- **`lib/gps.js`** — browser GPS normalization, accuracy classification, recoverable shot-location records, and the geolocation adapter used by the live round card.
+- **`data/course-maps/deerwood-runtime.js`** — tracked browser configuration for Deerwood's verified aerial and the OpenStreetMap facility-reference boundary. The boundary is context-only and is never treated as playable geometry or hazard data.
+- **`lib/course-map.js`** — pure EPSG:6541 projection, raster/pixel conversion, pan/zoom, shot overlay, and GPS-accuracy helpers. Shared unchanged between the browser and Node tests.
+- **`lib/course-map-labels.js`** — strict GeoJSON boundary for user-traced Deerwood map labels. It accepts only conservative aerial observations (sand candidates, visible water, greens, tees, tree canopy) and personal aim points tied to a canonical physical hole and the verified 2024 map.
+- **`lib/course-map-ui.js`** — interactive Deerwood map controller for pan/zoom, live GPS, aim targets, recorded-shot overlays, and explicit draft-label tracing. It consumes only the trusted map runtime and never reads the rejected legacy hazards.
+- **`tools/build_deerwood_aerial.py`** — reproducible NYSDOP aerial builder. It verifies the four source checksums, mosaics their world-file positions, excludes the near-infrared band, and writes the browser WebP plus exact spatial metadata.
 - **`data/courses.js`** — course catalog. 25 entries covering Deerwood Golf Course (per-nine, per-tee), Ridgeview, Lake County, and five Western New York courses (Arrowhead, Diamond Hawk, Glen Oak, Harvest Hill, Seneca Hickory Stick) including all their tee variants.
 - **`sw.js`** — service worker (network-first with offline fallback). Whole app shell is precached so it works on a phone with zero signal.
 - **`manifest.json` + `icon.svg`** — PWA manifest. Installs to home screen as a real-looking app with its own icon.
@@ -19,12 +25,12 @@ Open `index.html` locally to run it directly from the filesystem.
 ## Tests
 
 ```
-node --test tests/golf-math.test.js tests/shapes.test.js
+node --test tests/*.test.js
 ```
 
-80 tests across the pure-math and canonical-shapes libs. No build step, no dependencies, just Node's built-in test runner.
+170 tests across golf math, canonical shapes, games, GPS, the course-map projection engine, draft-label validation, and Deerwood source-policy safeguards. No build step or test dependencies, just Node's built-in test runner.
 
-The pure math runs both as a browser global (`window.GolfMath`, `window.GolfShapes`) and as a CommonJS module via the same UMD wrapper, so the tests `require()` the exact same code the browser runs.
+The pure modules run both as browser globals and CommonJS modules via the same UMD wrappers, so the tests `require()` the exact same code the browser runs.
 
 ## Home tab
 
@@ -81,7 +87,7 @@ All fields visible inline on every card (no hide-behind-toggle gimmicks — the 
 - **Putting by Distance** — make % by bucket (Inside 3 ft / 3-6 / 6-10 / 10-20 / 20+), with three-jack count.
 - **Tee Club Performance** — avg score-to-par + avg SG by tee club (Driver vs 3W vs Hybrid vs Iron), with per-par-type breakdown and a "best avg" flag when there's a meaningful comparison.
 - **Penalty Clubs** — strokes lost per club. Surfaces the quiet costers (often the driver).
-- **Pre-round brief** — when you select a course you have 2+ rounds at, a collapsible panel above the scorecard surfaces your round count, averages, recent rounds, top 3 leak/strength holes (with most recent per-hole note inline), a counterfactual, and hazards per hole.
+- **Pre-round brief** — when you select a course you have 2+ rounds at, a collapsible panel above the scorecard surfaces your round count, averages, recent rounds, top 3 leak/strength holes (with most recent per-hole note inline), and a counterfactual.
 
 ## Deerwood specifics
 
@@ -89,7 +95,9 @@ All fields visible inline on every card (no hide-behind-toggle gimmicks — the 
 - 18-hole rounds use independent Front 9 / Back 9 selectors so every pro-shop routing works (including the same nine twice).
 - Per-hole stats pool by physical hole identity ("Buck 3" is one history regardless of whether it played as hole 3 or hole 12).
 - Two tees: White + Blue, with per-tee ratings/slopes and per-hole yardages.
-- Per-hole hazards live on the course profile (Water / Bunker / OB / Trees / Hill / Other; Left / Right / Center / Long / Short; carry yardage; strategy note). Hazards mirror across tee variants of the same physical layout.
+- Legacy hand-entered Deerwood hazards are quarantined and never shown or used. The replacement course map is built only from sourced aerial imagery, elevation data, and field-verified WGS84 geometry.
+- The map's **Label map** mode stores separate, hole-specific draft GeoJSON. Polygon labels require an explicit save and support undo/reset/delete; personal aim labels are persistent notes and never activate the live aim target automatically.
+- Aerial labels are observations, not golf rulings: the editor cannot create out-of-bounds or penalty-area boundaries, and nothing traced there feeds the strategy engine.
 
 ## Other features
 

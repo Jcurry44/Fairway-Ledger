@@ -4,9 +4,40 @@
 survive context resets. Each entry has the original prompt/thought + my
 take + a rough effort estimate.*
 
-Last updated: 2026-06-05 (insights batch — smarter narrative + tier
-multi-dim summary + architecture roadmap — sitting on branch
-`narrative-and-insights` pending Jeff's review; nothing pushed)
+Last updated: 2026-07-06 (premium UI pass — see below)
+
+---
+
+## On branch `ui-premium-2026-07` (2026-07-06 — NOT pushed; review first)
+
+Jeff's ask: "improve the UI/design into something that feels as premium as
+Icenomics." Identity kept (cream / masters green / brass / Fraunces);
+craft raised. Three commits, one per item:
+
+1. **Overview tone layer** (`c339abc`) — insight cards carry accent bars +
+   tinted washes by meaning (form judged by TREND, never level — no red
+   walls on a scorecard); metric tiles gain last-5-vs-prior-5 trend ticks
+   (shown only when both windows have 3+ rounds); Best round is the gold
+   trophy tile; the Handicap dark void became an honest dashed "Building"
+   card that says how to unlock it.
+2. **P0 delete-confirm** (`5963f08`) — Recent Scorecards' Delete was a
+   single-tap instant delete (no confirm, one thumb from View, in a
+   localStorage-only app). Now routes through the existing destructive-
+   confirm modal with the round's facts AND takes a snapshot first
+   (restorable via Profile › Backups).
+3. **Scorecard rows** (`beb0964`) — tone-coded score badges lead each row
+   (gold = personal best w/ label, green = beat your average by X, neutral
+   otherwise), human dates, chip separators, Delete recedes to quiet text.
+
+Verified: desktop + 375px, no horizontal scroll, sample-data walkthrough,
+delete cancel/confirm/snapshot loop.
+
+**Next candidates for the same pass (in order):** Add Round flow (the money
+surface — hole entry ergonomics), Trends tab charts (apply the gridline +
+tone language), Courses/Games/Profile consistency sweep, and the
+`wip-country-club-2026-07-06` branch holds a prior session's uncommitted
+country-club/TV experiments (preserved verbatim — review before building on
+main).
 
 ---
 

@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "courseId": "deerwood",
+  "name": "Deerwood Golf Course",
+  "address": {
+    "street": "1818 Sweeney St",
+    "city": "North Tonawanda",
+    "region": "NY",
+    "postalCode": "14120",
+    "country": "US"
+  },
+  "coordinateReferenceSystem": "EPSG:4326",
+  "center": {
+    "latitude": 43.04078,
+    "longitude": -78.83765,
+    "confidence": "reference"
+  },
+  "bounds": {
+    "west": -78.846693,
+    "south": 43.0362622,
+    "east": -78.8286029,
+    "north": 43.0452657,
+    "source": "osm-way-24154378",
+    "usage": "discovery-and-crop-only"
+  },
+  "layouts": [
+    { "id": "buck", "name": "Buck", "holeCount": 9 },
+    { "id": "doe", "name": "Doe", "holeCount": 9 },
+    { "id": "fawn", "name": "Fawn", "holeCount": 9 }
+  ],
+  "referenceMap": {
+    "status": "ready",
+    "basemap": {
+      "status": "ready",
+      "sourceId": "nysdop-2024-north-tonawanda",
+      "assetPath": "./assets/maps/deerwood/aerial-2024.webp",
+      "metadataPath": "./data/course-maps/deerwood-aerial-2024.json",
+      "runtimePath": "./data/course-maps/deerwood-runtime.js",
+      "intendedUse": [
+        "visual-reference",
+        "gps-position-overlay",
+        "manual-aim-placement",
+        "source-for-future-verified-tracing"
+      ]
+    },
+    "facilityReferenceBoundary": {
+      "status": "ready",
+      "sourceId": "osm-way-24154378",
+      "runtimeFeatureId": "deerwood-facility-reference-boundary",
+      "confidence": "reference",
+      "authority": "non-authoritative-reference-only",
+      "intendedUse": [
+        "map-framing",
+        "facility-context"
+      ],
+      "notForUse": [
+        "playable-boundary-ruling",
+        "hole-identification",
+        "hazard-placement",
+        "aiming-recommendation"
+      ]
+    }
+  },
+  "geometry": {
+    "status": "playable-geometry-pending",
+    "format": "GeoJSON",
+    "featureScope": "playable-course-features-only",
+    "features": [],
+    "pendingFeatureTypes": [
+      "holes",
+      "tees",
+      "greens",
+      "hazards",
+      "aim-targets"
+    ],
+    "confidenceStates": [
+      "reference",
+      "imagery-traced",
+      "gps-observed",
+      "field-verified"
+    ]
+  },
+  "gpsQuality": {
+    "preferredAccuracyMeters": 8,
+    "warningAccuracyMeters": 20,
+    "storeReportedAccuracy": true,
+    "storeCaptureTimestamp": true,
+    "manualPlacementFallback": true,
+    "requiresSecureContext": true
+  },
+  "legacyHazards": {
+    "status": "rejected",
+    "policy": "Never display, trace, compare against, or use the prior hand-entered hazard array for map geometry or strategy recommendations."
+  },
+  "sources": [
+    {
+      "id": "deerwood-official-course-details",
+      "type": "official-course",
+      "publisher": "Deerwood Golf Course / North Tonawanda Parks & Recreation",
+      "url": "https://www.deerwoodgc.com/course-details",
+      "supports": [
+        "layout-names",
+        "hole-count",
+        "scorecard",
+        "hole-flyovers"
+      ]
+    },
+    {
+      "id": "nysdop-2024-north-tonawanda",
+      "type": "orthophotography",
+      "publisher": "New York State GIS Clearinghouse",
+      "year": 2024,
+      "resolution": "1 foot",
+      "bands": 4,
+      "sourceCrs": "EPSG:6541",
+      "attribution": "Imagery (c) NYS ITS Geospatial Services, NYSDOP 2024",
+      "indexQuery": "https://orthos.its.ny.gov/arcgis/rest/services/vector/ortho_indexes/MapServer/6/query?where=1%3D1&geometry=-78.846693%2C43.0362622%2C-78.8286029%2C43.0452657&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=OBJECTID%2CFILENAME%2CFTP_PATH%2CSIZE%2CDIRECT_DL&returnGeometry=true&outSR=4326&f=pjson",
+      "tiles": [
+        { "objectId": 16185, "file": "w_10771106_12_22500_4bd_2024.zip", "url": "https://gisdata.ny.gov/ortho/nysdop11/niagara/spcs/tiles/w_10771106_12_22500_4bd_2024.zip", "byteSize": 2403868, "sha256": "FEBB8722E4433C8D9DD7401CEC4C92237EFA950D1D798D36F83181A2E6AA1B9F", "retrievedAt": "2026-07-14" },
+        { "objectId": 16186, "file": "w_10801106_12_22500_4bd_2024.zip", "url": "https://gisdata.ny.gov/ortho/nysdop11/erie/spcs/tiles/w_10801106_12_22500_4bd_2024.zip", "byteSize": 2404107, "sha256": "DA08A6760CEB27E194BF7A88DDCB85515FE0CB3C38A5B2A7B5A965CC60B70800", "retrievedAt": "2026-07-14" },
+        { "objectId": 16237, "file": "w_10771108_12_22500_4bd_2024.zip", "url": "https://gisdata.ny.gov/ortho/nysdop11/niagara/spcs/tiles/w_10771108_12_22500_4bd_2024.zip", "byteSize": 2403483, "sha256": "B566F06ABB1CB2A600BE38B5BA3FD4B5E23D6FB7D869DD05DD20D8E393DB4AE0", "retrievedAt": "2026-07-14" },
+        { "objectId": 16238, "file": "w_10801108_12_22500_4bd_2024.zip", "url": "https://gisdata.ny.gov/ortho/nysdop11/erie/spcs/tiles/w_10801108_12_22500_4bd_2024.zip", "byteSize": 2403666, "sha256": "AA0A6C5A91006853590E5E4B4CA3E99D96D36B7C15C6AB70A7E5674C77E56DA9", "retrievedAt": "2026-07-14" }
+      ],
+      "supports": [
+        "visible-course-footprint",
+        "tees",
+        "fairways",
+        "greens",
+        "bunkers",
+        "water",
+        "tree-lines"
+      ]
+    },
+    {
+      "id": "osm-way-24154378",
+      "type": "open-map-reference",
+      "publisher": "OpenStreetMap contributors",
+      "url": "https://www.openstreetmap.org/way/24154378",
+      "geoJsonUrl": "https://nominatim.openstreetmap.org/lookup?osm_ids=W24154378&format=geojson&polygon_geojson=1",
+      "rightsUrl": "https://www.openstreetmap.org/copyright",
+      "attribution": "(c) OpenStreetMap contributors",
+      "supports": ["facility-boundary", "reference-center"]
+    },
+    {
+      "id": "usgs-3dep",
+      "type": "elevation",
+      "publisher": "U.S. Geological Survey",
+      "url": "https://www.usgs.gov/3d-elevation-program",
+      "project": "NY_FEMAR2_Central_2018_D19",
+      "metadataUrl": "https://rockyweb.usgs.gov/vdelivery/Datasets/Staged/Elevation/metadata/NY_FEMAR2_Central_2018_D19/",
+      "projectReportUrl": "https://rockyweb.usgs.gov/vdelivery/Datasets/Staged/Elevation/metadata/NY_FEMAR2_Central_2018_D19/USGS_NY_FEMAR2_Central_2018_D19_Project_Report.pdf",
+      "productDirectoryUrl": "https://prd-tnm.s3.amazonaws.com/index.html?prefix=StagedProducts/Elevation/OPR/Projects/NY_FEMAR2_Central_2018_D19/NY_FEMAR2_Central_B1_2018/TIFF/",
+      "acquisitionStatus": "identified-not-downloaded",
+      "demResolutionMeters": 1,
+      "attribution": "Elevation: USGS 3DEP, NY_FEMAR2_Central_2018_D19",
+      "supports": ["terrain", "elevation-change"]
+    }
+  ],
+  "notes": [
+    "The center coordinate is a facility reference and must not be used as a tee, target, or green coordinate.",
+    "The 2024 half-foot index has no Deerwood coverage; the verified source is the one-foot, four-band index and the four listed tiles.",
+    "The generated NYSDOP reference basemap is ready for browser display, GPS overlays, and future verified tracing.",
+    "The OpenStreetMap facility boundary is ready only as non-authoritative map framing and context; it is not a playable boundary, hole, hazard, or aiming source.",
+    "Legacy hand-entered hazards are quarantined and are not a tracing or validation source.",
+    "Playable hole, tee, green, hazard, and aim geometry stays empty until traced from approved sources and validated against official hole flyovers or field observations.",
+    "Every shot start and finish must retain the device-reported horizontal accuracy so low-quality fixes can be filtered later."
+  ]
+}

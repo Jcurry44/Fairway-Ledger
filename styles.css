@@ -7568,3 +7568,572 @@ summary:focus-visible {
   color: var(--green-dark);
   font-weight: 800;
 }
+
+/* ============================================================ */
+/* Tone layer (2026-07-06): numbers carry their meaning.        */
+/* Insight cards get a colored accent bar + tinted wash by what */
+/* they SAY (good / watch / pending), metric tiles get trend    */
+/* ticks judged by direction, and the best-round tile reads as  */
+/* the trophy it is. Clubhouse palette only -- green for good,  */
+/* brass-amber for watch, never a red wall on a scorecard.      */
+/* ============================================================ */
+
+.insight-card { position: relative; overflow: hidden; }
+.insight-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 3px;
+  background: var(--line);
+}
+.insight-card.tone-good::before { background: var(--green); }
+.insight-card.tone-good { background: linear-gradient(170deg, rgba(30, 107, 74, 0.06), #fffefa 55%); }
+.insight-card.tone-good .insight-tick { color: var(--green); }
+.insight-card.tone-warn::before { background: var(--gold); }
+.insight-card.tone-warn { background: linear-gradient(170deg, rgba(168, 133, 59, 0.08), #fffefa 55%); }
+.insight-card.tone-warn .insight-tick { color: #8a6a2f; }
+.insight-card.dark::before { background: var(--gold-soft); }
+
+/* Handicap building: an honest pending state, not a dark void. */
+.insight-card.pending {
+  background: var(--panel-soft);
+  border-style: dashed;
+  box-shadow: none;
+}
+.insight-card.pending strong { color: var(--muted); font-size: 1.15rem; }
+.insight-card.pending::before { background: var(--gold-soft); opacity: 0.6; }
+
+/* Metric tiles: trend ticks + the trophy tile. */
+.metric-trend {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+.metric-trend.trend-good { color: var(--green); }
+.metric-trend.trend-warn { color: #8a6a2f; }
+.metric-card.tone-gold strong { color: var(--gold); }
+.metric-card.tone-gold {
+  background: linear-gradient(170deg, rgba(217, 192, 138, 0.14), var(--panel) 60%);
+  border-color: rgba(168, 133, 59, 0.35);
+}
+
+/* Scorecard rows (2026-07-06): each round leads with a tone-coded score
+   badge -- gold for the personal best, green when it beat your average,
+   neutral cream otherwise. Delete recedes to a quiet text action so the
+   destructive path never sits shoulder-to-shoulder with View. */
+.round-row {
+  align-items: flex-start;
+  gap: 12px;
+}
+.round-badge {
+  flex: 0 0 auto;
+  width: 54px;
+  min-height: 54px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel-soft);
+  display: grid;
+  place-content: center;
+  gap: 1px;
+  text-align: center;
+  padding: 6px 4px;
+}
+.round-badge strong {
+  font-size: 1.25rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.round-badge span {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--muted);
+}
+.round-badge.tone-good {
+  border-color: rgba(30, 107, 74, 0.4);
+  background: linear-gradient(170deg, rgba(30, 107, 74, 0.1), var(--panel-soft) 70%);
+}
+.round-badge.tone-good strong { color: var(--green); }
+.round-badge.tone-gold {
+  border-color: rgba(168, 133, 59, 0.5);
+  background: linear-gradient(170deg, rgba(217, 192, 138, 0.25), var(--panel-soft) 70%);
+  box-shadow: 0 0 12px rgba(217, 192, 138, 0.35);
+}
+.round-badge.tone-gold strong { color: var(--gold); }
+.round-row-head { font-size: 0.95rem; }
+.round-row-context .round-context-best { color: var(--gold); font-weight: 800; }
+.round-row-context .round-context-good { color: var(--green); font-weight: 800; }
+.round-row .row-actions .row-delete {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  min-height: 34px;
+}
+.round-row .row-actions .row-delete:hover { color: var(--red); text-decoration: underline; }
+
+.round-row .row-actions .row-delete { border-color: transparent; }
+.round-row-main strong.round-row-head { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: center; }
+/* ---- On-course GPS shot capture --------------------------------------- */
+.gps-shot-tracker {
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid rgba(143, 113, 55, 0.24);
+  border-radius: 16px;
+  background: radial-gradient(circle at 100% 0%, rgba(194, 159, 85, 0.14), transparent 38%), linear-gradient(145deg, #fffdf8 0%, #f7f2e7 100%);
+  box-shadow: 0 10px 26px rgba(44, 52, 43, 0.08);
+}
+.gps-shot-heading, .gps-shot-start-row, .gps-shot-active-actions, .gps-shot-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.gps-shot-heading { justify-content: space-between; margin-bottom: 12px; }
+.gps-shot-heading > div { display: grid; gap: 2px; }
+.gps-shot-heading > span { color: #6d725f; font-size: 0.78rem; font-weight: 700; }
+.gps-shot-start-row { align-items: end; }
+.gps-shot-start-row label {
+  display: grid;
+  flex: 1;
+  gap: 5px;
+  color: #666b59;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.gps-shot-start-row select {
+  min-height: 44px;
+  width: 100%;
+  padding: 0 12px;
+  border: 1px solid #d7c9ad;
+  border-radius: 11px;
+  background: #fff;
+  color: #20271f;
+  font: inherit;
+  font-weight: 700;
+}
+.gps-start-button, .gps-finish-button { min-height: 44px; white-space: nowrap; }
+.gps-shot-active {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(49, 110, 78, 0.24);
+  border-radius: 12px;
+  background: rgba(224, 240, 228, 0.72);
+}
+.gps-shot-active > span:first-child { font-size: 0.92rem; }
+.gps-shot-active-actions { justify-content: flex-end; }
+.gps-quality { color: #55604f; font-size: 0.76rem; font-weight: 700; }
+.gps-quality-poor { color: #a34f3f; }
+.gps-quality-caution { color: #8a6a22; }
+.gps-quality-good { color: #296646; }
+.gps-shot-list { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.gps-shot-row { padding: 9px 0; border-top: 1px solid rgba(115, 102, 76, 0.14); }
+.gps-shot-number {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  background: #26382d;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+.gps-shot-main { display: grid; flex: 1; gap: 2px; min-width: 0; }
+.gps-shot-main small, .gps-shot-empty, .gps-shot-status { color: #6d725f; font-size: 0.72rem; }
+.gps-shot-distance {
+  display: grid;
+  min-width: 52px;
+  text-align: right;
+  color: #26382d;
+  font-size: 1rem;
+  font-weight: 850;
+}
+.gps-shot-distance small { font-size: 0.62rem; font-weight: 700; }
+.gps-shot-icon-button {
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid #d7c9ad;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #4d584b;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+.gps-shot-delete { width: 34px; padding: 0; color: #944a3d; }
+.gps-shot-empty { margin: 10px 0 0; }
+.gps-shot-status { min-height: 1em; margin: 8px 0 0; }
+@media (max-width: 520px) {
+  .gps-shot-row { flex-wrap: wrap; }
+  .gps-shot-main { min-width: calc(100% - 46px); }
+  .gps-shot-distance { margin-left: 34px; text-align: left; }
+  .gps-shot-active-actions > button { flex: 1; }
+}
+
+/* ---- Deerwood aerial course map --------------------------------------- */
+.course-map-launch {
+  border-color: rgba(31, 122, 89, 0.36);
+  background: rgba(226, 242, 232, 0.78);
+  color: var(--green-dark, #15573c);
+}
+
+.course-map-overlay {
+  align-items: center;
+  padding: 18px;
+}
+
+.course-map-sheet {
+  position: relative;
+  width: min(980px, calc(100% - 24px));
+  height: min(90dvh, 820px);
+  display: grid;
+  grid-template-rows: auto auto minmax(220px, 1fr) auto auto auto;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  border-radius: 24px;
+  background: #fbfcf8;
+  box-shadow: 0 28px 80px rgba(8, 26, 21, 0.42);
+  animation: hp-pop 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.course-map-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px 10px;
+}
+
+.course-map-header .eyebrow { margin: 0 0 2px; }
+.course-map-header h3 { margin: 0; color: var(--ink); font-size: 1.12rem; }
+
+.course-map-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  padding: 0 18px 12px;
+}
+
+.course-map-hole-field {
+  min-width: 150px;
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.course-map-hole-field select {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 34px 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.course-map-toolbar > button { min-height: 42px; }
+
+.course-map-zoom {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.course-map-zoom button {
+  min-width: 42px;
+  min-height: 42px;
+  padding: 0 12px;
+  font-weight: 850;
+}
+
+.course-map-viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  margin: 0 18px;
+  overflow: hidden;
+  border: 1px solid rgba(18, 53, 40, 0.45);
+  border-radius: 18px;
+  background: #193329;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.course-map-viewport:active { cursor: grabbing; }
+
+.course-map-stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.course-map-stage img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+}
+
+.course-map-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.course-map-annotation path,
+.course-map-annotation circle,
+.course-map-annotation-draft,
+.course-map-annotation-vertex circle {
+  vector-effect: non-scaling-stroke;
+}
+
+.course-map-annotation path {
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.course-map-annotation text,
+.course-map-annotation-vertex text {
+  fill: #fff;
+  stroke: rgba(9, 29, 22, 0.94);
+  stroke-width: 4px;
+  paint-order: stroke fill;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.course-map-annotation--sand_surface path { fill: rgba(231, 198, 126, 0.3); stroke: #f4d58c; }
+.course-map-annotation--open_water path { fill: rgba(56, 151, 211, 0.3); stroke: #91d4ff; }
+.course-map-annotation--green_surface path { fill: rgba(92, 194, 117, 0.24); stroke: #9ee5aa; }
+.course-map-annotation--tee_surface path { fill: rgba(238, 244, 225, 0.2); stroke: #f3f7e9; }
+.course-map-annotation--tree_canopy path { fill: rgba(44, 106, 72, 0.25); stroke: #8bc49d; }
+.course-map-annotation--strategy_target circle { fill: rgba(255, 211, 111, 0.24); stroke: #ffd36f; stroke-width: 2; }
+.course-map-annotation--strategy_target path { fill: none; stroke: #fff4ce; stroke-width: 2; }
+.course-map-annotation.is-selected path,
+.course-map-annotation.is-selected circle { stroke-width: 4; filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.75)); }
+
+.course-map-annotation-draft {
+  fill: rgba(255, 211, 111, 0.12);
+  stroke: #ffd36f;
+  stroke-width: 2.5;
+  stroke-dasharray: 7 5;
+  stroke-linejoin: round;
+}
+
+.course-map-annotation-draft--point circle { fill: rgba(255, 211, 111, 0.24); stroke: #ffd36f; stroke-width: 2; }
+.course-map-annotation-draft--point path { fill: none; stroke: #fff4ce; stroke-width: 2; }
+.course-map-annotation-vertex circle { fill: #ffd36f; stroke: #173d2f; stroke-width: 2; }
+
+.course-map-boundary {
+  fill: rgba(255, 211, 119, 0.05);
+  stroke: rgba(255, 229, 166, 0.9);
+  stroke-width: 1.5;
+  stroke-dasharray: 7 5;
+}
+
+.course-map-shot-plan,
+.course-map-current-aim {
+  stroke: #ffd36f;
+  stroke-width: 2;
+  stroke-dasharray: 7 5;
+  stroke-linecap: round;
+}
+
+.course-map-current-aim { stroke-width: 2.5; }
+
+.course-map-shot-line {
+  stroke: #ffffff;
+  stroke-width: 3;
+  stroke-linecap: round;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7));
+}
+
+.course-map-shot-start { fill: #173d2f; stroke: #fff; stroke-width: 2; }
+.course-map-shot-finish { fill: #ffd36f; stroke: #173d2f; stroke-width: 2; }
+
+.course-map-shot-label {
+  fill: #fff;
+  stroke: rgba(9, 29, 22, 0.92);
+  stroke-width: 4px;
+  paint-order: stroke fill;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.course-map-target circle {
+  fill: rgba(255, 211, 111, 0.18);
+  stroke: #ffd36f;
+  stroke-width: 2;
+}
+
+.course-map-target path { stroke: #fff4ce; stroke-width: 2; stroke-linecap: round; }
+
+.course-map-gps-accuracy {
+  fill: rgba(80, 174, 255, 0.18);
+  stroke: rgba(170, 220, 255, 0.9);
+  stroke-width: 1.5;
+}
+
+.course-map-gps-pulse { fill: rgba(50, 153, 232, 0.3); stroke: #fff; stroke-width: 2; }
+.course-map-gps-dot { fill: #138be0; stroke: #fff; stroke-width: 2; }
+
+.course-map-map-label {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  max-width: calc(100% - 20px);
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: rgba(9, 29, 22, 0.78);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.66rem;
+  font-weight: 750;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+}
+
+.course-map-readout {
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 18px 6px;
+}
+
+.course-map-readout > div { min-width: 0; display: grid; gap: 3px; }
+.course-map-readout strong { color: var(--ink); font-size: 0.88rem; }
+.course-map-readout span { color: var(--muted); font-size: 0.72rem; }
+.course-map-readout span[data-tone="success"] { color: var(--green-dark, #15573c); }
+.course-map-readout span[data-tone="warning"] { color: #8a641c; }
+.course-map-readout span[data-tone="error"] { color: #a14538; }
+
+.course-map-readout-actions {
+  display: flex !important;
+  grid-auto-flow: column;
+  gap: 7px !important;
+  flex: 0 0 auto;
+}
+
+#courseMapEdit[aria-pressed="true"] {
+  background: var(--green-dark, #15573c);
+  border-color: var(--green-dark, #15573c);
+  color: #fff;
+}
+
+.course-map-label-panel {
+  padding: 10px 18px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: #f5f7ef;
+}
+
+.course-map-label-heading,
+.course-map-label-progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.course-map-label-heading > div { display: grid; gap: 2px; }
+.course-map-label-heading strong { color: var(--ink); font-size: 0.82rem; }
+.course-map-label-heading span,
+.course-map-label-progress p { margin: 0; color: var(--muted); font-size: 0.68rem; }
+
+.course-map-label-fields {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.75fr) minmax(180px, 1.25fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.course-map-label-fields label { display: grid; gap: 3px; color: var(--muted); font-size: 0.66rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+.course-map-label-fields small { font: inherit; font-weight: 650; text-transform: none; letter-spacing: 0; }
+.course-map-label-fields select,
+.course-map-label-fields input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 750;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.course-map-label-progress { margin-top: 8px; }
+.course-map-label-actions { display: flex; gap: 6px; }
+.course-map-label-actions button,
+.course-map-label-heading button { min-height: 36px; padding: 0 10px; }
+.course-map-viewport:has(+ .course-map-label-panel:not([hidden])) { cursor: cell; }
+
+.course-map-attribution {
+  margin: 0;
+  padding: 0 18px 10px;
+  color: var(--muted);
+  font-size: 0.64rem;
+  line-height: 1.35;
+}
+
+@media (max-width: 640px) {
+  .course-map-overlay { align-items: stretch; padding: 0; }
+  .course-map-sheet {
+    width: 100%;
+    height: 100dvh;
+    max-height: none;
+    grid-template-rows: auto auto minmax(200px, 1fr) auto auto auto;
+    border: none;
+    border-radius: 0;
+    animation: hp-slide-up 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .course-map-header { padding: 12px 12px 8px; }
+  .course-map-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; padding: 0 10px 10px; gap: 7px; }
+  .course-map-hole-field { min-width: 0; }
+  .course-map-toolbar > button { padding-inline: 11px; }
+  .course-map-zoom { gap: 4px; margin: 0; }
+  .course-map-zoom button { min-width: 38px; padding-inline: 9px; }
+  .course-map-zoom #courseMapFit { display: none; }
+  .course-map-viewport { margin: 0 10px; border-radius: 14px; }
+  .course-map-readout { min-height: 58px; padding: 8px 10px 5px; }
+  .course-map-readout { align-items: flex-start; }
+  .course-map-readout-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .course-map-label-panel { padding: 9px 10px; }
+  .course-map-label-fields { grid-template-columns: 1fr 1fr; }
+  .course-map-label-progress { align-items: flex-end; }
+  .course-map-label-progress p { max-width: 44%; }
+  .course-map-label-actions { gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+  .course-map-label-actions button { min-height: 34px; padding-inline: 8px; }
+  .course-map-attribution { padding: 0 10px 8px; }
+}
+
+@media (max-width: 390px) {
+  .course-map-label-fields { grid-template-columns: 1fr; }
+  .course-map-label-progress { align-items: stretch; flex-direction: column; gap: 7px; }
+  .course-map-label-progress p { max-width: none; }
+}
