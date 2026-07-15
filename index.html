@@ -32,17 +32,18 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap">
 
-    <link rel="stylesheet" href="./styles.css?v=2026-07-14c">
-    <script src="./data/courses.js?v=2026-07-14c" defer></script>
-    <script src="./data/course-maps/deerwood-runtime.js?v=2026-07-14c" defer></script>
-    <script src="./lib/golf-math.js?v=2026-07-14c" defer></script>
-    <script src="./lib/shapes.js?v=2026-07-14c" defer></script>
-    <script src="./lib/gps.js?v=2026-07-14c" defer></script>
-    <script src="./lib/course-map.js?v=2026-07-14c" defer></script>
-    <script src="./lib/course-map-labels.js?v=2026-07-14c" defer></script>
-    <script src="./lib/course-map-ui.js?v=2026-07-14c" defer></script>
-    <script src="./lib/games.js?v=2026-07-14c" defer></script>
-    <script src="./app.js?v=2026-07-14c" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-07-14d">
+    <script src="./data/courses.js?v=2026-07-14d" defer></script>
+    <script src="./data/course-maps/deerwood-runtime.js?v=2026-07-14d" defer></script>
+    <script src="./lib/golf-math.js?v=2026-07-14d" defer></script>
+    <script src="./lib/shapes.js?v=2026-07-14d" defer></script>
+    <script src="./lib/gps.js?v=2026-07-14d" defer></script>
+    <script src="./lib/course-map.js?v=2026-07-14d" defer></script>
+    <script src="./lib/course-map-labels.js?v=2026-07-14d" defer></script>
+    <script src="./data/course-maps/deerwood-aerial-labels-v1.js?v=2026-07-14d" defer></script>
+    <script src="./lib/course-map-ui.js?v=2026-07-14d" defer></script>
+    <script src="./lib/games.js?v=2026-07-14d" defer></script>
+    <script src="./app.js?v=2026-07-14d" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -885,13 +886,13 @@
             <img id="courseMapImage" draggable="false" alt="">
           </div>
           <svg id="courseMapSvg" class="course-map-svg" aria-hidden="true"></svg>
-          <div class="course-map-map-label">NYSDOP aerial · no legacy hazards<br>Dashed outline: facility reference only — not course/OB</div>
+          <div class="course-map-map-label">NYSDOP 2024 aerial · no legacy hazards<br>Blue/amber: visual suggestions · dashed boundary is not course/OB</div>
         </div>
-        <section id="courseMapEditor" class="course-map-label-panel" aria-label="Draft map label editor" hidden>
+        <section id="courseMapEditor" class="course-map-label-panel" aria-label="Map label editor" hidden>
           <div class="course-map-label-heading">
             <div>
-              <strong>Draft map labels</strong>
-              <span>Image trace only — never an OB or penalty-area ruling. Tap a saved outline to select it.</span>
+              <strong>Map labels</strong>
+              <span>Visual traces only — never an OB or penalty-area ruling. Select a suggestion to hide it.</span>
             </div>
             <button id="courseMapCancelEdit" class="ghost-button" type="button">Done</button>
           </div>

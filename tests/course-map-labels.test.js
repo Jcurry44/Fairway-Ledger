@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const Labels = require("../lib/course-map-labels.js");
+const SeedLabels = require("../data/course-maps/deerwood-aerial-labels-v1.js");
 
 const POINT = [-78.8408, 43.0412];
 const TRIANGLE = [
@@ -350,4 +351,40 @@ test("removeFeature removes one canonical ID without mutating the collection", (
   assert.deepEqual(removed.features.map((feature) => feature.id), ["second"]);
   assert.deepEqual(starting.features.map((feature) => feature.id), ["first", "second"]);
   assert.deepEqual(Labels.removeFeature(starting, "not valid id"), Labels.normalizeCollection(starting));
+});
+
+test("ships a strict 2024 aerial-observation layer without legacy or rules claims", () => {
+  const normalized = Labels.normalizeSeedCollection(SeedLabels);
+  assert.equal(normalized.features.length, 32);
+  assert.equal(normalized.features.filter((feature) => feature.properties.kind === "open_water").length, 11);
+  assert.equal(normalized.features.filter((feature) => feature.properties.kind === "sand_surface").length, 21);
+  assert.equal(new Set(normalized.features.map((feature) => feature.id)).size, 32);
+  for (const feature of normalized.features) {
+    assert.match(feature.id, /^seed-v1-/);
+    assert.equal(feature.properties.geometrySource, Labels.SEED_GEOMETRY_SOURCE);
+    assert.equal(feature.properties.classificationSource, Labels.SEED_CLASSIFICATION_SOURCE);
+    assert.equal(feature.properties.classificationConfidence, "high_visual");
+    assert.equal(feature.properties.outlineConfidence, "draft_trace");
+    assert.equal(feature.properties.rulesStatus, "not_official");
+    assert.equal(feature.properties.legacyHazardDataUsed, false);
+    assert.equal(feature.geometry.type, "Polygon");
+    assert.ok(feature.properties.holeIds.length >= 1);
+    assert.equal(Labels.normalizeFeature(feature), null);
+  }
+});
+
+test("seed suggestions can be hidden persistently without changing user labels", () => {
+  const starting = Labels.createEmptySeedState();
+  const hidden = Labels.hideSeedFeature(starting, "seed-v1-water-08");
+  assert.deepEqual(starting.hiddenFeatureIds, []);
+  assert.deepEqual(hidden.hiddenFeatureIds, ["seed-v1-water-08"]);
+  assert.equal(
+    Labels.seedFeaturesForHole(SeedLabels, starting, "buck-1").some((feature) => feature.id === "seed-v1-water-08"),
+    true
+  );
+  assert.equal(
+    Labels.seedFeaturesForHole(SeedLabels, hidden, "buck-1").some((feature) => feature.id === "seed-v1-water-08"),
+    false
+  );
+  assert.deepEqual(Labels.normalizeSeedState({ ...hidden, mapSha256: "BAD" }), Labels.createEmptySeedState());
 });
