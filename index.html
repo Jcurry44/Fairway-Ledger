@@ -32,18 +32,18 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap">
 
-    <link rel="stylesheet" href="./styles.css?v=2026-07-14d">
-    <script src="./data/courses.js?v=2026-07-14d" defer></script>
-    <script src="./data/course-maps/deerwood-runtime.js?v=2026-07-14d" defer></script>
-    <script src="./lib/golf-math.js?v=2026-07-14d" defer></script>
-    <script src="./lib/shapes.js?v=2026-07-14d" defer></script>
-    <script src="./lib/gps.js?v=2026-07-14d" defer></script>
-    <script src="./lib/course-map.js?v=2026-07-14d" defer></script>
-    <script src="./lib/course-map-labels.js?v=2026-07-14d" defer></script>
-    <script src="./data/course-maps/deerwood-aerial-labels-v1.js?v=2026-07-14d" defer></script>
-    <script src="./lib/course-map-ui.js?v=2026-07-14d" defer></script>
-    <script src="./lib/games.js?v=2026-07-14d" defer></script>
-    <script src="./app.js?v=2026-07-14d" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-07-15a">
+    <script src="./data/courses.js?v=2026-07-15a" defer></script>
+    <script src="./data/course-maps/deerwood-runtime.js?v=2026-07-15a" defer></script>
+    <script src="./lib/golf-math.js?v=2026-07-15a" defer></script>
+    <script src="./lib/shapes.js?v=2026-07-15a" defer></script>
+    <script src="./lib/gps.js?v=2026-07-15a" defer></script>
+    <script src="./lib/course-map.js?v=2026-07-15a" defer></script>
+    <script src="./lib/course-map-labels.js?v=2026-07-15a" defer></script>
+    <script src="./data/course-maps/deerwood-aerial-labels-v1.js?v=2026-07-15a" defer></script>
+    <script src="./lib/course-map-ui.js?v=2026-07-15a" defer></script>
+    <script src="./lib/games.js?v=2026-07-15a" defer></script>
+    <script src="./app.js?v=2026-07-15a" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -877,7 +877,7 @@
           <button id="courseMapLocate" class="primary-button" type="button">Locate me</button>
           <div class="course-map-zoom" aria-label="Map zoom controls">
             <button id="courseMapZoomOut" class="ghost-button" type="button" aria-label="Zoom out">&minus;</button>
-            <button id="courseMapFit" class="ghost-button" type="button">Fit</button>
+            <button id="courseMapFit" class="ghost-button" type="button" aria-label="Show whole course" aria-pressed="false">Course</button>
             <button id="courseMapZoomIn" class="ghost-button" type="button" aria-label="Zoom in">+</button>
           </div>
         </div>

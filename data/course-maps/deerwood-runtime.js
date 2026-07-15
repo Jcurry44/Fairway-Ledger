@@ -96,6 +96,20 @@
         maxY: 1110000
       })
     }),
+    holeViews: Object.freeze({
+      "buck-1": Object.freeze({
+        teePixel: Object.freeze([2550, 1415]),
+        greenPixel: Object.freeze([1710, 1480]),
+        pixelBounds: Object.freeze({
+          minX: 1633,
+          minY: 1191,
+          maxX: 2627,
+          maxY: 1704
+        }),
+        source: "user_confirmed_2024_aerial_corridor",
+        confidence: "user_confirmed"
+      })
+    }),
     boundary,
     alt: "2024 aerial view of Deerwood Golf Course in North Tonawanda",
     attribution: "Imagery © NYS ITS Geospatial Services, NYSDOP 2024 · Boundary © OpenStreetMap contributors",

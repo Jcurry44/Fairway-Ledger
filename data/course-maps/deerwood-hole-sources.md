@@ -45,3 +45,9 @@ These are the exact links currently published by Deerwood Golf Course / North To
 | 2024 NYSDOP one-foot imagery | Visible surface-feature tracing | Imagery-traced after manual review | Hole number by itself |
 
 A hole feature should advance to `imagery-traced` only when its visible shape is traced from NYSDOP and its Buck/Doe/Fawn hole identity is matched independently against the scorecard and relevant official flyover. Tee and green observations from play can later advance confidence to `gps-observed` or `field-verified`.
+
+## Buck 1 corridor correction — 2026-07-14
+
+A user-marked route on the same 2024 aerial established Buck 1's east-west playing corridor, with the clubhouse-side start near image pixel `(2550, 1415)` and the green end near `(1710, 1480)`. These are approximate image anchors, not surveyed GPS positions or rules boundaries.
+
+The review removed Buck 1 from `seed-v1-water-08` and `seed-v1-water-12`, both north of the marked corridor. It also retired `seed-v1-sand-18` until that visible surface can be associated with a physical hole without guessing. `seed-v1-water-13` directly overlaps the confirmed Buck 1 corridor and is now the only automatic Buck 1 aerial suggestion. No legacy hazard data was consulted.
