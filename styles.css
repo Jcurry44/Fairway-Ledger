@@ -7859,6 +7859,17 @@ summary:focus-visible {
   font-weight: 850;
 }
 
+#courseMapFit {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+#courseMapFit[aria-pressed="true"] {
+  border-color: var(--green-dark, #15573c);
+  background: var(--green-dark, #15573c);
+  color: #fff;
+}
+
 .course-map-viewport {
   position: relative;
   min-width: 0;
@@ -8112,7 +8123,10 @@ summary:focus-visible {
     width: 100%;
     height: 100dvh;
     max-height: none;
-    grid-template-rows: auto auto minmax(200px, 1fr) auto auto auto;
+    grid-template-rows: auto auto clamp(280px, 36dvh, 340px) auto auto auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     border: none;
     border-radius: 0;
     animation: hp-slide-up 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -8123,8 +8137,19 @@ summary:focus-visible {
   .course-map-toolbar > button { padding-inline: 11px; }
   .course-map-zoom { gap: 4px; margin: 0; }
   .course-map-zoom button { min-width: 38px; padding-inline: 9px; }
-  .course-map-zoom #courseMapFit { display: none; }
-  .course-map-viewport { margin: 0 10px; border-radius: 14px; }
+  .course-map-zoom #courseMapFit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    padding-inline: 8px;
+    font-size: 0.7rem;
+  }
+  .course-map-viewport {
+    height: clamp(280px, 36dvh, 340px);
+    margin: 0 10px;
+    border-radius: 14px;
+  }
   .course-map-readout { min-height: 58px; padding: 8px 10px 5px; }
   .course-map-readout { align-items: flex-start; }
   .course-map-readout-actions { flex-wrap: wrap; justify-content: flex-end; }

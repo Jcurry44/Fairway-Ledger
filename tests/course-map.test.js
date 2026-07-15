@@ -136,6 +136,77 @@ test("fitView contains and centers the raster with optional padding", () => {
   closeTo(padded.maxScale, 1.44);
 });
 
+test("fitImageBoundsView centers and contains an image region", () => {
+  const bounds = { minX: 250, minY: 100, maxX: 750, maxY: 400 };
+  const view = CourseMap.fitImageBoundsView(bounds, IMAGE, { width: 400, height: 400 });
+
+  assert.deepEqual(view, {
+    scale: 0.8,
+    x: -200,
+    y: 0,
+    zoom: 2,
+    minScale: 0.4,
+    maxScale: 3.2,
+  });
+  assert.deepEqual(
+    CourseMap.imageToContainerPixel({ x: bounds.minX, y: bounds.minY }, view),
+    { x: 0, y: 80 },
+  );
+  assert.deepEqual(
+    CourseMap.imageToContainerPixel({ x: bounds.maxX, y: bounds.maxY }, view),
+    { x: 400, y: 320 },
+  );
+});
+
+test("fitImageBoundsView honors asymmetric padding and the zoom ceiling", () => {
+  const padded = CourseMap.fitImageBoundsView(
+    { minX: 200, minY: 100, maxX: 600, maxY: 300 },
+    IMAGE,
+    { width: 500, height: 400 },
+    { padding: { top: 20, right: 10, bottom: 40, left: 50 } },
+  );
+  closeTo(padded.scale, 1.1);
+  closeTo(padded.x, -170);
+  closeTo(padded.y, -30);
+
+  const zoomLimited = CourseMap.fitImageBoundsView(
+    { minX: 450, minY: 225, maxX: 550, maxY: 275 },
+    IMAGE,
+    { width: 400, height: 400 },
+    { maxZoom: 2 },
+  );
+  assert.deepEqual(zoomLimited, {
+    scale: 0.8,
+    x: -200,
+    y: 0,
+    zoom: 2,
+    minScale: 0.4,
+    maxScale: 0.8,
+  });
+});
+
+test("fitImageBoundsView frames the confirmed Buck 1 corridor without exposing the aerial edge", () => {
+  const buckOne = { minX: 1633, minY: 1191, maxX: 2627, maxY: 1704 };
+  const image = { width: 3000, height: 2000 };
+  const container = { width: 400, height: 600 };
+  const view = CourseMap.fitImageBoundsView(buckOne, image, container, { padding: 20 });
+  const topLeft = CourseMap.imageToContainerPixel(
+    { x: buckOne.minX, y: buckOne.minY },
+    view,
+  );
+  const bottomRight = CourseMap.imageToContainerPixel(
+    { x: buckOne.maxX, y: buckOne.maxY },
+    view,
+  );
+
+  closeTo(view.scale, 360 / 994);
+  closeTo(topLeft.x, 20);
+  closeTo(bottomRight.x, 380);
+  assert.ok(topLeft.y >= 20);
+  assert.ok(bottomRight.y <= 580);
+  closeTo(view.y + image.height * view.scale, 580);
+});
+
 test("constrainView clamps scale and pan without exposing an edge", () => {
   const container = { width: 400, height: 400 };
   const tooFar = CourseMap.constrainView(
@@ -306,6 +377,22 @@ test("invalid bounds, dimensions, transforms, and zoom requests fail clearly", (
   assert.throws(
     () => CourseMap.fitView(IMAGE, { width: 100, height: 100 }, { padding: 50 }),
     /positive container area/,
+  );
+  assert.throws(
+    () => CourseMap.fitImageBoundsView(
+      { minX: 10, minY: 10, maxX: 10, maxY: 20 },
+      IMAGE,
+      { width: 100, height: 100 },
+    ),
+    /minX < maxX/,
+  );
+  assert.throws(
+    () => CourseMap.fitImageBoundsView(
+      { minX: -1, minY: 10, maxX: 20, maxY: 20 },
+      IMAGE,
+      { width: 100, height: 100 },
+    ),
+    /within imageSize/,
   );
   assert.throws(
     () => CourseMap.zoomViewAt({ scale: 1, x: 0, y: 0 }, 0, { x: 0, y: 0 }, IMAGE, IMAGE),

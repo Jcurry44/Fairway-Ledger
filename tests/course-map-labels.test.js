@@ -355,10 +355,10 @@ test("removeFeature removes one canonical ID without mutating the collection", (
 
 test("ships a strict 2024 aerial-observation layer without legacy or rules claims", () => {
   const normalized = Labels.normalizeSeedCollection(SeedLabels);
-  assert.equal(normalized.features.length, 32);
+  assert.equal(normalized.features.length, 31);
   assert.equal(normalized.features.filter((feature) => feature.properties.kind === "open_water").length, 11);
-  assert.equal(normalized.features.filter((feature) => feature.properties.kind === "sand_surface").length, 21);
-  assert.equal(new Set(normalized.features.map((feature) => feature.id)).size, 32);
+  assert.equal(normalized.features.filter((feature) => feature.properties.kind === "sand_surface").length, 20);
+  assert.equal(new Set(normalized.features.map((feature) => feature.id)).size, 31);
   for (const feature of normalized.features) {
     assert.match(feature.id, /^seed-v1-/);
     assert.equal(feature.properties.geometrySource, Labels.SEED_GEOMETRY_SOURCE);
@@ -373,17 +373,37 @@ test("ships a strict 2024 aerial-observation layer without legacy or rules claim
   }
 });
 
+test("Buck 1 suggestions follow the user-confirmed east-west playing corridor", () => {
+  const visible = Labels.seedFeaturesForHole(
+    SeedLabels,
+    Labels.createEmptySeedState(),
+    "buck-1"
+  );
+  assert.deepEqual(visible.map((feature) => feature.id), ["seed-v1-water-13"]);
+
+  const water13 = SeedLabels.features.find((feature) => feature.id === "seed-v1-water-13");
+  assert.deepEqual(water13.properties.holeIds, ["buck-1", "doe-9", "buck-9"]);
+  for (const staleId of ["seed-v1-water-08", "seed-v1-water-12"]) {
+    const stale = SeedLabels.features.find((feature) => feature.id === staleId);
+    assert.equal(stale.properties.holeIds.includes("buck-1"), false);
+  }
+  assert.equal(
+    SeedLabels.features.some((feature) => feature.id === "seed-v1-sand-18"),
+    false
+  );
+});
+
 test("seed suggestions can be hidden persistently without changing user labels", () => {
   const starting = Labels.createEmptySeedState();
-  const hidden = Labels.hideSeedFeature(starting, "seed-v1-water-08");
+  const hidden = Labels.hideSeedFeature(starting, "seed-v1-water-13");
   assert.deepEqual(starting.hiddenFeatureIds, []);
-  assert.deepEqual(hidden.hiddenFeatureIds, ["seed-v1-water-08"]);
+  assert.deepEqual(hidden.hiddenFeatureIds, ["seed-v1-water-13"]);
   assert.equal(
-    Labels.seedFeaturesForHole(SeedLabels, starting, "buck-1").some((feature) => feature.id === "seed-v1-water-08"),
+    Labels.seedFeaturesForHole(SeedLabels, starting, "buck-1").some((feature) => feature.id === "seed-v1-water-13"),
     true
   );
   assert.equal(
-    Labels.seedFeaturesForHole(SeedLabels, hidden, "buck-1").some((feature) => feature.id === "seed-v1-water-08"),
+    Labels.seedFeaturesForHole(SeedLabels, hidden, "buck-1").some((feature) => feature.id === "seed-v1-water-13"),
     false
   );
   assert.deepEqual(Labels.normalizeSeedState({ ...hidden, mapSha256: "BAD" }), Labels.createEmptySeedState());
