@@ -59,6 +59,8 @@
     derivedGir,
     isDeerwoodCourseId,
     physicalHoleId,
+    haversineMeters,
+    metersToYards,
     expectedNineHoleDifferential,
     handicapRuleForCount,
     estimateRoundDifferential: estimateRoundDifferentialPure,
@@ -75,6 +77,13 @@
     makeRound,
     normalizeRound
   } = window.GolfShapes;
+
+  const {
+    classifyAccuracy,
+    cloneShot,
+    normalizeShots,
+    requestPosition
+  } = window.FairwayGps;
 
   const STORAGE_KEY = "fairwayLedger.v1";
   const ACTIVE_TAB_KEY = "fairwayLedger.activeTab";
@@ -130,6 +139,7 @@
   let selectedCourseDetailId = null;
   let editingRoundId = null;
   let viewMode = readInitialViewMode();
+  let courseMapController = null;
 
   // ---- Per-hole pending state (in-progress round data) -------------------
   //
@@ -144,9 +154,14 @@
   // write; restoreInProgressRound uses the same setters that pre-existed.
 
   let pendingHoles = {};
+  let gpsCaptureGeneration = 0;
 
   function resetPendingHoles() {
     pendingHoles = {};
+    // Invalidate any geolocation request that was started for the previous
+    // round/setup so a late device response cannot populate a fresh round.
+    gpsCaptureGeneration += 1;
+    if (courseMapController) courseMapController.clearTargets();
   }
 
   // Internal accessor — lazily creates the per-hole entry.
@@ -164,6 +179,7 @@
     if (!entry) return;
     const empty = !entry.note
       && !(entry.clubs && entry.clubs.length)
+      && !(entry.shots && entry.shots.length)
       && !entry.penaltyClub
       && !(entry.penaltyClubs && entry.penaltyClubs.length);
     if (empty) delete pendingHoles[key];
@@ -283,6 +299,22 @@
     if (trimmed) entry.note = trimmed;
     else delete entry.note;
     compactPendingHole(holeNumber);
+  }
+
+  // ---- GPS-tracked shots -------------------------------------------------
+
+  function getHoleShots(holeNumber) {
+    const entry = pendingHoles[String(holeNumber)];
+    return entry && Array.isArray(entry.shots) ? entry.shots.map(cloneShot) : [];
+  }
+
+  function setHoleShots(holeNumber, shots) {
+    const entry = getOrCreatePendingHole(holeNumber);
+    const normalized = normalizeShots(shots);
+    if (normalized.length) entry.shots = normalized;
+    else delete entry.shots;
+    compactPendingHole(holeNumber);
+    if (courseMapController && courseMapController.isOpen()) courseMapController.refresh();
   }
 
   // ---- Clubs hit ---------------------------------------------------------
@@ -538,7 +570,7 @@
   };
 
   let sampleRounds = [];
-  let state = { courses: [], rounds: [], profile: { bag: [] } };
+  let state = { courses: [], rounds: [], profile: { bag: [] }, mapAnnotations: null };
 
   const els = {
     metricRounds: document.getElementById("metricRounds"),
@@ -591,6 +623,7 @@
     roundForm: document.getElementById("roundForm"),
     resetRoundButton: document.getElementById("resetRoundButton"),
     viewToggleButton: document.getElementById("viewToggleButton"),
+    courseMapButton: document.getElementById("courseMapButton"),
     roundEntryTitle: document.getElementById("roundEntryTitle"),
     roundSubmitButton: document.getElementById("roundSubmitButton"),
     scorecardGrid: document.getElementById("scorecardGrid"),
@@ -677,6 +710,33 @@
     holePickerBackdrop: document.getElementById("holePickerBackdrop"),
     holePickerClose: document.getElementById("holePickerClose"),
     holePickerList: document.getElementById("holePickerList"),
+    courseMapOverlay: document.getElementById("courseMapOverlay"),
+    courseMapBackdrop: document.getElementById("courseMapBackdrop"),
+    courseMapClose: document.getElementById("courseMapClose"),
+    courseMapTitle: document.getElementById("courseMapTitle"),
+    courseMapHole: document.getElementById("courseMapHole"),
+    courseMapLocate: document.getElementById("courseMapLocate"),
+    courseMapZoomOut: document.getElementById("courseMapZoomOut"),
+    courseMapFit: document.getElementById("courseMapFit"),
+    courseMapZoomIn: document.getElementById("courseMapZoomIn"),
+    courseMapViewport: document.getElementById("courseMapViewport"),
+    courseMapStage: document.getElementById("courseMapStage"),
+    courseMapImage: document.getElementById("courseMapImage"),
+    courseMapSvg: document.getElementById("courseMapSvg"),
+    courseMapTargetSummary: document.getElementById("courseMapTargetSummary"),
+    courseMapStatus: document.getElementById("courseMapStatus"),
+    courseMapClearTarget: document.getElementById("courseMapClearTarget"),
+    courseMapAttribution: document.getElementById("courseMapAttribution"),
+    courseMapEdit: document.getElementById("courseMapEdit"),
+    courseMapEditor: document.getElementById("courseMapEditor"),
+    courseMapFeatureType: document.getElementById("courseMapFeatureType"),
+    courseMapFeatureLabel: document.getElementById("courseMapFeatureLabel"),
+    courseMapEditorHint: document.getElementById("courseMapEditorHint"),
+    courseMapUndoVertex: document.getElementById("courseMapUndoVertex"),
+    courseMapResetDraft: document.getElementById("courseMapResetDraft"),
+    courseMapCancelEdit: document.getElementById("courseMapCancelEdit"),
+    courseMapSaveFeature: document.getElementById("courseMapSaveFeature"),
+    courseMapDeleteFeature: document.getElementById("courseMapDeleteFeature"),
     destructiveConfirmOverlay: document.getElementById("destructiveConfirmOverlay"),
     destructiveConfirmBackdrop: document.getElementById("destructiveConfirmBackdrop"),
     destructiveConfirmClose: document.getElementById("destructiveConfirmClose"),
@@ -941,11 +1001,64 @@
     return stateValue;
   }
 
+  function getCourseMapLabelsApi() {
+    return window.FairwayCourseMapLabels && typeof window.FairwayCourseMapLabels.normalizeCollection === "function"
+      ? window.FairwayCourseMapLabels
+      : null;
+  }
+
+  const EMPTY_COURSE_MAP_ANNOTATIONS = Object.freeze({
+    type: "FeatureCollection",
+    dataset: "deerwood-user-map-v1",
+    coordinateSystem: "WGS84",
+    mapId: "deerwood-aerial-2024",
+    mapSha256: "5FD178E66F235E7712E231DA2AC42BF466914BD889A2535875461D1CB9A1478A",
+    legacyHazardDataUsed: false
+  });
+
+  function createEmptyCourseMapAnnotations() {
+    const labelsApi = getCourseMapLabelsApi();
+    return labelsApi && typeof labelsApi.createEmptyCollection === "function"
+      ? labelsApi.createEmptyCollection()
+      : { ...EMPTY_COURSE_MAP_ANNOTATIONS, features: [] };
+  }
+
+  function normalizeCourseMapAnnotations(value) {
+    const labelsApi = getCourseMapLabelsApi();
+    if (labelsApi) return labelsApi.normalizeCollection(value);
+    // If the optional module misses one load, preserve only its already-pinned
+    // opaque dataset. The label UI stays disabled, so nothing is interpreted;
+    // a later successful load runs the strict feature-by-feature normalizer.
+    if (value
+      && typeof value === "object"
+      && !Array.isArray(value)
+      && value.type === EMPTY_COURSE_MAP_ANNOTATIONS.type
+      && value.dataset === EMPTY_COURSE_MAP_ANNOTATIONS.dataset
+      && value.coordinateSystem === EMPTY_COURSE_MAP_ANNOTATIONS.coordinateSystem
+      && value.mapId === EMPTY_COURSE_MAP_ANNOTATIONS.mapId
+      && value.mapSha256 === EMPTY_COURSE_MAP_ANNOTATIONS.mapSha256
+      && value.legacyHazardDataUsed === false
+      && Array.isArray(value.features)
+      && !Object.prototype.hasOwnProperty.call(value, "hazards")
+      && !Object.prototype.hasOwnProperty.call(value, "legacyHazards")) {
+      return structuredClone(value);
+    }
+    return createEmptyCourseMapAnnotations();
+  }
+
   function ensureCourseDataShape(stateValue) {
     if (!stateValue || !Array.isArray(stateValue.courses)) return stateValue;
+    stateValue.mapAnnotations = normalizeCourseMapAnnotations(stateValue.mapAnnotations);
     stateValue.courses.forEach((course) => {
       if (!Array.isArray(course.holes)) return;
+      const rejectLegacyHazards = course.id === DEERWOOD_COURSE_ID || isDeerwoodCourseId(course.id);
       course.holes.forEach((hole) => {
+        // Absolute quarantine: old Deerwood hazard notes are not retained in
+        // normalized state, snapshots restored into state, or imported data.
+        if (rejectLegacyHazards) {
+          hole.hazards = [];
+          return;
+        }
         if (!Array.isArray(hole.hazards)) hole.hazards = [];
         hole.hazards = hole.hazards.map(normalizeHazard).filter(Boolean);
       });
@@ -974,6 +1087,9 @@
     });
     byName.forEach((group) => {
       if (group.length < 2) return;
+      // Deerwood hazards have already been scrubbed by ensureCourseDataShape;
+      // never propagate hazard data across its tee/layout variants.
+      if (group.some((course) => isDeerwoodCourseId(course.id))) return;
       // Build a merged hazard list per hole number across the group.
       const mergedByHole = new Map();
       group.forEach((course) => {
@@ -999,24 +1115,13 @@
   }
 
   function mergeNewDefaultCourses(saved) {
-    // For Deerwood courses, refresh from the latest sample data so layout/
-    // par/yardage updates land on returning users — but preserve any user-
-    // entered hazards on those holes.
+    // Refresh Deerwood from the catalog so layout/par/yardage updates land on
+    // returning users. Rejected hazards are intentionally not copied forward.
     const defaultDeerwoodCourses = sampleCourses.filter((course) => isDeerwoodCourseId(course.id));
     const defaultDeerwoodById = new Map(defaultDeerwoodCourses.map((course) => [course.id, course]));
     const updatedCourses = saved.courses.map((course) => {
       if (!defaultDeerwoodById.has(course.id)) return course;
-      const fresh = structuredClone(defaultDeerwoodById.get(course.id));
-      // Preserve any user-entered hazards from the existing course copy.
-      fresh.holes = fresh.holes.map((hole) => {
-        const existing = (course.holes || []).find((h) => h.number === hole.number);
-        const userHazards = existing && Array.isArray(existing.hazards) ? existing.hazards : null;
-        return {
-          ...hole,
-          hazards: userHazards && userHazards.length ? userHazards : (hole.hazards || [])
-        };
-      });
-      return fresh;
+      return structuredClone(defaultDeerwoodById.get(course.id));
     });
     // Add ANY default catalog course the user doesn't have yet — Deerwood
     // and every other shipped course (Ridgeview, Lake County, the WNY
@@ -1249,9 +1354,11 @@
         const holeNotes = {};
         const holeClubs = {};
         const holePenaltyClubs = {};
+        const holeShots = {};
         Object.entries(pendingHoles).forEach(([key, data]) => {
           if (data.note) holeNotes[key] = data.note;
           if (data.clubs && data.clubs.length) holeClubs[key] = [...data.clubs];
+          if (data.shots && data.shots.length) holeShots[key] = normalizeShots(data.shots);
           // Write the canonical array form. Legacy drafts wrote a single
           // string under the same key — restore handles both shapes.
           if (Array.isArray(data.penaltyClubs) && data.penaltyClubs.length) {
@@ -1260,7 +1367,7 @@
             holePenaltyClubs[key] = [data.penaltyClub];
           }
         });
-        return { holeNotes, holeClubs, holePenaltyClubs };
+        return { holeNotes, holeClubs, holePenaltyClubs, holeShots };
       })()
     };
   }
@@ -1280,10 +1387,11 @@
         return Number.isFinite(score) && score > 0;
       });
       const hasNotes = Object.keys(draft.holeNotes || {}).length > 0;
+      const hasShots = Object.values(draft.holeShots || {}).some((shots) => Array.isArray(shots) && shots.length > 0);
       // Note: clubs are intentionally NOT a "started a round" signal — they're
       // pre-seeded with Driver/Putter defaults, so counting them would flag a
       // round in progress before the user has actually entered anything.
-      if (!hasScores && !hasNotes) {
+      if (!hasScores && !hasNotes && !hasShots) {
         // Empty draft — don't pollute storage with placeholder rows.
         clearInProgressRound();
         return;
@@ -1359,6 +1467,9 @@
     }
     syncSurveyUiFromState();
     Object.entries(data.holeNotes || {}).forEach(([num, note]) => setHoleNote(num, note));
+    Object.entries(data.holeShots || {}).forEach(([num, shots]) => {
+      if (Array.isArray(shots) && shots.length) setHoleShots(Number(num), shots);
+    });
     Object.entries(data.holeClubs || {}).forEach(([num, clubs]) => {
       if (Array.isArray(clubs) && clubs.length) setHoleClubs(Number(num), clubs);
     });
@@ -1393,13 +1504,15 @@
       return Number.isFinite(score) && score > 0;
     }).length;
     const noteCount = Object.keys(data.holeNotes || {}).length;
-    if (!scoreCount && !noteCount) {
+    const shotCount = Object.values(data.holeShots || {}).reduce((sum, shots) => sum + (Array.isArray(shots) ? shots.length : 0), 0);
+    if (!scoreCount && !noteCount && !shotCount) {
       clearInProgressRound();
       return;
     }
     const parts = [];
     if (scoreCount) parts.push(`${scoreCount} hole${scoreCount === 1 ? "" : "s"} scored`);
     if (noteCount) parts.push(`${noteCount} note${noteCount === 1 ? "" : "s"}`);
+    if (shotCount) parts.push(`${shotCount} GPS shot${shotCount === 1 ? "" : "s"}`);
     let ageLabel = "";
     if (data.savedAt) {
       const ageMinutes = Math.floor((Date.now() - data.savedAt) / 60000);
@@ -1520,7 +1633,10 @@
       return nineCourse.holes.map((hole) => ({
         ...hole,
         number: nextHoleNumber++,
-        label: `${deerwoodNineLabels[nineId]} ${hole.number}`
+        label: `${deerwoodNineLabels[nineId]} ${hole.number}`,
+        // Hard quarantine: the old hand-entered mapping is not a trusted
+        // geographic source. Verified GeoJSON will replace it.
+        hazards: []
       }));
     });
     const nines = layout.nines.map((nineId) => getDeerwoodNineCourse(nineId, selectedTee)).filter(Boolean);
@@ -2124,6 +2240,7 @@
 
   function renderScorecard(courseOrId) {
     const course = typeof courseOrId === "string" ? getCourse(courseOrId) : courseOrId;
+    updateCourseMapAvailability(course);
     // Pre-Start-Round phase — show a friendly placeholder instead of the
     // scorecard so the user's eye lands on the setup form + Start Round CTA.
     if (!roundStarted && !editingRoundId) {
@@ -2558,6 +2675,275 @@
     return CLUB_OPTIONS.filter((c) => bag.includes(c) || extras.includes(c));
   }
 
+  // ---- Deerwood aerial course map ---------------------------------------
+
+  function getDeerwoodCourseMapConfig() {
+    return window.FairwayCourseMaps && window.FairwayCourseMaps.deerwood
+      ? window.FairwayCourseMaps.deerwood
+      : null;
+  }
+
+  function getPhysicalDeerwoodHoleIdentity(holeNumber) {
+    const labelsApi = getCourseMapLabelsApi();
+    if (!labelsApi || typeof labelsApi.holeIdentity !== "function") return null;
+    const course = getSelectedRoundCourse();
+    const hole = course && Array.isArray(course.holes)
+      ? course.holes.find((item) => Number(item.number) === Number(holeNumber))
+      : null;
+    if (!hole) return null;
+    const holeLabel = typeof hole.label === "string" && hole.label.trim()
+      ? hole.label.trim()
+      : `Hole ${holeNumber}`;
+    const holeId = labelsApi.holeIdentity({ label: holeLabel });
+    return holeId ? { holeId, holeLabel } : null;
+  }
+
+  function ensureCourseMapController() {
+    if (courseMapController) return courseMapController;
+    const config = getDeerwoodCourseMapConfig();
+    if (!config || !window.FairwayCourseMap || !window.FairwayCourseMapUi) return null;
+    const mapElements = {
+      overlay: els.courseMapOverlay,
+      backdrop: els.courseMapBackdrop,
+      close: els.courseMapClose,
+      title: els.courseMapTitle,
+      hole: els.courseMapHole,
+      locate: els.courseMapLocate,
+      zoomOut: els.courseMapZoomOut,
+      fit: els.courseMapFit,
+      zoomIn: els.courseMapZoomIn,
+      viewport: els.courseMapViewport,
+      stage: els.courseMapStage,
+      image: els.courseMapImage,
+      svg: els.courseMapSvg,
+      targetSummary: els.courseMapTargetSummary,
+      status: els.courseMapStatus,
+      clearTarget: els.courseMapClearTarget,
+      attribution: els.courseMapAttribution,
+      edit: els.courseMapEdit,
+      editor: els.courseMapEditor,
+      featureType: els.courseMapFeatureType,
+      featureLabel: els.courseMapFeatureLabel,
+      editorHint: els.courseMapEditorHint,
+      undoVertex: els.courseMapUndoVertex,
+      resetDraft: els.courseMapResetDraft,
+      cancelEdit: els.courseMapCancelEdit,
+      saveFeature: els.courseMapSaveFeature,
+      deleteFeature: els.courseMapDeleteFeature
+    };
+    const requiredMapElements = [
+      "overlay", "backdrop", "close", "title", "hole", "locate", "zoomOut", "fit", "zoomIn",
+      "viewport", "stage", "image", "svg", "targetSummary", "status", "clearTarget", "attribution"
+    ];
+    if (requiredMapElements.some((key) => !mapElements[key])) return null;
+    try {
+      courseMapController = window.FairwayCourseMapUi.createCourseMapController({
+        mapConfig: config,
+        engine: window.FairwayCourseMap,
+        labelsApi: getCourseMapLabelsApi(),
+        elements: mapElements,
+        requestPosition,
+        getShots: (holeNumber) => getHoleShots(holeNumber),
+        getAnnotations: () => state.mapAnnotations,
+        onAnnotationsChange: (nextCollection) => {
+          state.mapAnnotations = normalizeCourseMapAnnotations(nextCollection);
+          saveState();
+        },
+        getHoleIdentity: getPhysicalDeerwoodHoleIdentity,
+        onClose: () => { if (els.courseMapButton) els.courseMapButton.focus(); }
+      });
+    } catch (error) {
+      console.error("Could not initialize Deerwood course map", error);
+      return null;
+    }
+    return courseMapController;
+  }
+
+  function activeCourseMapHoleNumber(course) {
+    const activeCard = els.scorecardGrid && els.scorecardGrid.querySelector(".scorecard-card.active");
+    const activeNumber = activeCard ? Number(activeCard.dataset.holeNumber) : null;
+    if (Number.isFinite(activeNumber)) return activeNumber;
+    return course && course.holes && course.holes[0] ? Number(course.holes[0].number) : 1;
+  }
+
+  function updateCourseMapAvailability(course) {
+    if (!els.courseMapButton) return;
+    const available = Boolean(
+      course
+      && isDeerwoodCourseId(course.id)
+      && getDeerwoodCourseMapConfig()
+      && window.FairwayCourseMap
+      && window.FairwayCourseMapUi
+    );
+    els.courseMapButton.hidden = !available;
+    if (!available && courseMapController && courseMapController.isOpen()) courseMapController.close();
+  }
+
+  function openCourseMap() {
+    const course = getSelectedRoundCourse();
+    if (!course || !isDeerwoodCourseId(course.id)) return;
+    const controller = ensureCourseMapController();
+    if (!controller) {
+      showToast("The Deerwood aerial map is not available yet.");
+      return;
+    }
+    controller.open({
+      holes: course.holes,
+      holeNumber: activeCourseMapHoleNumber(course),
+      position: controller.getPosition()
+    });
+  }
+
+  function gpsAccuracyText(position) {
+    if (!position || !Number.isFinite(position.accuracyM)) return "accuracy unknown";
+    return `GPS +/-${Math.round(position.accuracyM)}m`;
+  }
+
+  function gpsQualityText(position) {
+    const quality = classifyAccuracy(position && position.accuracyM);
+    if (quality === "good") return "Good fix";
+    if (quality === "caution") return "Usable fix";
+    if (quality === "poor") return "Low accuracy";
+    return "Accuracy unknown";
+  }
+
+  function trackedShotDistanceYards(shot) {
+    if (!shot || !shot.start || !shot.finish) return null;
+    const meters = haversineMeters(shot.start.lat, shot.start.lng, shot.finish.lat, shot.finish.lng);
+    return Number(metersToYards(meters).toFixed(1));
+  }
+
+  function renderShotTracker(hole) {
+    const shots = getHoleShots(hole.number);
+    const activeShot = [...shots].reverse().find((shot) => shot && shot.start && !shot.finish) || null;
+    const trackedClubs = shots.map((shot) => shot.club).filter(Boolean);
+    const options = CLUB_OPTIONS.filter((club) => getBag().includes(club) || trackedClubs.includes(club));
+    const seededClub = getHoleClubs(hole.number).find((club) => club !== "Putter" && options.includes(club))
+      || options.find((club) => club !== "Putter")
+      || options[0]
+      || "Other";
+    const completed = shots.filter((shot) => shot.start && shot.finish);
+    const rows = completed.map((shot, index) => {
+      const distance = trackedShotDistanceYards(shot);
+      const startQuality = classifyAccuracy(shot.start.accuracyM);
+      const finishQuality = classifyAccuracy(shot.finish.accuracyM);
+      const approximate = startQuality !== "good" || finishQuality !== "good";
+      return `
+        <li class="gps-shot-row">
+          <span class="gps-shot-number">${index + 1}</span>
+          <span class="gps-shot-main"><strong>${escapeHtml(shot.club || "Club")}</strong><small>${gpsAccuracyText(shot.start)} start / ${gpsAccuracyText(shot.finish)} finish</small></span>
+          <span class="gps-shot-distance">${approximate ? "~" : ""}${distance === null ? "--" : distance.toFixed(1)}<small>yds</small></span>
+          <button type="button" class="gps-shot-icon-button" data-gps-action="retry-finish" data-hole="${hole.number}" data-shot-id="${escapeHtml(shot.id)}" aria-label="Retry finish location">Retry</button>
+          <button type="button" class="gps-shot-icon-button gps-shot-delete" data-delete-gps-shot data-hole="${hole.number}" data-shot-id="${escapeHtml(shot.id)}" aria-label="Delete GPS shot">x</button>
+        </li>`;
+    }).join("");
+    const activeHtml = activeShot ? `
+      <div class="gps-shot-active">
+        <span><strong>${escapeHtml(activeShot.club || "Club")}</strong> started</span>
+        <span class="gps-quality gps-quality-${classifyAccuracy(activeShot.start.accuracyM)}">${gpsQualityText(activeShot.start)} / ${gpsAccuracyText(activeShot.start)}</span>
+        <div class="gps-shot-active-actions">
+          <button type="button" class="ghost-button" data-delete-gps-shot data-hole="${hole.number}" data-shot-id="${escapeHtml(activeShot.id)}">Delete shot</button>
+          <button type="button" class="ghost-button" data-gps-action="retry-start" data-hole="${hole.number}" data-shot-id="${escapeHtml(activeShot.id)}">Retry start</button>
+          <button type="button" class="primary-button gps-finish-button" data-gps-action="finish" data-hole="${hole.number}" data-shot-id="${escapeHtml(activeShot.id)}">Mark finish</button>
+        </div>
+      </div>` : `
+      <div class="gps-shot-start-row">
+        <label><span>Club</span><select data-gps-club data-hole="${hole.number}">${options.map((club) => `<option value="${escapeHtml(club)}"${club === seededClub ? " selected" : ""}>${escapeHtml(club)}</option>`).join("")}</select></label>
+        <button type="button" class="primary-button gps-start-button" data-gps-action="start" data-hole="${hole.number}">Start shot</button>
+      </div>`;
+    return `
+      <section class="gps-shot-tracker" data-gps-shot-tracker data-hole="${hole.number}">
+        <div class="gps-shot-heading"><div><span class="eyebrow">On-course GPS</span><strong>Shot locations</strong></div><span>${completed.length} recorded</span></div>
+        ${activeHtml}
+        ${rows ? `<ol class="gps-shot-list">${rows}</ol>` : `<p class="gps-shot-empty">Choose a club at the ball, then mark the finish when you reach it.</p>`}
+        <p class="gps-shot-status" data-gps-status aria-live="polite"></p>
+      </section>`;
+  }
+
+  function refreshShotTracker(holeNumber) {
+    const course = getSelectedRoundCourse();
+    const hole = course && course.holes.find((item) => Number(item.number) === Number(holeNumber));
+    const current = els.scorecardGrid.querySelector(`[data-gps-shot-tracker][data-hole="${holeNumber}"]`);
+    if (hole && current) current.outerHTML = renderShotTracker(hole);
+  }
+
+  let gpsCaptureBusy = false;
+
+  async function handleGpsShotAction(button) {
+    if (gpsCaptureBusy) return;
+    const action = button.dataset.gpsAction;
+    const holeNumber = Number(button.dataset.hole);
+    if (!Number.isFinite(holeNumber)) return;
+    const tracker = button.closest("[data-gps-shot-tracker]");
+    const status = tracker && tracker.querySelector("[data-gps-status]");
+    const captureGeneration = gpsCaptureGeneration;
+    gpsCaptureBusy = true;
+    button.disabled = true;
+    if (status) status.textContent = "Finding the best available GPS position...";
+    try {
+      const position = await requestPosition();
+      if (captureGeneration !== gpsCaptureGeneration) {
+        throw new Error("The round changed before GPS finished. That location was discarded.");
+      }
+      const shots = getHoleShots(holeNumber);
+      const shotId = button.dataset.shotId;
+      const index = shotId ? shots.findIndex((shot) => shot.id === shotId) : -1;
+      if (action === "start") {
+        const select = tracker && tracker.querySelector(`[data-gps-club][data-hole="${holeNumber}"]`);
+        const club = select && select.value ? select.value : "Other";
+        shots.push({
+          id: makeId("shot"),
+          club,
+          target: courseMapController ? courseMapController.getTarget(holeNumber) : null,
+          startedAt: position.capturedAt || new Date().toISOString(),
+          start: position,
+          finish: null
+        });
+      } else if (index >= 0 && action === "finish") {
+        const next = { ...shots[index], finish: position, finishedAt: position.capturedAt || new Date().toISOString() };
+        next.distanceYards = trackedShotDistanceYards(next);
+        shots[index] = next;
+      } else if (index >= 0 && action === "retry-start") {
+        const next = { ...shots[index], start: position, startedAt: position.capturedAt || new Date().toISOString() };
+        if (next.finish) next.distanceYards = trackedShotDistanceYards(next);
+        shots[index] = next;
+      } else if (index >= 0 && action === "retry-finish") {
+        const next = { ...shots[index], finish: position, finishedAt: position.capturedAt || new Date().toISOString() };
+        next.distanceYards = trackedShotDistanceYards(next);
+        shots[index] = next;
+      } else {
+        throw new Error("That shot is no longer available.");
+      }
+      setHoleShots(holeNumber, shots);
+      if (courseMapController) courseMapController.setPosition(position);
+      roundTouched = true;
+      scheduleInProgressSave();
+      refreshShotTracker(holeNumber);
+      const quality = classifyAccuracy(position.accuracyM);
+      showToast(quality === "poor"
+        ? `Location saved with low accuracy (${gpsAccuracyText(position)}). Retry when the phone has a clearer sky view.`
+        : `GPS location saved (${gpsAccuracyText(position)}).`);
+    } catch (error) {
+      if (status) status.textContent = error && error.message
+        ? error.message
+        : "Could not get your location. Check browser location permission and try again.";
+      button.disabled = false;
+    } finally {
+      gpsCaptureBusy = false;
+    }
+  }
+
+  function deleteGpsShot(button) {
+    const holeNumber = Number(button.dataset.hole);
+    const shotId = button.dataset.shotId;
+    const next = getHoleShots(holeNumber).filter((shot) => shot.id !== shotId);
+    setHoleShots(holeNumber, next);
+    roundTouched = true;
+    scheduleInProgressSave();
+    refreshShotTracker(holeNumber);
+    showToast("GPS shot removed.");
+  }
+
   // Shown only when a hole has a penalty logged — captures which club caused
   // it. syncPenaltyClubRows() toggles visibility and defaults to the tee club.
   // Shell only — the actual N selects are rebuilt dynamically by
@@ -2600,7 +2986,7 @@
               <span>${hole.yards ? `${hole.yards} yds` : "no yardage"}</span>
               <span>HCP ${hole.hcp || "--"}</span>
             </div>
-            ${Array.isArray(hole.hazards) && hole.hazards.length ? `<ul class="hazard-chip-list hazard-chip-list-compact">${hole.hazards.map((h) => renderHazardChip(h)).join("")}</ul>` : ""}
+            ${!isDeerwoodCourseId(course.id) && Array.isArray(hole.hazards) && hole.hazards.length ? `<ul class="hazard-chip-list hazard-chip-list-compact">${hole.hazards.map((h) => renderHazardChip(h)).join("")}</ul>` : ""}
           </div>
           <div class="card-hidden-inputs" hidden>
             ${scoreInputCell(hole)}
@@ -2616,6 +3002,7 @@
           <div class="card-extra">
             ${cardFlowMode === "narrative" ? `
               ${renderClubsHitPills(hole)}
+              ${renderShotTracker(hole)}
               ${renderFairwayPills(hole)}
               ${renderPuttsPills(hole)}
               ${renderFirstPuttPills(hole)}
@@ -2631,6 +3018,7 @@
               ${renderFirstPuttPills(hole)}
               ${renderFairwayPills(hole)}
               ${renderClubsHitPills(hole)}
+              ${renderShotTracker(hole)}
               ${renderPenPills(hole)}
               ${renderPenaltyClubRow(hole)}
               ${renderBunkerPills(hole)}
@@ -3233,6 +3621,7 @@
       fairwayHit: h.fairwayHit,
       greenInRegulation: h.greenInRegulation,
       clubsHit: h.clubsHit,
+      shots: h.shots,
       penaltyClubs: h.penaltyClubs,
       penalties: h.penalties,
       bunker: h.bunker,
@@ -3419,6 +3808,7 @@
         penalty: penaltyInput ? penaltyInput.value : "",
         firstPutt: firstPuttInput ? firstPuttInput.value : "",
         fringePutts: fringePuttsInput ? fringePuttsInput.value : ""
+        ,shots: getHoleShots(hole)
       });
     });
     return map;
@@ -3458,6 +3848,7 @@
         bunkerInput.value = values.bunker;
       }
       if (girInput) girInput.checked = Boolean(values.gir);
+      if (Array.isArray(values.shots)) setHoleShots(holeNumber, values.shots);
       if (penaltyInput && values.penalty !== "") penaltyInput.value = values.penalty;
       if (firstPuttInput && values.firstPutt !== "") firstPuttInput.value = values.firstPutt;
       if (fringePuttsInput && values.fringePutts !== undefined && values.fringePutts !== "") fringePuttsInput.value = values.fringePutts;
@@ -3708,12 +4099,16 @@
       const firstPuttRaw = firstPuttInput ? firstPuttInput.value.trim() : "";
       const firstPuttValue = firstPuttRaw === "" ? null : Number(firstPuttRaw);
       const fringePuttsValue = fringePuttsInput ? Number(fringePuttsInput.value || 0) : 0;
+      const shots = getHoleShots(holeNumber);
       if (requireComplete) {
         if (!scoreValue || scoreValue < 1) {
           throw new Error(`Enter a score on ${scoreInput.dataset.label || `hole ${holeNumber}`} before saving.`);
         }
         if (puttsValue < 0 || penaltyValue < 0) {
           throw new Error("Putts and penalties must be 0 or higher.");
+        }
+        if (shots.some((shot) => shot && shot.start && !shot.finish)) {
+          throw new Error(`Finish or delete the active GPS shot on ${scoreInput.dataset.label || `hole ${holeNumber}`} before saving.`);
         }
       }
       return makeHole({
@@ -3734,7 +4129,8 @@
         fringePutts: Number.isFinite(fringePuttsValue) && fringePuttsValue > 0 ? fringePuttsValue : 0,
         bunker: bunkerInput ? bunkerInput.value : "",
         note: getHoleNote(holeNumber),
-        clubsHit: getHoleClubs(holeNumber)
+        clubsHit: getHoleClubs(holeNumber),
+        shots
       });
     });
   }
@@ -6820,7 +7216,10 @@
         scores: [],
         sgs: [],
         notes: [],
-        hazards: Array.isArray(courseHole.hazards) ? courseHole.hazards : []
+        // Deerwood's replacement features must come from the sourced,
+        // confidence-rated geographic dataset. Other courses retain their
+        // existing behavior.
+        hazards: deerwood ? [] : (Array.isArray(courseHole.hazards) ? courseHole.hazards : [])
       };
       holePoolRounds.forEach((round) => {
         round.holes.forEach((hole) => {
@@ -7760,13 +8159,18 @@
     const yards = course.holes.reduce((sum, hole) => sum + Number(hole.yards || 0), 0);
     const totals = rounds.map(roundTotals);
     const holeGroups = getHoleGroups(rounds);
+    const allowLegacyHazardEditor = !isDeerwoodCourseId(course.id);
     const holeRows = course.holes.map((hole) => {
       const stats = holeGroups.find((group) => group.number === hole.number);
-      const hazards = Array.isArray(hole.hazards) ? hole.hazards : [];
-      const hazardCountLabel = hazards.length
+      const hazards = allowLegacyHazardEditor && Array.isArray(hole.hazards) ? hole.hazards : [];
+      const hazardCountLabel = !allowLegacyHazardEditor
+        ? `<span class="hazard-count hazard-count-empty">Verified map pending</span>`
+        : hazards.length
         ? `<span class="hazard-count">${hazards.length} hazard${hazards.length === 1 ? "" : "s"}</span>`
         : `<span class="hazard-count hazard-count-empty">+ add hazard</span>`;
-      const chipsHtml = hazards.length
+      const chipsHtml = !allowLegacyHazardEditor
+        ? `<p class="hazard-empty">The old hand-entered hazard mapping is disabled. This hole will use the new sourced satellite map when its geometry is verified.</p>`
+        : hazards.length
         ? `<ul class="hazard-chip-list">${hazards.map((hazard) => renderHazardChip(hazard, { editable: true })).join("")}</ul>`
         : `<p class="hazard-empty">No hazards recorded yet. Add water, bunkers, OB, or strategy notes that you want to see every time you play this hole.</p>`;
       return `
@@ -7782,7 +8186,7 @@
           </summary>
           <div class="course-hole-hazards">
             ${chipsHtml}
-            <form class="hazard-form" data-add-hazard data-hole-number="${hole.number}">
+            ${allowLegacyHazardEditor ? `<form class="hazard-form" data-add-hazard data-hole-number="${hole.number}">
               <select class="hazard-form-type" name="type" aria-label="Hazard type" required>
                 ${HAZARD_TYPES.map((t) => `<option value="${t.value}">${t.icon} ${t.label}</option>`).join("")}
               </select>
@@ -7793,7 +8197,7 @@
               <input class="hazard-form-carry" name="carryYards" type="number" inputmode="numeric" min="0" max="700" placeholder="Carry yds">
               <input class="hazard-form-note" name="note" type="text" maxlength="80" placeholder="Note (optional)">
               <button class="hazard-form-add" type="submit">Add</button>
-            </form>
+            </form>` : ""}
           </div>
         </details>`;
     }).join("");
@@ -9292,6 +9696,9 @@
   // the holes in the unchanged half (or all holes, for a tee swap) keep
   // their scores/putts/notes/shots/clubs; the rest reset to fresh.
   function refreshRoundPreservingHoles(preserveHoleNumbers) {
+    // The selected routing may change while the device is still resolving a
+    // fix. Even preserved hole numbers can refer to different physical holes.
+    gpsCaptureGeneration += 1;
     const preserve = new Set(preserveHoleNumbers);
     const snapshot = captureScorecardSnapshot();
     // Drop the per-hole entry for any hole NOT being preserved.
@@ -9508,6 +9915,9 @@
       if (hole && Array.isArray(hole.clubsHit) && hole.clubsHit.length) {
         setHoleClubs(hole.number, hole.clubsHit);
       }
+      if (hole && Array.isArray(hole.shots) && hole.shots.length) {
+        setHoleShots(hole.number, hole.shots);
+      }
       // Prefer the canonical penaltyClubs array; fall back to the legacy
       // single penaltyClub string for rounds saved before the multi-club
       // change. Either way the in-form state ends up as the array shape.
@@ -9697,8 +10107,24 @@
     });
   }
 
+  if (els.courseMapButton) {
+    els.courseMapButton.addEventListener("click", openCourseMap);
+  }
+
   els.scorecardGrid.addEventListener("keydown", advanceScorecardOnEnter);
   els.scorecardGrid.addEventListener("click", (event) => {
+    const gpsButton = event.target.closest("[data-gps-action]");
+    if (gpsButton) {
+      event.preventDefault();
+      void handleGpsShotAction(gpsButton);
+      return;
+    }
+    const deleteGpsButton = event.target.closest("[data-delete-gps-shot]");
+    if (deleteGpsButton) {
+      event.preventDefault();
+      deleteGpsShot(deleteGpsButton);
+      return;
+    }
     // Prev/Next nav — delegated so the header arrows and the bottom buttons
     // both work (and survive scorecard re-renders).
     const navButton = event.target.closest("[data-card-nav]");
@@ -9741,7 +10167,7 @@
       });
       if (!hazard) return;
       const course = state.courses.find((c) => c.id === selectedCourseDetailId);
-      if (!course) return;
+      if (!course || isDeerwoodCourseId(course.id)) return;
       const hole = course.holes.find((h) => h.number === holeNumber);
       if (!hole) return;
       hole.hazards = Array.isArray(hole.hazards) ? [...hole.hazards, hazard] : [hazard];
@@ -9772,7 +10198,7 @@
       if (!block) return;
       const holeNumber = Number(block.dataset.holeNumber);
       const course = state.courses.find((c) => c.id === selectedCourseDetailId);
-      if (!course) return;
+      if (!course || isDeerwoodCourseId(course.id)) return;
       const hole = course.holes.find((h) => h.number === holeNumber);
       if (!hole || !Array.isArray(hole.hazards)) return;
       hole.hazards = hole.hazards.filter((h) => h.id !== hazardId);
@@ -10135,9 +10561,11 @@
 
   function applySampleData() {
     takeSnapshot("before-sample", { force: true });
+    const mapAnnotations = normalizeCourseMapAnnotations(state.mapAnnotations);
     state = {
       courses: structuredClone(sampleCourses),
-      rounds: structuredClone(sampleRounds)
+      rounds: structuredClone(sampleRounds),
+      mapAnnotations
     };
     clearEditState({ rerender: false });
     clearInProgressRound();
@@ -10171,7 +10599,7 @@
 
   function applyClearAll() {
     takeSnapshot("before-clear", { force: true });
-    state = { courses: [], rounds: [] };
+    state = { courses: [], rounds: [], mapAnnotations: createEmptyCourseMapAnnotations() };
     clearEditState({ rerender: false });
     clearInProgressRound();
     resetPendingHoles(); resetReviewState();

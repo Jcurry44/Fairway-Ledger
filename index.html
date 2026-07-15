@@ -15,9 +15,9 @@
     <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
          icon, theme color in the browser chrome, and a standalone display
          mode instead of a tab. -->
-    <link rel="manifest" href="./manifest.json?v=2026-06-16a">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-06-16a">
-    <link rel="apple-touch-icon" href="./icon.svg?v=2026-06-16a">
+    <link rel="manifest" href="./manifest.json?v=2026-07-14a">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-07-14a">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-07-14a">
     <meta name="theme-color" content="#1f7a59">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -32,12 +32,17 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap">
 
-    <link rel="stylesheet" href="./styles.css?v=2026-06-16a">
-    <script src="./data/courses.js?v=2026-06-16a" defer></script>
-    <script src="./lib/golf-math.js?v=2026-06-16a" defer></script>
-    <script src="./lib/shapes.js?v=2026-06-16a" defer></script>
-    <script src="./lib/games.js?v=2026-06-16a" defer></script>
-    <script src="./app.js?v=2026-06-16a" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-07-14c">
+    <script src="./data/courses.js?v=2026-07-14c" defer></script>
+    <script src="./data/course-maps/deerwood-runtime.js?v=2026-07-14c" defer></script>
+    <script src="./lib/golf-math.js?v=2026-07-14c" defer></script>
+    <script src="./lib/shapes.js?v=2026-07-14c" defer></script>
+    <script src="./lib/gps.js?v=2026-07-14c" defer></script>
+    <script src="./lib/course-map.js?v=2026-07-14c" defer></script>
+    <script src="./lib/course-map-labels.js?v=2026-07-14c" defer></script>
+    <script src="./lib/course-map-ui.js?v=2026-07-14c" defer></script>
+    <script src="./lib/games.js?v=2026-07-14c" defer></script>
+    <script src="./app.js?v=2026-07-14c" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -346,6 +351,7 @@
                 <h2 id="roundEntryTitle">Add Round</h2>
               </div>
               <div class="round-entry-actions">
+                <button class="ghost-button course-map-launch" id="courseMapButton" type="button" hidden>Course map</button>
                 <button class="ghost-button" id="viewToggleButton" type="button">Card view</button>
                 <button class="ghost-button" id="resetRoundButton" type="button">Reset</button>
               </div>
@@ -850,6 +856,77 @@
         </div>
         <ul id="holePickerList" class="hole-picker-list"></ul>
       </div>
+    </div>
+
+    <div id="courseMapOverlay" class="hole-picker-overlay course-map-overlay" hidden>
+      <button id="courseMapBackdrop" class="hole-picker-backdrop" type="button" aria-label="Close course map"></button>
+      <section class="course-map-sheet" role="dialog" aria-modal="true" aria-labelledby="courseMapTitle">
+        <header class="course-map-header">
+          <div>
+            <p class="eyebrow">Deerwood · 2024 aerial</p>
+            <h3 id="courseMapTitle">Course map</h3>
+          </div>
+          <button id="courseMapClose" class="hole-picker-close" type="button" aria-label="Close course map">&times;</button>
+        </header>
+        <div class="course-map-toolbar">
+          <label class="course-map-hole-field">
+            <span>Hole</span>
+            <select id="courseMapHole"></select>
+          </label>
+          <button id="courseMapLocate" class="primary-button" type="button">Locate me</button>
+          <div class="course-map-zoom" aria-label="Map zoom controls">
+            <button id="courseMapZoomOut" class="ghost-button" type="button" aria-label="Zoom out">&minus;</button>
+            <button id="courseMapFit" class="ghost-button" type="button">Fit</button>
+            <button id="courseMapZoomIn" class="ghost-button" type="button" aria-label="Zoom in">+</button>
+          </div>
+        </div>
+        <div id="courseMapViewport" class="course-map-viewport" aria-label="Interactive Deerwood aerial map. Drag to pan, use the zoom controls, and tap to set an aim point.">
+          <div id="courseMapStage" class="course-map-stage">
+            <img id="courseMapImage" draggable="false" alt="">
+          </div>
+          <svg id="courseMapSvg" class="course-map-svg" aria-hidden="true"></svg>
+          <div class="course-map-map-label">NYSDOP aerial · no legacy hazards<br>Dashed outline: facility reference only — not course/OB</div>
+        </div>
+        <section id="courseMapEditor" class="course-map-label-panel" aria-label="Draft map label editor" hidden>
+          <div class="course-map-label-heading">
+            <div>
+              <strong>Draft map labels</strong>
+              <span>Image trace only — never an OB or penalty-area ruling. Tap a saved outline to select it.</span>
+            </div>
+            <button id="courseMapCancelEdit" class="ghost-button" type="button">Done</button>
+          </div>
+          <div class="course-map-label-fields">
+            <label>
+              <span>Feature</span>
+              <select id="courseMapFeatureType"></select>
+            </label>
+            <label>
+              <span>Name <small>optional</small></span>
+              <input id="courseMapFeatureLabel" type="text" maxlength="80" autocomplete="off" placeholder="e.g. left greenside sand">
+            </label>
+          </div>
+          <div class="course-map-label-progress">
+            <p id="courseMapEditorHint">Choose a feature, then tap the aerial.</p>
+            <div class="course-map-label-actions">
+              <button id="courseMapUndoVertex" class="ghost-button" type="button">Undo</button>
+              <button id="courseMapResetDraft" class="ghost-button" type="button">Reset</button>
+              <button id="courseMapDeleteFeature" class="ghost-button" type="button" disabled>Delete</button>
+              <button id="courseMapSaveFeature" class="primary-button" type="button" disabled>Save label</button>
+            </div>
+          </div>
+        </section>
+        <div class="course-map-readout">
+          <div>
+            <strong id="courseMapTargetSummary">Tap the aerial to set an aim point.</strong>
+            <span id="courseMapStatus" role="status" aria-live="polite"></span>
+          </div>
+          <div class="course-map-readout-actions">
+            <button id="courseMapEdit" class="ghost-button" type="button" aria-pressed="false">Label map</button>
+            <button id="courseMapClearTarget" class="ghost-button" type="button" hidden>Clear aim</button>
+          </div>
+        </div>
+        <p id="courseMapAttribution" class="course-map-attribution"></p>
+      </section>
     </div>
 
     <!-- Round detail sheet — opens when the user taps a Trophy card. Shows

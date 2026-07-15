@@ -10,7 +10,7 @@
 // bump the version — but bumping it is the only way to drop a now-unused
 // asset from a returning visitor's cache.
 
-const CACHE_VERSION = 'fairway-ledger-v79-2026-06-16a';
+const CACHE_VERSION = 'fairway-ledger-v82-2026-07-14c';
 
 // Paths are relative to the SW's location (./sw.js at the project root).
 const CORE_ASSETS = [
@@ -19,9 +19,15 @@ const CORE_ASSETS = [
   './styles.css',
   './app.js',
   './data/courses.js',
+  './data/course-maps/deerwood-runtime.js',
   './lib/golf-math.js',
   './lib/shapes.js',
+  './lib/gps.js',
+  './lib/course-map.js',
+  './lib/course-map-labels.js',
+  './lib/course-map-ui.js',
   './lib/games.js',
+  './assets/maps/deerwood/aerial-2024.webp',
   './manifest.json',
   './icon.svg',
 ];

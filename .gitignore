@@ -9,6 +9,9 @@ fairway-ledger-*.json
 data/golf-lab/
 logs/
 
+# Large authoritative course-source downloads (documented by checksum)
+data/course-source/**/imagery/
+
 # Editor / IDE
 .vscode/
 .idea/

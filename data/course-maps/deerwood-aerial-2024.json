@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "assetId": "deerwood-aerial-2024",
+  "courseId": "deerwood",
+  "status": "authoritative-source-mosaic",
+  "image": {
+    "path": "./assets/maps/deerwood/aerial-2024.webp",
+    "format": "webp",
+    "width": 3000,
+    "height": 2000,
+    "byteSize": 1429012,
+    "sha256": "5fd178e66f235e7712e231da2ac42bf466914bd889a2535875461d1cb9a1478a",
+    "naturalColorBands": [
+      "red",
+      "green",
+      "blue"
+    ],
+    "excludedBand": "near-infrared"
+  },
+  "source": {
+    "id": "nysdop-2024-north-tonawanda",
+    "publisher": "New York State ITS Geospatial Services / NYSDOP",
+    "acquisitionYear": 2024,
+    "groundSampleDistanceFtUs": 1,
+    "sourcePixelDimensions": {
+      "width": 6000,
+      "height": 4000
+    },
+    "archives": [
+      {
+        "file": "w_10771106_12_22500_4bd_2024.zip",
+        "sha256": "febb8722e4433c8d9dd7401cec4c92237efa950d1d798d36f83181a2e6aa1b9f"
+      },
+      {
+        "file": "w_10771108_12_22500_4bd_2024.zip",
+        "sha256": "b566f06abb1cb2a600be38b5ba3fd4b5e23d6fb7d869dd05dd20d8e393db4ae0"
+      },
+      {
+        "file": "w_10801106_12_22500_4bd_2024.zip",
+        "sha256": "da08a6760ceb27e194bf7a88ddcb85515fe0cb3c38a5b2a7b5a965cc60b70800"
+      },
+      {
+        "file": "w_10801108_12_22500_4bd_2024.zip",
+        "sha256": "aa0a6c5a91006853590e5e4b4ca3e99d96d36b7c15c6ab70a7e5674c77e56da9"
+      }
+    ]
+  },
+  "spatialReference": {
+    "crs": "EPSG:6541",
+    "name": "NAD83(2011) / New York West (ftUS)",
+    "method": "Transverse Mercator",
+    "units": "US survey foot",
+    "usSurveyFootMeters": 0.3048006096012192,
+    "parameters": {
+      "ellipsoid": "GRS 1980",
+      "semiMajorAxisMeters": 6378137.0,
+      "inverseFlattening": 298.257222101,
+      "latitudeOfNaturalOriginDegrees": 40.0,
+      "longitudeOfNaturalOriginDegrees": -78.58333333333333,
+      "scaleFactorAtNaturalOrigin": 0.9999375,
+      "falseEastingMeters": 350000.0,
+      "falseNorthingMeters": 0.0
+    },
+    "projectedBoundsFtUs": {
+      "west": 1077000.0,
+      "south": 1106000.0,
+      "east": 1083000.0,
+      "north": 1110000.0
+    },
+    "outputResolutionFtUsPerPixel": {
+      "x": 2.0,
+      "y": 2.0
+    },
+    "pixelEdgeToProjectedAffine": [
+      2.0,
+      0.0,
+      1077000.0,
+      0.0,
+      -2.0,
+      1110000.0
+    ],
+    "pixelEdgeToProjectedFormula": {
+      "eastingFtUs": "west + column * xResolution",
+      "northingFtUs": "north - row * yResolution"
+    }
+  },
+  "browserGeographicReference": {
+    "crs": "EPSG:4326",
+    "datumHandling": "NAD83(2011) geographic coordinates represented as WGS84 longitude/latitude with no datum shift",
+    "corners": {
+      "northwest": {
+        "longitude": -78.85003818,
+        "latitude": 43.046127456
+      },
+      "northeast": {
+        "longitude": -78.82759216,
+        "latitude": 43.046177563
+      },
+      "southeast": {
+        "longitude": -78.827548627,
+        "latitude": 43.035202418
+      },
+      "southwest": {
+        "longitude": -78.849990647,
+        "latitude": 43.03515233
+      }
+    },
+    "axisAlignedBounds": {
+      "west": -78.85003818,
+      "south": 43.03515233,
+      "east": -78.827548627,
+      "north": 43.046177563
+    },
+    "courseReferenceBounds": {
+      "west": -78.846693,
+      "south": 43.0362622,
+      "east": -78.8286029,
+      "north": 43.0452657
+    }
+  },
+  "attribution": {
+    "display": "Imagery \u00a9 NYS ITS Geospatial Services, NYSDOP 2024",
+    "sourceIndex": "https://orthos.its.ny.gov/arcgis/rest/services/vector/ortho_indexes/MapServer/6"
+  },
+  "pipeline": {
+    "script": "./tools/build_deerwood_aerial.py",
+    "pillowVersion": "12.2.0",
+    "command": "python tools/build_deerwood_aerial.py",
+    "legacyHazardDataUsed": false
+  }
+}
