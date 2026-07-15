@@ -570,7 +570,13 @@
   };
 
   let sampleRounds = [];
-  let state = { courses: [], rounds: [], profile: { bag: [] }, mapAnnotations: null };
+  let state = {
+    courses: [],
+    rounds: [],
+    profile: { bag: [] },
+    mapAnnotations: null,
+    mapAnnotationSeedState: null
+  };
 
   const els = {
     metricRounds: document.getElementById("metricRounds"),
@@ -1007,6 +1013,13 @@
       : null;
   }
 
+  function getDeerwoodAerialLabels() {
+    return window.FairwayDeerwoodAerialLabels
+      && window.FairwayDeerwoodAerialLabels.dataset === "deerwood-aerial-observations-v1"
+      ? window.FairwayDeerwoodAerialLabels
+      : null;
+  }
+
   const EMPTY_COURSE_MAP_ANNOTATIONS = Object.freeze({
     type: "FeatureCollection",
     dataset: "deerwood-user-map-v1",
@@ -1014,6 +1027,12 @@
     mapId: "deerwood-aerial-2024",
     mapSha256: "5FD178E66F235E7712E231DA2AC42BF466914BD889A2535875461D1CB9A1478A",
     legacyHazardDataUsed: false
+  });
+
+  const EMPTY_COURSE_MAP_SEED_STATE = Object.freeze({
+    dataset: "deerwood-aerial-observations-suppressions-v1",
+    mapId: "deerwood-aerial-2024",
+    mapSha256: "5FD178E66F235E7712E231DA2AC42BF466914BD889A2535875461D1CB9A1478A"
   });
 
   function createEmptyCourseMapAnnotations() {
@@ -1046,9 +1065,34 @@
     return createEmptyCourseMapAnnotations();
   }
 
+  function createEmptyCourseMapSeedState() {
+    const labelsApi = getCourseMapLabelsApi();
+    return labelsApi && typeof labelsApi.createEmptySeedState === "function"
+      ? labelsApi.createEmptySeedState()
+      : { ...EMPTY_COURSE_MAP_SEED_STATE, hiddenFeatureIds: [] };
+  }
+
+  function normalizeCourseMapSeedState(value) {
+    const labelsApi = getCourseMapLabelsApi();
+    if (labelsApi && typeof labelsApi.normalizeSeedState === "function") {
+      return labelsApi.normalizeSeedState(value);
+    }
+    if (value
+      && typeof value === "object"
+      && !Array.isArray(value)
+      && value.dataset === EMPTY_COURSE_MAP_SEED_STATE.dataset
+      && value.mapId === EMPTY_COURSE_MAP_SEED_STATE.mapId
+      && value.mapSha256 === EMPTY_COURSE_MAP_SEED_STATE.mapSha256
+      && Array.isArray(value.hiddenFeatureIds)) {
+      return structuredClone(value);
+    }
+    return createEmptyCourseMapSeedState();
+  }
+
   function ensureCourseDataShape(stateValue) {
     if (!stateValue || !Array.isArray(stateValue.courses)) return stateValue;
     stateValue.mapAnnotations = normalizeCourseMapAnnotations(stateValue.mapAnnotations);
+    stateValue.mapAnnotationSeedState = normalizeCourseMapSeedState(stateValue.mapAnnotationSeedState);
     stateValue.courses.forEach((course) => {
       if (!Array.isArray(course.holes)) return;
       const rejectLegacyHazards = course.id === DEERWOOD_COURSE_ID || isDeerwoodCourseId(course.id);
@@ -2741,12 +2785,18 @@
         mapConfig: config,
         engine: window.FairwayCourseMap,
         labelsApi: getCourseMapLabelsApi(),
+        seedAnnotations: getDeerwoodAerialLabels(),
         elements: mapElements,
         requestPosition,
         getShots: (holeNumber) => getHoleShots(holeNumber),
         getAnnotations: () => state.mapAnnotations,
         onAnnotationsChange: (nextCollection) => {
           state.mapAnnotations = normalizeCourseMapAnnotations(nextCollection);
+          saveState();
+        },
+        getSeedState: () => state.mapAnnotationSeedState,
+        onSeedStateChange: (nextSeedState) => {
+          state.mapAnnotationSeedState = normalizeCourseMapSeedState(nextSeedState);
           saveState();
         },
         getHoleIdentity: getPhysicalDeerwoodHoleIdentity,
@@ -10562,10 +10612,12 @@
   function applySampleData() {
     takeSnapshot("before-sample", { force: true });
     const mapAnnotations = normalizeCourseMapAnnotations(state.mapAnnotations);
+    const mapAnnotationSeedState = normalizeCourseMapSeedState(state.mapAnnotationSeedState);
     state = {
       courses: structuredClone(sampleCourses),
       rounds: structuredClone(sampleRounds),
-      mapAnnotations
+      mapAnnotations,
+      mapAnnotationSeedState
     };
     clearEditState({ rerender: false });
     clearInProgressRound();
@@ -10599,7 +10651,12 @@
 
   function applyClearAll() {
     takeSnapshot("before-clear", { force: true });
-    state = { courses: [], rounds: [], mapAnnotations: createEmptyCourseMapAnnotations() };
+    state = {
+      courses: [],
+      rounds: [],
+      mapAnnotations: createEmptyCourseMapAnnotations(),
+      mapAnnotationSeedState: createEmptyCourseMapSeedState()
+    };
     clearEditState({ rerender: false });
     clearInProgressRound();
     resetPendingHoles(); resetReviewState();

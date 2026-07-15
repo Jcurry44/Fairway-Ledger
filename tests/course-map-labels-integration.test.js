@@ -19,13 +19,15 @@ function between(source, start, end) {
   return source.slice(startIndex, endIndex);
 }
 
-test("draft label module loads before the map UI and is available offline", () => {
-  const labelsIndex = INDEX_SOURCE.indexOf("./lib/course-map-labels.js?v=2026-07-14c");
-  const mapUiIndex = INDEX_SOURCE.indexOf("./lib/course-map-ui.js?v=2026-07-14c");
+test("draft and seeded label modules load before the map UI and are available offline", () => {
+  const labelsIndex = INDEX_SOURCE.indexOf("./lib/course-map-labels.js?v=2026-07-14d");
+  const seedIndex = INDEX_SOURCE.indexOf("./data/course-maps/deerwood-aerial-labels-v1.js?v=2026-07-14d");
+  const mapUiIndex = INDEX_SOURCE.indexOf("./lib/course-map-ui.js?v=2026-07-14d");
   assert.notEqual(labelsIndex, -1);
-  assert.ok(labelsIndex < mapUiIndex);
+  assert.ok(labelsIndex < seedIndex && seedIndex < mapUiIndex);
   assert.match(SERVICE_WORKER_SOURCE, /'\.\/lib\/course-map-labels\.js'/);
-  assert.match(SERVICE_WORKER_SOURCE, /fairway-ledger-v82-2026-07-14c/);
+  assert.match(SERVICE_WORKER_SOURCE, /'\.\/data\/course-maps\/deerwood-aerial-labels-v1\.js'/);
+  assert.match(SERVICE_WORKER_SOURCE, /fairway-ledger-v83-2026-07-14d/);
   assert.match(RUNTIME_SOURCE, /mapId: "deerwood-aerial-2024"/);
   assert.match(MAP_UI_SOURCE, /config\.mapId === labelsApi\.MAP_ID/);
   assert.match(MAP_UI_SOURCE, /imageConfig\.sha256\.toLowerCase\(\) === labelsApi\.MAP_SHA256\.toLowerCase\(\)/);
@@ -50,11 +52,25 @@ test("visible editor controls match the controller integration", () => {
 test("map annotations persist separately and never re-enter Deerwood hazards", () => {
   const shape = between(APP_SOURCE, "function getCourseMapLabelsApi", "function getSiblingCourses");
   assert.match(shape, /stateValue\.mapAnnotations = normalizeCourseMapAnnotations\(stateValue\.mapAnnotations\)/);
+  assert.match(shape, /stateValue\.mapAnnotationSeedState = normalizeCourseMapSeedState\(stateValue\.mapAnnotationSeedState\)/);
   assert.match(shape, /hole\.hazards = \[\]/);
   assert.match(shape, /return structuredClone\(value\)/);
   assert.match(shape, /!Object\.prototype\.hasOwnProperty\.call\(value, "legacyHazards"\)/);
   const controller = between(APP_SOURCE, "function ensureCourseMapController", "function activeCourseMapHoleNumber");
   assert.match(controller, /getAnnotations: \(\) => state\.mapAnnotations/);
   assert.match(controller, /state\.mapAnnotations = normalizeCourseMapAnnotations\(nextCollection\)/);
+  assert.match(controller, /seedAnnotations: getDeerwoodAerialLabels\(\)/);
+  assert.match(controller, /getSeedState: \(\) => state\.mapAnnotationSeedState/);
+  assert.match(controller, /state\.mapAnnotationSeedState = normalizeCourseMapSeedState\(nextSeedState\)/);
   assert.doesNotMatch(controller, /\.hazards/);
+});
+
+test("seeded suggestions render beneath user labels and hide through tombstones", () => {
+  const annotationMarkup = between(MAP_UI_SOURCE, "function annotationMarkup", "function draftAnnotationMarkup");
+  assert.match(annotationMarkup, /visibleAnnotationsForCurrentHole\(\)/);
+  assert.match(annotationMarkup, /course-map-annotation--baseline/);
+  assert.match(annotationMarkup, /aerial-suggestion/);
+  const deleteFlow = between(MAP_UI_SOURCE, "function deleteAnnotation", "function addAnnotationPoint");
+  assert.match(deleteFlow, /labelsApi\.hideSeedFeature\(readSeedState\(\), featureId\)/);
+  assert.match(deleteFlow, /labelsApi\.removeFeature\(readAnnotations\(\), featureId\)/);
 });

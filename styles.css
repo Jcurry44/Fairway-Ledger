@@ -7930,6 +7930,11 @@ summary:focus-visible {
 .course-map-annotation--tree_canopy path { fill: rgba(44, 106, 72, 0.25); stroke: #8bc49d; }
 .course-map-annotation--strategy_target circle { fill: rgba(255, 211, 111, 0.24); stroke: #ffd36f; stroke-width: 2; }
 .course-map-annotation--strategy_target path { fill: none; stroke: #fff4ce; stroke-width: 2; }
+.course-map-annotation--baseline path {
+  stroke-dasharray: 6 4;
+  stroke-width: 2.5;
+}
+.course-map-annotation--baseline text { opacity: 0.94; }
 .course-map-annotation.is-selected path,
 .course-map-annotation.is-selected circle { stroke-width: 4; filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.75)); }
 

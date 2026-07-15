@@ -38,6 +38,6 @@ test("load, snapshot restore, and import all pass through the scrub boundary", (
   assert.match(importBlock, /ensureCourseDataShape\(mergeNewDefaultCourses\(imported\)\)/);
 });
 
-test("visible map badge identifies the dashed outline as non-playing reference", () => {
-  assert.match(INDEX_SOURCE, /Dashed outline: facility reference only — not course\/OB/);
+test("visible map badge separates aerial suggestions and the boundary from rules markings", () => {
+  assert.match(INDEX_SOURCE, /Blue\/amber: visual suggestions · dashed boundary is not course\/OB/);
 });
