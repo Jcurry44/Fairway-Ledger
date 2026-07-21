@@ -788,6 +788,54 @@ select[data-use-chips] {
 
 /* Collapsible in-round chrome: once a round is underway the setup fields tuck
    behind this banner so the screen is just the scorecard. Tap to re-open. */
+/* One-tap "Play it again" replay card — the clubhouse-green hero material,
+   sized as a full-width tappable card above the blank setup form. */
+.quick-start-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  margin: 0 0 16px;
+  padding: 18px 20px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(217, 192, 138, 0.35);
+  background: linear-gradient(150deg, #0d3322 0%, #124530 62%, #175539 100%);
+  box-shadow: 0 14px 40px rgba(13, 51, 34, 0.22), inset 0 -2px 0 rgba(217, 192, 138, 0.4);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.quick-start-card:active { transform: translateY(1px); }
+.quick-start-card .qs-eyebrow {
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #d8c79b;
+}
+.quick-start-card .qs-course {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 600;
+  line-height: 1.15;
+}
+.quick-start-card .qs-meta {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.82);
+}
+.quick-start-card .qs-go {
+  margin-top: 9px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(217, 192, 138, 0.16);
+  border: 1px solid rgba(217, 192, 138, 0.5);
+  color: #f0e3c2;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
 .round-collapse-banner {
   width: 100%;
   display: flex;

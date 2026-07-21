@@ -633,6 +633,7 @@
     roundEntryTitle: document.getElementById("roundEntryTitle"),
     roundSubmitButton: document.getElementById("roundSubmitButton"),
     scorecardGrid: document.getElementById("scorecardGrid"),
+    quickStartSlot: document.getElementById("quickStartSlot"),
     startRoundContainer: document.getElementById("startRoundContainer"),
     startRoundButton: document.getElementById("startRoundButton"),
     startRoundHint: document.getElementById("startRoundHint"),
@@ -2063,6 +2064,9 @@
     }
     // Chip rows need re-sync so newly-tapped / un-tapped rows show right.
     syncAllChipsToSelects();
+    // The one-tap replay card lives above the setup form — only in the
+    // pre-start phase, and only when there's a last round to replay.
+    renderQuickStart();
   }
 
   function startRound() {
@@ -2078,6 +2082,95 @@
     renderScorecard(getSelectedRoundCourse());
     // Auto-collapse the setup section so the scorecard gets the screen.
     if (typeof renderRoundSetupChrome === "function") renderRoundSetupChrome();
+  }
+
+  // ---- One-tap "Play it again" quick start --------------------------------
+  //
+  // The blank-by-design setup form is the right default for a NEW situation,
+  // but Joe replays the same course/tee constantly — standing on the first
+  // tee, eight chip rows is why a paper card wins. This reconstructs the
+  // most recent round's setup and starts scoring in a single tap. Wind and
+  // play-type stay unset (weather changes daily; both editable from the
+  // collapsed setup banner after start).
+
+  function describeLastRoundSetup() {
+    if (!state.rounds.length) return null;
+    const last = [...state.rounds].sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0];
+    if (!last || !last.courseId) return null;
+    if (isDeerwoodCourseId(last.courseId)) {
+      // Saved Deerwood ids encode layout + tee: deerwood-{nine[-nine]}-{tee}.
+      const parts = String(last.courseId).replace("deerwood-", "").split("-");
+      const teePart = parts.pop();
+      const tee = DEERWOOD_TEE_OPTIONS.find((option) => option.toLowerCase() === teePart);
+      const layoutId = parts.join("-");
+      if (!tee || !layoutId || !parts.every((nine) => DEERWOOD_NINE_IDS.includes(nine))) return null;
+      const holeCount = layoutId.includes("-") ? "18" : "9";
+      const nines = parts.map((nine) => deerwoodNineLabels[nine] || nine).join("–");
+      return {
+        course: DEERWOOD_COURSE_ID, holeCount, layoutId, tee,
+        name: "Deerwood",
+        detail: `${nines} · ${tee} tees · ${holeCount} holes`
+      };
+    }
+    const entry = getCourse(last.courseId);
+    if (!entry) return null; // course no longer in catalog — nothing to replay
+    const nine = (last.holes || []).length > 0 && last.holes.length <= 9;
+    const firstHole = nine ? Number(last.holes[0] && last.holes[0].number) : 1;
+    return {
+      course: last.courseId,
+      holeCount: nine ? "9" : "18",
+      layoutId: nine ? (firstHole >= 10 ? "back" : "front") : "",
+      tee: last.tee || "",
+      name: physicalCourseName(last.courseId) || entry.name,
+      detail: [
+        nine ? `${firstHole >= 10 ? "Back" : "Front"} 9` : "18 holes",
+        last.tee ? `${last.tee} tees` : ""
+      ].filter(Boolean).join(" · ")
+    };
+  }
+
+  function renderQuickStart() {
+    if (!els.quickStartSlot) return;
+    const show = !roundStarted && !editingRoundId;
+    const setup = show ? describeLastRoundSetup() : null;
+    els.quickStartSlot.hidden = !setup;
+    if (!setup) { els.quickStartSlot.innerHTML = ""; return; }
+    els.quickStartSlot.innerHTML = `
+      <button type="button" class="quick-start-card" id="quickStartButton">
+        <span class="qs-eyebrow">Play it again</span>
+        <span class="qs-course">${escapeHtml(setup.name)}</span>
+        <span class="qs-meta">${escapeHtml(setup.detail)}</span>
+        <span class="qs-go">Start scoring →</span>
+      </button>`;
+    const button = els.quickStartSlot.querySelector("#quickStartButton");
+    if (button) button.addEventListener("click", () => applyQuickStart(setup));
+  }
+
+  function applyQuickStart(setup) {
+    // Same field order restoreInProgressRound uses — course first, then hole
+    // count (which re-renders the layout options), then tee/layout.
+    els.roundDate.value = today;
+    els.roundCourse.value = setup.course;
+    renderRoundSetupOptions();
+    els.roundHoleCount.value = setup.holeCount;
+    renderRoundSetupOptions();
+    if (setup.course === DEERWOOD_COURSE_ID) {
+      if (setup.holeCount === "9") {
+        els.roundLayout.value = setup.layoutId;
+      } else {
+        const [front, back] = String(setup.layoutId).split("-");
+        if (DEERWOOD_NINE_IDS.includes(front)) els.roundFrontNine.value = front;
+        if (DEERWOOD_NINE_IDS.includes(back)) els.roundBackNine.value = back;
+      }
+    } else if (setup.holeCount === "9" && setup.layoutId) {
+      els.roundLayout.value = setup.layoutId;
+    }
+    if (setup.tee) els.roundTee.value = setup.tee;
+    renderRoundSetupOptions();
+    SETUP_CHIP_ROW_IDS.forEach((id) => setupChipRowsTapped.add(id));
+    syncAllChipsToSelects();
+    startRound();
+    showToast(`Round started — ${setup.name}, ${setup.detail}.`);
   }
 
   function syncAllChipsToSelects() {
