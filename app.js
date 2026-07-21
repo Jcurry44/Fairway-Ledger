@@ -1381,6 +1381,9 @@
     return {
       v: 1,
       savedAt: Date.now(),
+      // The per-round entry mode override travels with the draft — a speed
+      // round that gets evicted mid-loop must not resume as a detail wall.
+      entryMode: currentEntryMode,
       date: els.roundDate ? els.roundDate.value || "" : "",
       course: els.roundCourse ? els.roundCourse.value || "" : "",
       holeCount: els.roundHoleCount ? els.roundHoleCount.value || "" : "",
@@ -1470,6 +1473,9 @@
     // and the scorecard is live (not the setup placeholder).
     roundStarted = true;
     SETUP_CHIP_ROW_IDS.forEach((id) => setupChipRowsTapped.add(id));
+    if (data.entryMode === "speed" || data.entryMode === "detailed") {
+      setCurrentEntryMode(data.entryMode);
+    }
     if (data.date) els.roundDate.value = data.date;
     if (data.course) els.roundCourse.value = data.course;
     if (data.note) els.roundNote.value = data.note;
@@ -1539,6 +1545,22 @@
     setActiveTab("rounds");
   }
 
+  // After a restore, land the card view on the hole play actually left off
+  // at — not Hole 1. All holes scored → land on the last card (next stop is
+  // Review & save).
+  function jumpToFirstUnscoredCard() {
+    const stack = els.scorecardGrid.querySelector(".scorecard-cards");
+    if (!stack) return;
+    const cards = [...stack.querySelectorAll(".scorecard-card")];
+    if (!cards.length) return;
+    const idx = cards.findIndex((card) => {
+      const input = card.querySelector(".score-input");
+      return input instanceof HTMLInputElement && input.value.trim() === "";
+    });
+    const target = idx === -1 ? cards.length - 1 : idx;
+    if (target > 0) setActiveCardIndex(target);
+  }
+
   function maybeResumeInProgressRound() {
     if (editingRoundId) return; // edit mode owns the form
     const data = loadInProgressRound();
@@ -1553,28 +1575,36 @@
       clearInProgressRound();
       return;
     }
+    // A round saved in the last 12 hours IS today's round — iOS evicts the
+    // PWA constantly during a 4-hour loop, and every relaunch used to route
+    // through a native confirm whose Cancel button permanently discarded
+    // the draft. Same-day drafts now restore themselves; the phone waking
+    // up mid-round goes straight back to the hole you're standing on.
+    const ageMs = data.savedAt ? Date.now() - data.savedAt : Infinity;
+    const FRESH_DRAFT_MS = 12 * 60 * 60 * 1000;
+    if (ageMs < FRESH_DRAFT_MS) {
+      restoreInProgressRound(data);
+      jumpToFirstUnscoredCard();
+      showToast(`Resumed your round — ${scoreCount} hole${scoreCount === 1 ? "" : "s"} scored.`);
+      return;
+    }
+    // Older drafts still ask — but Cancel only postpones. Discarding is an
+    // explicit act (the Reset button), never the default button of a dialog.
     const parts = [];
     if (scoreCount) parts.push(`${scoreCount} hole${scoreCount === 1 ? "" : "s"} scored`);
     if (noteCount) parts.push(`${noteCount} note${noteCount === 1 ? "" : "s"}`);
     if (shotCount) parts.push(`${shotCount} GPS shot${shotCount === 1 ? "" : "s"}`);
-    let ageLabel = "";
-    if (data.savedAt) {
-      const ageMinutes = Math.floor((Date.now() - data.savedAt) / 60000);
-      if (ageMinutes < 1) ageLabel = " (saved just now)";
-      else if (ageMinutes < 60) ageLabel = ` (saved ${ageMinutes} min ago)`;
-      else if (ageMinutes < 1440) ageLabel = ` (saved ${Math.floor(ageMinutes / 60)} hr ago)`;
-      else ageLabel = ` (saved ${Math.floor(ageMinutes / 1440)} day${Math.floor(ageMinutes / 1440) === 1 ? "" : "s"} ago)`;
-    }
-    const summary = parts.join(", ");
+    const days = Math.floor(ageMs / 86400000);
+    const ageLabel = ageMs === Infinity ? "" : days >= 1
+      ? ` from ${days} day${days === 1 ? "" : "s"} ago`
+      : ` from ${Math.floor(ageMs / 3600000)} hr ago`;
     const ok = window.confirm(
-      `Resume round in progress?\n\n${summary}${ageLabel}.\n\nOK to resume, Cancel to discard.`
+      `Resume the unfinished round${ageLabel}?\n\n${parts.join(", ")}.\n\nOK resumes it. Cancel keeps it for later — nothing is deleted.`
     );
     if (ok) {
       restoreInProgressRound(data);
+      jumpToFirstUnscoredCard();
       showToast("Resumed round in progress.");
-    } else {
-      clearInProgressRound();
-      showToast("Discarded in-progress round.");
     }
   }
 
@@ -10149,7 +10179,9 @@
     if (editingRoundId) {
       clearEditState();
       showToast("Edit cancelled.");
-    } else {
+      return;
+    }
+    const doReset = () => {
       clearInProgressRound();
       resetPendingHoles(); resetReviewState();
       resetPendingSurvey(); syncSurveyUiFromState();
@@ -10157,7 +10189,32 @@
       resetRoundSetupState();
       resetRoundChrome();
       renderScorecard(getSelectedRoundCourse());
-    }
+    };
+    // Reset was a silent one-tap wipe of the live round — in a
+    // localStorage-only app that's unrecoverable. With real entries on the
+    // card it now routes through the destructive-confirm sheet.
+    const snapshot = captureInProgressRound();
+    const scored = snapshot.holes.filter((h) => {
+      const score = Number(h.score);
+      return Number.isFinite(score) && score > 0;
+    }).length;
+    if (!roundTouched || !scored) { doReset(); return; }
+    const courseName = els.roundCourse && els.roundCourse.selectedOptions[0]
+      ? els.roundCourse.selectedOptions[0].textContent : "";
+    openDestructiveConfirm({
+      title: "Discard this round?",
+      message: "The round in progress will be wiped. This cannot be undone.",
+      facts: [
+        courseName && `Course: ${courseName}`,
+        `${scored} hole${scored === 1 ? "" : "s"} scored`
+      ],
+      confirmLabel: "Discard round",
+      showBackupHint: false,
+      onConfirm: () => {
+        doReset();
+        showToast("Round discarded.");
+      }
+    });
   });
 
   if (els.startRoundButton) {
