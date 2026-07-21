@@ -9378,19 +9378,34 @@
     const computed = computeGame(game);
     const lines = gameStandingsLines(game);
     const stake = game.options && Number.isFinite(game.options.stake) ? game.options.stake : null;
+    // A match-style game "finished" before it was mathematically decided
+    // settles on the current lead — say so, or the payout looks wrong next
+    // to the standings line.
+    const matchStates = game.gameType === "nassau"
+      ? [computed.front, computed.back, computed.overall]
+      : (game.gameType === "matchplay" || game.gameType === "bestball") ? [computed] : [];
+    const endedEarly = matchStates.some((m) => m && m.thru > 0 && !m.done);
+    const nothingEntered = matchStates.length > 0 && matchStates.every((m) => !m || m.thru === 0);
     let settleHtml = "";
     if (stake && computed) {
       const settlement = Games.computeSettlement(game, computed, stake);
-      if (settlement && settlement.transfers.length) {
+      const earlyNote = endedEarly
+        ? `<p class="games-hint game-settle-note">Called early — settled on the standings as they sit.</p>` : "";
+      if (nothingEntered) {
+        settleHtml = `<h3 class="games-section-title">Settle up</h3><p class="games-hint">No holes entered — nothing to settle.</p>`;
+      } else if (settlement && settlement.transfers.length) {
         settleHtml = `
           <h3 class="games-section-title">Settle up</h3>
+          ${earlyNote}
           <ul class="game-settle-list">
             ${settlement.transfers.map((t) => `
               <li><strong>${escapeHtml(gamePlayerName(game, t.from))}</strong> pays <strong>${escapeHtml(gamePlayerName(game, t.to))}</strong> $${t.amount.toFixed(2)}</li>`).join("")}
           </ul>`;
       } else if (settlement) {
-        settleHtml = `<h3 class="games-section-title">Settle up</h3><p class="games-hint">All square — nobody owes anything.</p>`;
+        settleHtml = `<h3 class="games-section-title">Settle up</h3>${earlyNote}<p class="games-hint">All square — nobody owes anything.</p>`;
       }
+    } else {
+      settleHtml = `<h3 class="games-section-title">Settle up</h3><p class="games-hint">No stake was set for this game — bragging rights only.</p>`;
     }
     let extras = "";
     if (game.gameType === "skins" && computed && computed.carrying > 0) {
