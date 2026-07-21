@@ -3048,13 +3048,12 @@
             ${penaltyInputCell(hole)}
             ${girInputCell(hole)}
           </div>
-          ${cardFlowMode === "narrative" ? "" : `${renderScorePills(hole)}${renderPuttsPills(hole)}`}
+          ${renderScorePills(hole)}${renderPuttsPills(hole)}
           <div class="card-extra">
             ${cardFlowMode === "narrative" ? `
               ${renderClubsHitPills(hole)}
               ${renderShotTracker(hole)}
               ${renderFairwayPills(hole)}
-              ${renderPuttsPills(hole)}
               ${renderFirstPuttPills(hole)}
               ${renderPenPills(hole)}
               ${renderPenaltyClubRow(hole)}
@@ -3063,7 +3062,6 @@
                 <span>What happened on this hole?</span>
                 <textarea class="card-note-input" data-hole="${hole.number}" rows="2" placeholder="Drove left, chipped twice, 2-putt from 12ft… (tap the mic on your keyboard for voice)">${escapeHtml(getHoleNote(hole.number))}</textarea>
               </label>
-              ${renderScorePills(hole)}
             ` : `
               ${renderFirstPuttPills(hole)}
               ${renderFairwayPills(hole)}
