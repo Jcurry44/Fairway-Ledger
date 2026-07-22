@@ -9063,7 +9063,8 @@
     activeGameId: null,
     entryView: "hole",       // hole | grid
     holeIndex: 0,
-    confirmingDeleteId: null
+    confirmingDeleteId: null,
+    editingStake: false      // summary view: stake input open
   };
 
   function saveGamesState() {
@@ -9317,7 +9318,7 @@
         ${optionToggles ? `<h3 class="games-section-title">Options</h3>${optionToggles}` : ""}
         <label class="game-setup-field game-stake-field">
           ${escapeHtml(meta.stakeLabel || "$ per point")} <span class="games-hint-inline">(optional — leave blank for bragging rights)</span>
-          <input type="number" inputmode="decimal" min="0" step="0.25" class="game-stake-input" placeholder="0">
+          <input type="text" inputmode="decimal" class="game-stake-input" placeholder="0">
         </label>
         <button type="button" class="primary-button" data-game-action="start">Start game →</button>
       </div>`;
@@ -9330,7 +9331,14 @@
       return Boolean(b.bingo || b.bango || b.bongo);
     }
     if (meta && meta.needsScores) {
-      return game.players.every((p) => Number.isFinite(hole.scores[p.id]) && hole.scores[p.id] > 0);
+      const scored = game.players.every((p) => Number.isFinite(hole.scores[p.id]) && hole.scores[p.id] > 0);
+      // Wolf: a fully-scored hole with no partner/Lone-Wolf pick is worth 0
+      // points in the engine — counting it "complete" hides real money from
+      // the settle-up. The pick is part of entering the hole.
+      if (game.gameType === "wolf") {
+        return scored && Boolean(hole.wolf && hole.wolf.wolfId);
+      }
+      return scored;
     }
     return false;
   }
@@ -9358,7 +9366,13 @@
         ${standings}
         ${entry}
         <div class="games-finish-row">
-          <span class="games-hint">${doneCount}/${game.holes.length} holes entered</span>
+          <span class="games-hint">${(() => {
+            const counts = gameScoreCounts(game);
+            const uneven = counts.length > 1 && new Set(counts.map((c) => c.count)).size > 1;
+            return uneven
+              ? `${doneCount}/${game.holes.length} complete — ${escapeHtml(counts.map((c) => `${c.name} ${c.count}`).join(" · "))}`
+              : `${doneCount}/${game.holes.length} holes entered`;
+          })()}</span>
           <button type="button" class="primary-button" data-game-action="finish">Finish game</button>
         </div>
       </div>`;
@@ -9492,6 +9506,28 @@
       <p class="games-hint">Tap a row to jump to that hole.</p>`;
   }
 
+  // Forgiving stake reader: users type "$5", "5.00", "5," — take the number,
+  // reject garbage loudly instead of silently starting a stakeless game.
+  function parseStakeValue(raw) {
+    const text = String(raw == null ? "" : raw).trim();
+    if (!text) return { empty: true, value: null };
+    const cleaned = Number(text.replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(cleaned) || cleaned <= 0) return { empty: false, value: null, bad: text };
+    return { empty: false, value: cleaned };
+  }
+
+  // Per-player entered-hole counts — the honest answer to "why doesn't the
+  // app see my 18 holes?" (a match hole only counts when EVERYONE has a
+  // score on it).
+  function gameScoreCounts(game) {
+    const meta = Games.GAME_BY_ID[game.gameType];
+    if (!meta || !meta.needsScores) return [];
+    return game.players.map((p) => ({
+      name: p.name,
+      count: game.holes.filter((h) => Number.isFinite(h.scores[p.id]) && h.scores[p.id] > 0).length
+    }));
+  }
+
   function renderGameSummaryView() {
     const game = getActiveGame();
     if (!game) return renderGamesHomeView();
@@ -9506,27 +9542,47 @@
       ? [computed.front, computed.back, computed.overall]
       : (game.gameType === "matchplay" || game.gameType === "bestball") ? [computed] : [];
     const endedEarly = matchStates.some((m) => m && m.thru > 0 && !m.done);
-    const nothingEntered = matchStates.length > 0 && matchStates.every((m) => !m || m.thru === 0);
+    const doneCount = game.holes.filter((h) => gameHoleEntryComplete(game, h)).length;
+    const counts = gameScoreCounts(game);
+    const somebodyEntered = counts.some((c) => c.count > 0);
+    const uneven = counts.length > 1 && new Set(counts.map((c) => c.count)).size > 1;
+    const countsLine = counts.map((c) => `${c.name} ${c.count}`).join(" · ");
+    // The stake row is always present and always fixable — 'we forgot to
+    // set a stake on the first tee' shouldn't cost the settle-up.
+    const stakeRow = (gamesUi.editingStake || !stake) ? `
+      <div class="game-stake-late-row">
+        <input class="game-stake-late-input" type="text" inputmode="decimal" placeholder="${stake ? String(stake) : "$ stake"}" value="${stake ? String(stake) : ""}">
+        <button type="button" class="games-count-chip small" data-game-action="set-stake">${stake ? "Save" : "Set stake"}</button>
+      </div>` : `
+      <p class="games-hint game-stake-line">Stake: $${stake.toFixed(2)}${meta && meta.stakeLabel ? ` (${escapeHtml(meta.stakeLabel.replace("$ ", ""))})` : ""}
+        <button type="button" class="game-stake-edit" data-game-action="edit-stake">Edit</button></p>`;
     let settleHtml = "";
     if (stake && computed) {
       const settlement = Games.computeSettlement(game, computed, stake);
       const earlyNote = endedEarly
         ? `<p class="games-hint game-settle-note">Called early — settled on the standings as they sit.</p>` : "";
-      if (nothingEntered) {
-        settleHtml = `<h3 class="games-section-title">Settle up</h3><p class="games-hint">No holes entered — nothing to settle.</p>`;
+      const unevenNote = (uneven && doneCount > 0)
+        ? `<p class="games-hint game-settle-note">Uneven entry — ${escapeHtml(countsLine)} holes. ${game.gameType === "stableford"
+            ? "Missing holes score 0 points for that player."
+            : "Only holes with everyone's score count."}</p>` : "";
+      if (doneCount === 0) {
+        settleHtml = `<h3 class="games-section-title">Settle up</h3>${stakeRow}<p class="games-hint">${somebodyEntered
+          ? `No hole has a score for every player yet — entered so far: ${escapeHtml(countsLine)}. Fill in the missing scores, then finish.`
+          : "No holes entered — nothing to settle."}</p>`;
       } else if (settlement && settlement.transfers.length) {
         settleHtml = `
           <h3 class="games-section-title">Settle up</h3>
-          ${earlyNote}
+          ${stakeRow}
+          ${earlyNote}${unevenNote}
           <ul class="game-settle-list">
             ${settlement.transfers.map((t) => `
               <li><strong>${escapeHtml(gamePlayerName(game, t.from))}</strong> pays <strong>${escapeHtml(gamePlayerName(game, t.to))}</strong> $${t.amount.toFixed(2)}</li>`).join("")}
           </ul>`;
       } else if (settlement) {
-        settleHtml = `<h3 class="games-section-title">Settle up</h3>${earlyNote}<p class="games-hint">All square — nobody owes anything.</p>`;
+        settleHtml = `<h3 class="games-section-title">Settle up</h3>${stakeRow}${earlyNote}${unevenNote}<p class="games-hint">All square — nobody owes anything.</p>`;
       }
     } else {
-      settleHtml = `<h3 class="games-section-title">Settle up</h3><p class="games-hint">No stake was set for this game — bragging rights only.</p>`;
+      settleHtml = `<h3 class="games-section-title">Settle up</h3>${stakeRow}<p class="games-hint">No stake set — bragging rights only. Add one above to settle up, even now.</p>`;
     }
     let extras = "";
     if (game.gameType === "skins" && computed && computed.carrying > 0) {
@@ -9542,7 +9598,8 @@
         ${extras}
         ${settleHtml}
         ${game.status === "active" ? `<button type="button" class="primary-button" data-game-action="confirm-finish">Confirm final →</button>
-        <button type="button" class="games-back-secondary" data-game-action="resume-play">← Keep playing</button>` : ""}
+        <button type="button" class="games-back-secondary" data-game-action="resume-play">← Keep playing</button>`
+        : `<button type="button" class="games-back-secondary" data-game-action="reopen">Reopen game — fix a score</button>`}
       </div>`;
   }
 
@@ -9570,11 +9627,38 @@
       if (action === "setup") { gamesUi.view = "setup"; }
       if (action === "toggle-view") { gamesUi.entryView = gamesUi.entryView === "grid" ? "hole" : "grid"; }
       if (action === "start") { startGameFromSetup(); return; }
-      if (action === "finish") { gamesUi.view = "summary"; }
-      if (action === "resume-play") { gamesUi.view = "play"; }
+      if (action === "finish") { gamesUi.view = "summary"; gamesUi.editingStake = false; }
+      if (action === "resume-play") { gamesUi.view = "play"; gamesUi.editingStake = false; }
       if (action === "confirm-finish") {
         const game = getActiveGame();
         if (game) { game.status = "final"; saveGamesState(); }
+      }
+      if (action === "reopen") {
+        // Finality is a UI state, not a contract — a fat-fingered score
+        // discovered after Confirm shouldn't leave the money wrong forever.
+        const game = getActiveGame();
+        if (game) {
+          game.status = "active";
+          saveGamesState();
+          gamesUi.view = "play";
+          gamesUi.holeIndex = firstIncompleteGameHole(game);
+        }
+      }
+      if (action === "edit-stake") { gamesUi.editingStake = true; }
+      if (action === "set-stake") {
+        const game = getActiveGame();
+        const input = els.gamesRoot.querySelector(".game-stake-late-input");
+        if (game && input) {
+          const parsed = parseStakeValue(input.value);
+          if (parsed.bad) {
+            showToast(`Couldn't read "${parsed.bad}" as a stake — digits only, like 5.`);
+            return;
+          }
+          game.options = { ...(game.options || {}), stake: parsed.value };
+          saveGamesState();
+          gamesUi.editingStake = false;
+          showToast(parsed.value ? `Stake set — $${parsed.value.toFixed(2)}.` : "Stake cleared.");
+        }
       }
       renderGames();
       return;
@@ -9716,8 +9800,14 @@
       options[opt.id] = toggle ? toggle.checked : Boolean(opt.default);
     });
     const stakeInput = els.gamesRoot.querySelector(".game-stake-input");
-    const stakeVal = stakeInput ? Number(stakeInput.value) : NaN;
-    if (Number.isFinite(stakeVal) && stakeVal > 0) options.stake = stakeVal;
+    const parsedStake = parseStakeValue(stakeInput ? stakeInput.value : "");
+    if (parsedStake.bad) {
+      // A stake the user typed but we can't read must never silently become
+      // "no stake" — that's an 18-holes-later surprise on the settle screen.
+      showToast(`Couldn't read "${parsedStake.bad}" as a stake — digits only, like 5.`);
+      return;
+    }
+    if (parsedStake.value) options.stake = parsedStake.value;
     const teams = meta.teams ? [[players[0].id, players[1].id], [players[2].id, players[3].id]] : null;
     const game = {
       id: makeId("game"),

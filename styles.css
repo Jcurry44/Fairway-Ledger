@@ -6927,6 +6927,34 @@ td {
   margin-top: 16px;
 }
 
+/* Late stake row on the settle screen — set or fix the stake even after
+   the round (or after Confirm final). */
+.game-stake-late-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 6px 0 10px;
+}
+.game-stake-late-input {
+  width: 110px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  font: inherit;
+}
+.game-stake-line { display: flex; align-items: center; gap: 10px; }
+.game-stake-edit {
+  border: none;
+  background: none;
+  padding: 2px 4px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .game-settle-list {
   list-style: none;
   margin: 0;
