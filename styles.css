@@ -6175,6 +6175,10 @@ td {
   .app-tabs {
     overflow-x: auto;
     position: fixed;
+    /* top: auto is LOAD-BEARING — the base rule's sticky top: 0 otherwise
+       combines with bottom: 0 and stretches the bar into a full-screen
+       overlay (the 2026-07-22 hotfix). */
+    top: auto;
     bottom: 0;
     left: 0;
     right: 0;
