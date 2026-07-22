@@ -1655,8 +1655,10 @@ body.floating-card-nav-visible .floating-card-nav {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
-  min-width: 40px;
+  /* 44px = Apple's minimum comfortable target — these pills are the app's
+     primary input surface, tapped in wind with a glove half-off. */
+  min-height: 44px;
+  min-width: 44px;
   padding: 4px 12px;
   border: 1.5px solid var(--line, #d6e2d9);
   border-radius: 999px;
@@ -6167,11 +6169,32 @@ td {
     padding-right: 88px;
   }
 
+  /* Sticky bottom tab bar: mid-card (cards run 2+ screens) the top tabs
+     used to scroll away, so any Rounds↔Games switch meant scrolling all the
+     way up. Fixed to the thumb zone instead, clear of the home indicator. */
   .app-tabs {
     overflow-x: auto;
-    position: static;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 60;
+    margin: 0;
+    border-radius: 0;
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -8px 24px rgba(25, 38, 30, 0.10);
     gap: 4px;
-    padding: 5px;
+    padding: 5px 5px calc(5px + env(safe-area-inset-bottom));
+  }
+
+  /* Keep page content (and the round Save button) clear of the fixed bar. */
+  body {
+    padding-bottom: 76px;
+  }
+
+  /* Toasts ride above the fixed tab bar instead of hiding behind it. */
+  .toast {
+    bottom: calc(84px + env(safe-area-inset-bottom));
   }
 
   /* Phone tab bar: classic icon-over-label segments, equal widths. Five

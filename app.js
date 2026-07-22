@@ -2067,6 +2067,7 @@
     // The one-tap replay card lives above the setup form — only in the
     // pre-start phase, and only when there's a last round to replay.
     renderQuickStart();
+    syncWakeLock();
   }
 
   function startRound() {
@@ -3290,6 +3291,34 @@
     updateRoundPreview();
   }
 
+  // Tap a score, walk to the next tee — the card advances itself. SPEED
+  // mode only: there score is the whole job, so entry becomes literally one
+  // tap per hole; in detailed mode the user still has putts/clubs below and
+  // an auto-jump would fight them. Only from the card being played, only
+  // INTO a hole with no score yet (so tapping back to fix hole 4 never
+  // yanks the view forward), never off the last hole (the Review CTA is
+  // the next step there). Edit mode is naturally immune: every hole
+  // already has a value.
+  let autoAdvanceTimer = null;
+  function maybeAutoAdvanceAfterScore(holeNumber) {
+    if (currentEntryMode !== "speed") return;
+    if (viewMode !== "card") return;
+    const stack = els.scorecardGrid.querySelector(".scorecard-cards");
+    if (!stack) return;
+    const cards = [...stack.querySelectorAll(".scorecard-card")];
+    const idx = cards.findIndex((c) => c.dataset.holeNumber === String(holeNumber));
+    if (idx === -1 || idx !== getActiveCardIndex()) return;
+    if (idx >= cards.length - 1) return;
+    const next = cards[idx + 1].querySelector(".score-input");
+    if (!(next instanceof HTMLInputElement) || next.value.trim() !== "") return;
+    if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
+    autoAdvanceTimer = setTimeout(() => {
+      autoAdvanceTimer = null;
+      if (viewMode !== "card" || getActiveCardIndex() !== idx) return;
+      setActiveCardIndex(idx + 1);
+    }, 450);
+  }
+
   function getCardCount() {
     return els.scorecardGrid.querySelectorAll(".scorecard-card").length;
   }
@@ -3444,6 +3473,7 @@
           // subsequent auto-recalcs don't blow it away.
           const scoreInput = stack.querySelector(`.score-input[data-hole="${holeNumber}"]`);
           if (scoreInput) delete scoreInput.dataset.autoScore;
+          maybeAutoAdvanceAfterScore(holeNumber);
         }
         return;
       }
@@ -9178,6 +9208,7 @@
 
   function renderGames() {
     if (!els.gamesRoot) return;
+    syncWakeLock();
     let html = "";
     switch (gamesUi.view) {
       case "pick": html = renderGamePickView(); break;
@@ -9956,7 +9987,42 @@
     // Refresh the snapshot panel on Profile entry so timestamps don't drift
     // (e.g. "2 min ago" should re-evaluate without a full reload).
     if (targetName === "profile") renderSnapshotPanel();
+    syncWakeLock();
   }
+
+  // ---- Screen wake lock ---------------------------------------------------
+  //
+  // Keep the screen awake while actually scoring — a live round on the
+  // rounds tab, or a live game on the games tab. iOS releases the lock
+  // whenever the app is pocketed; the visibilitychange hook re-acquires on
+  // wake. Feature-detected, fails silent (Safari 16.4+ / installed PWAs).
+  let screenWakeLock = null;
+  function wantsWakeLock() {
+    const roundsLive = roundStarted && !editingRoundId
+      && !!document.querySelector('.tab-panel[data-tab-panel="rounds"].active');
+    const gameLive = gamesUi.view === "play"
+      && !!document.querySelector('.tab-panel[data-tab-panel="games"].active');
+    return roundsLive || gameLive;
+  }
+  async function syncWakeLock() {
+    if (!("wakeLock" in navigator)) return;
+    const want = wantsWakeLock() && document.visibilityState === "visible";
+    try {
+      if (want && !screenWakeLock) {
+        screenWakeLock = await navigator.wakeLock.request("screen");
+        screenWakeLock.addEventListener("release", () => { screenWakeLock = null; });
+      } else if (!want && screenWakeLock) {
+        const lock = screenWakeLock;
+        screenWakeLock = null;
+        await lock.release();
+      }
+    } catch {
+      screenWakeLock = null;
+    }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") syncWakeLock();
+  });
 
   function refreshRoundSetup() {
     resetRoundChrome();
