@@ -4,7 +4,70 @@
 survive context resets. Each entry has the original prompt/thought + my
 take + a rough effort estimate.*
 
-Last updated: 2026-07-06 (premium UI pass — see below)
+Last updated: 2026-07-21 (convenience + settle-trust batch — see below)
+
+---
+
+## On branch `games-settle-oncourse-2026-07-21` (NOT pushed; ready to deploy)
+
+Joe's ask: "using it less and less when I golf — not convenient enough…
+better UI/UX, more premium. Also my wife said the quick score settling
+wasn't working at all." Nine commits, verified in-browser + 187/187 tests:
+
+1. `4d21d3a` **P0 settle fix** — match-style games (Match Play/Nassau/Best
+   Ball) called before mathematical completion settled as "All square"
+   (the wife's bug: 9 holes of a default-18 match = "Joe 9 UP" and
+   "nobody owes anything" on one screen). Early finishes now pay the
+   leader with an honest "Called early" note. +7 engine tests.
+2. `52072b7` **Score-first hole cards** — SCORE led-from-bottom → top in
+   both flow modes (it sat below 23 club chips + GPS + 7 rows; narrative
+   default since 2026-05-26 tracks the usage decline).
+3. `c4c617f` **Auto-resume + guarded discard** — <12h drafts restore with
+   no dialog onto the first unscored hole; the old confirm's Cancel
+   DISCARDED the round (P0 data-loss trap); Reset now routes through the
+   destructive-confirm sheet; drafts carry entry mode.
+4. `5dc6c26` **"Play it again" card** — one tap replays last round's
+   course/nines/tee and starts scoring.
+5. `fb93def` **P0 SW rework** — stale-while-revalidate assets (instant
+   launch on weak LTE), 2.5s-capped navigations, VERSIONED precache
+   (query-less entries used to strand offline phones on stale bundles
+   forever), fonts non-blocking, busters unified to ASSET_VERSION.
+6. `ca4b467` **Deploy-consistency test gate** — every index.html ?v= must
+   equal sw.js ASSET_VERSION or the suite fails.
+7. `93fe650` **Settle-trust pack** — stake can't be silently lost (text
+   input + forgiving parse + blocking toast), stake add/edit ON the
+   settle screen (finals too), per-player entered counts ("Joe 3 ·
+   Kate 0"), honest zero/uneven-entry messages for every game type,
+   Reopen for confirmed finals, wolf pick required for hole completion.
+8. `ce4d073` **On-course ergonomics** — fixed bottom tab bar on phones,
+   44px pills, speed-mode auto-advance on score tap, screen wake lock.
+9. `1a0ca53` **Games premium pass** — settle-up payoff hero + brass
+   transfer rows, hole-entry card material, home-card parity, grid
+   de-spreadsheet, 160ms card-settle.
+
+**Deploy notes:** cache buster = `2026-07-21b` / SW `v87`. After push,
+each phone needs ONE online open to pick up the new SW (skipWaiting+claim)
+— until then old clients still run the pre-fix bundle.
+
+**Audit leftovers (confirmed real, not yet done, in priority order):**
+- Scramble setup: tapping a team-count chip re-renders and wipes typed
+  names + stake (harvest inputs into gamesUi before renderGames).
+- needsPar games (Vegas/Stableford/Scramble): every hole seeds par 4 and
+  a never-touched par row silently settles wrong money — create with
+  par:null, require par for completeness.
+- saveGamesState swallows storage failures silently (games are ALSO
+  excluded from snapshots + export — no safety net; surface a toast +
+  retry like takeSnapshot's quota prune).
+- Stableford uneven-entry money (warning shipped; decide whether to gate
+  on holeComplete instead).
+- Round↔game single-entry: auto-push player-1 scores from the live round
+  draft into the active game (pull chip is one-way/per-hole today);
+  bigger version = linked games (design in audit output).
+- Detailed-card "Details" disclosure (GPS/1st putt/bunker/pen-club/note
+  collapsed per hole), warm-token alignment on Add Round card, Profile
+  panel merge, pace-vs-your-average line (computePaceVsSelf in
+  lib/golf-math.js), 18-hole auto-advance for detailed mode once the
+  disclosure exists.
 
 ---
 
