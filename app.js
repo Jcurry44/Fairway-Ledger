@@ -9470,7 +9470,7 @@
       <div class="game-hole-entry">
         <div class="game-hole-nav">
           <button type="button" class="card-step" data-game-nav="-1" ${idx === 0 ? "disabled" : ""}>‹</button>
-          <strong>Hole ${hole.number}</strong>
+          <span class="game-hole-title">Hole ${hole.number} <em>of ${game.holes.length}</em></span>
           <button type="button" class="card-step" data-game-nav="1" ${idx >= game.holes.length - 1 ? "disabled" : ""}>›</button>
         </div>
         ${parRow}
@@ -9607,7 +9607,7 @@
           ${earlyNote}${unevenNote}
           <ul class="game-settle-list">
             ${settlement.transfers.map((t) => `
-              <li><strong>${escapeHtml(gamePlayerName(game, t.from))}</strong> pays <strong>${escapeHtml(gamePlayerName(game, t.to))}</strong> $${t.amount.toFixed(2)}</li>`).join("")}
+              <li><span class="settle-who"><strong>${escapeHtml(gamePlayerName(game, t.from))}</strong> pays <strong>${escapeHtml(gamePlayerName(game, t.to))}</strong></span><span class="settle-amount">$${t.amount.toFixed(2)}</span></li>`).join("")}
           </ul>`;
       } else if (settlement) {
         settleHtml = `<h3 class="games-section-title">Settle up</h3>${stakeRow}${earlyNote}${unevenNote}<p class="games-hint">All square — nobody owes anything.</p>`;
@@ -9622,9 +9622,12 @@
     return `
       <div class="games-summary">
         <button type="button" class="games-back" data-game-action="home">← Games</button>
-        <h2>${escapeHtml(meta ? meta.name : "")} — final</h2>
-        <div class="game-standings final">
-          ${lines.map((l) => `<div class="game-standings-line">${escapeHtml(l)}</div>`).join("")}
+        <div class="game-final-hero">
+          <p class="game-final-eyebrow">${game.status === "final" ? "Final" : "Finishing up"}</p>
+          <h2 class="game-final-name">${escapeHtml(meta ? meta.name : "")}</h2>
+          <div class="game-final-standings">
+            ${lines.map((l) => `<div class="game-standings-line">${escapeHtml(l)}</div>`).join("")}
+          </div>
         </div>
         ${extras}
         ${settleHtml}
