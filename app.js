@@ -9094,8 +9094,26 @@
     entryView: "hole",       // hole | grid
     holeIndex: 0,
     confirmingDeleteId: null,
-    editingStake: false      // summary view: stake input open
+    editingStake: false,     // summary view: stake input open
+    setupNames: null,        // draft names typed mid-setup, harvested before a
+                             // count-chip re-render wipes the inputs (null = no
+                             // draft yet, fall back to remembered/placeholder)
+    setupStake: null         // draft stake string, same reason
   };
+
+  // A player/entrant-count chip tap re-renders the whole setup view (to swap
+  // in the new row count), which would otherwise wipe any names or stake the
+  // user already typed. Pull the live DOM values into gamesUi first so the
+  // next render can seed them back in.
+  function harvestGameSetupInputs() {
+    if (!els.gamesRoot) return;
+    const nameInputs = [...els.gamesRoot.querySelectorAll(".game-player-name")];
+    if (nameInputs.length) {
+      gamesUi.setupNames = nameInputs.map((input) => input.value);
+    }
+    const stakeInput = els.gamesRoot.querySelector(".game-stake-input");
+    if (stakeInput) gamesUi.setupStake = stakeInput.value;
+  }
 
   function saveGamesState() {
     try { localStorage.setItem(GAMES_KEY, JSON.stringify(gamesState)); } catch {}
@@ -9320,12 +9338,19 @@
         ${meta.entrantCounts.map((n) => `
           <button type="button" class="games-count-chip${n === count ? " active" : ""}" data-game-entrants="${n}">${n} team${n === 1 ? "" : "s"}</button>`).join("")}
       </div>` : "";
-    const nameInputs = Array.from({ length: count }, (_, i) => `
+    const draftNames = gamesUi.setupNames;
+    const nameInputs = Array.from({ length: count }, (_, i) => {
+      const draft = draftNames && draftNames[i] !== undefined ? draftNames[i] : null;
+      const value = draft !== null
+        ? draft
+        : (remembered[i] || (!isEntrant && i === 0 ? "Me" : ""));
+      return `
       <label class="game-setup-field">
         ${escapeHtml(label(i))}
         <input type="text" class="game-player-name" data-player-index="${i}" maxlength="24"
-          value="${escapeHtml(remembered[i] || (!isEntrant && i === 0 ? "Me" : ""))}" placeholder="${escapeHtml(placeholder(i))}">
-      </label>`).join("");
+          value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder(i))}">
+      </label>`;
+    }).join("");
     const holeChips = meta.holeCounts.map((n) => `
       <button type="button" class="games-count-chip${n === 18 ? " active" : ""}" data-game-holecount="${n}">${n} holes</button>`).join("");
     const optionToggles = (meta.options || []).map((opt) => `
@@ -9349,7 +9374,7 @@
         ${optionToggles ? `<h3 class="games-section-title">Options</h3>${optionToggles}` : ""}
         <label class="game-setup-field game-stake-field">
           ${escapeHtml(meta.stakeLabel || "$ per point")} <span class="games-hint-inline">(optional — leave blank for bragging rights)</span>
-          <input type="text" inputmode="decimal" class="game-stake-input" placeholder="0">
+          <input type="text" inputmode="decimal" class="game-stake-input" placeholder="0" value="${escapeHtml(gamesUi.setupStake || "")}">
         </label>
         <button type="button" class="primary-button" data-game-action="start">Start game →</button>
       </div>`;
@@ -9699,16 +9724,22 @@
     }
 
     if (t.dataset.gameCount) {
+      harvestGameSetupInputs();
       gamesUi.playerCount = Number(t.dataset.gameCount);
       renderGames();
       return;
     }
     if (t.dataset.gameEntrants) {
+      harvestGameSetupInputs();
       gamesUi.entrantCount = Number(t.dataset.gameEntrants);
       renderGames();
       return;
     }
     if (t.dataset.gamePick) {
+      // Fresh game pick — start a clean setup draft rather than carrying a
+      // previous game's typed names/stake forward.
+      gamesUi.setupNames = null;
+      gamesUi.setupStake = null;
       gamesUi.pickedGameId = t.dataset.gamePick;
       gamesUi.view = "rules";
       renderGames();
@@ -9864,6 +9895,8 @@
     gamesUi.view = "play";
     gamesUi.holeIndex = 0;
     gamesUi.entryView = "hole";
+    gamesUi.setupNames = null;
+    gamesUi.setupStake = null;
     renderGames();
   }
 
