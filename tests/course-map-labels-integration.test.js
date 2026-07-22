@@ -21,14 +21,25 @@ function between(source, start, end) {
 }
 
 test("draft and seeded label modules load before the map UI and are available offline", () => {
-  const labelsIndex = INDEX_SOURCE.indexOf("./lib/course-map-labels.js?v=2026-07-15a");
-  const seedIndex = INDEX_SOURCE.indexOf("./data/course-maps/deerwood-aerial-labels-v1.js?v=2026-07-15a");
-  const mapUiIndex = INDEX_SOURCE.indexOf("./lib/course-map-ui.js?v=2026-07-15a");
+  const labelsIndex = INDEX_SOURCE.search(/\.\/lib\/course-map-labels\.js\?v=/);
+  const seedIndex = INDEX_SOURCE.search(/\.\/data\/course-maps\/deerwood-aerial-labels-v1\.js\?v=/);
+  const mapUiIndex = INDEX_SOURCE.search(/\.\/lib\/course-map-ui\.js\?v=/);
   assert.notEqual(labelsIndex, -1);
   assert.ok(labelsIndex < seedIndex && seedIndex < mapUiIndex);
   assert.match(SERVICE_WORKER_SOURCE, /'\.\/lib\/course-map-labels\.js'/);
   assert.match(SERVICE_WORKER_SOURCE, /'\.\/data\/course-maps\/deerwood-aerial-labels-v1\.js'/);
-  assert.match(SERVICE_WORKER_SOURCE, /fairway-ledger-v85-2026-07-15a/);
+  // Deploy-consistency gate (2026-07-21 audit P0): every ?v= buster in
+  // index.html must equal sw.js's ASSET_VERSION — a mismatched or partial
+  // bump strands offline clients on stale bundles. This test IS the deploy
+  // check: it fails on any half-bumped deploy, on purpose, instead of the
+  // wife's phone failing on the course.
+  const versionMatch = SERVICE_WORKER_SOURCE.match(/const ASSET_VERSION = '([^']+)'/);
+  assert.ok(versionMatch, "sw.js must declare ASSET_VERSION");
+  const busters = [...INDEX_SOURCE.matchAll(/\?v=([0-9A-Za-z.-]+)/g)].map((m) => m[1]);
+  assert.ok(busters.length >= 12, "index.html should version its core assets");
+  busters.forEach((buster) => {
+    assert.equal(buster, versionMatch[1], "every index.html ?v= must equal sw.js ASSET_VERSION");
+  });
   assert.match(RUNTIME_SOURCE, /mapId: "deerwood-aerial-2024"/);
   assert.match(MAP_UI_SOURCE, /config\.mapId === labelsApi\.MAP_ID/);
   assert.match(MAP_UI_SOURCE, /imageConfig\.sha256\.toLowerCase\(\) === labelsApi\.MAP_SHA256\.toLowerCase\(\)/);

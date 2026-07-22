@@ -633,6 +633,7 @@
     roundEntryTitle: document.getElementById("roundEntryTitle"),
     roundSubmitButton: document.getElementById("roundSubmitButton"),
     scorecardGrid: document.getElementById("scorecardGrid"),
+    quickStartSlot: document.getElementById("quickStartSlot"),
     startRoundContainer: document.getElementById("startRoundContainer"),
     startRoundButton: document.getElementById("startRoundButton"),
     startRoundHint: document.getElementById("startRoundHint"),
@@ -1381,6 +1382,9 @@
     return {
       v: 1,
       savedAt: Date.now(),
+      // The per-round entry mode override travels with the draft — a speed
+      // round that gets evicted mid-loop must not resume as a detail wall.
+      entryMode: currentEntryMode,
       date: els.roundDate ? els.roundDate.value || "" : "",
       course: els.roundCourse ? els.roundCourse.value || "" : "",
       holeCount: els.roundHoleCount ? els.roundHoleCount.value || "" : "",
@@ -1470,6 +1474,9 @@
     // and the scorecard is live (not the setup placeholder).
     roundStarted = true;
     SETUP_CHIP_ROW_IDS.forEach((id) => setupChipRowsTapped.add(id));
+    if (data.entryMode === "speed" || data.entryMode === "detailed") {
+      setCurrentEntryMode(data.entryMode);
+    }
     if (data.date) els.roundDate.value = data.date;
     if (data.course) els.roundCourse.value = data.course;
     if (data.note) els.roundNote.value = data.note;
@@ -1539,6 +1546,22 @@
     setActiveTab("rounds");
   }
 
+  // After a restore, land the card view on the hole play actually left off
+  // at — not Hole 1. All holes scored → land on the last card (next stop is
+  // Review & save).
+  function jumpToFirstUnscoredCard() {
+    const stack = els.scorecardGrid.querySelector(".scorecard-cards");
+    if (!stack) return;
+    const cards = [...stack.querySelectorAll(".scorecard-card")];
+    if (!cards.length) return;
+    const idx = cards.findIndex((card) => {
+      const input = card.querySelector(".score-input");
+      return input instanceof HTMLInputElement && input.value.trim() === "";
+    });
+    const target = idx === -1 ? cards.length - 1 : idx;
+    if (target > 0) setActiveCardIndex(target);
+  }
+
   function maybeResumeInProgressRound() {
     if (editingRoundId) return; // edit mode owns the form
     const data = loadInProgressRound();
@@ -1553,28 +1576,36 @@
       clearInProgressRound();
       return;
     }
+    // A round saved in the last 12 hours IS today's round — iOS evicts the
+    // PWA constantly during a 4-hour loop, and every relaunch used to route
+    // through a native confirm whose Cancel button permanently discarded
+    // the draft. Same-day drafts now restore themselves; the phone waking
+    // up mid-round goes straight back to the hole you're standing on.
+    const ageMs = data.savedAt ? Date.now() - data.savedAt : Infinity;
+    const FRESH_DRAFT_MS = 12 * 60 * 60 * 1000;
+    if (ageMs < FRESH_DRAFT_MS) {
+      restoreInProgressRound(data);
+      jumpToFirstUnscoredCard();
+      showToast(`Resumed your round — ${scoreCount} hole${scoreCount === 1 ? "" : "s"} scored.`);
+      return;
+    }
+    // Older drafts still ask — but Cancel only postpones. Discarding is an
+    // explicit act (the Reset button), never the default button of a dialog.
     const parts = [];
     if (scoreCount) parts.push(`${scoreCount} hole${scoreCount === 1 ? "" : "s"} scored`);
     if (noteCount) parts.push(`${noteCount} note${noteCount === 1 ? "" : "s"}`);
     if (shotCount) parts.push(`${shotCount} GPS shot${shotCount === 1 ? "" : "s"}`);
-    let ageLabel = "";
-    if (data.savedAt) {
-      const ageMinutes = Math.floor((Date.now() - data.savedAt) / 60000);
-      if (ageMinutes < 1) ageLabel = " (saved just now)";
-      else if (ageMinutes < 60) ageLabel = ` (saved ${ageMinutes} min ago)`;
-      else if (ageMinutes < 1440) ageLabel = ` (saved ${Math.floor(ageMinutes / 60)} hr ago)`;
-      else ageLabel = ` (saved ${Math.floor(ageMinutes / 1440)} day${Math.floor(ageMinutes / 1440) === 1 ? "" : "s"} ago)`;
-    }
-    const summary = parts.join(", ");
+    const days = Math.floor(ageMs / 86400000);
+    const ageLabel = ageMs === Infinity ? "" : days >= 1
+      ? ` from ${days} day${days === 1 ? "" : "s"} ago`
+      : ` from ${Math.floor(ageMs / 3600000)} hr ago`;
     const ok = window.confirm(
-      `Resume round in progress?\n\n${summary}${ageLabel}.\n\nOK to resume, Cancel to discard.`
+      `Resume the unfinished round${ageLabel}?\n\n${parts.join(", ")}.\n\nOK resumes it. Cancel keeps it for later — nothing is deleted.`
     );
     if (ok) {
       restoreInProgressRound(data);
+      jumpToFirstUnscoredCard();
       showToast("Resumed round in progress.");
-    } else {
-      clearInProgressRound();
-      showToast("Discarded in-progress round.");
     }
   }
 
@@ -2033,6 +2064,10 @@
     }
     // Chip rows need re-sync so newly-tapped / un-tapped rows show right.
     syncAllChipsToSelects();
+    // The one-tap replay card lives above the setup form — only in the
+    // pre-start phase, and only when there's a last round to replay.
+    renderQuickStart();
+    syncWakeLock();
   }
 
   function startRound() {
@@ -2048,6 +2083,95 @@
     renderScorecard(getSelectedRoundCourse());
     // Auto-collapse the setup section so the scorecard gets the screen.
     if (typeof renderRoundSetupChrome === "function") renderRoundSetupChrome();
+  }
+
+  // ---- One-tap "Play it again" quick start --------------------------------
+  //
+  // The blank-by-design setup form is the right default for a NEW situation,
+  // but Joe replays the same course/tee constantly — standing on the first
+  // tee, eight chip rows is why a paper card wins. This reconstructs the
+  // most recent round's setup and starts scoring in a single tap. Wind and
+  // play-type stay unset (weather changes daily; both editable from the
+  // collapsed setup banner after start).
+
+  function describeLastRoundSetup() {
+    if (!state.rounds.length) return null;
+    const last = [...state.rounds].sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0];
+    if (!last || !last.courseId) return null;
+    if (isDeerwoodCourseId(last.courseId)) {
+      // Saved Deerwood ids encode layout + tee: deerwood-{nine[-nine]}-{tee}.
+      const parts = String(last.courseId).replace("deerwood-", "").split("-");
+      const teePart = parts.pop();
+      const tee = DEERWOOD_TEE_OPTIONS.find((option) => option.toLowerCase() === teePart);
+      const layoutId = parts.join("-");
+      if (!tee || !layoutId || !parts.every((nine) => DEERWOOD_NINE_IDS.includes(nine))) return null;
+      const holeCount = layoutId.includes("-") ? "18" : "9";
+      const nines = parts.map((nine) => deerwoodNineLabels[nine] || nine).join("–");
+      return {
+        course: DEERWOOD_COURSE_ID, holeCount, layoutId, tee,
+        name: "Deerwood",
+        detail: `${nines} · ${tee} tees · ${holeCount} holes`
+      };
+    }
+    const entry = getCourse(last.courseId);
+    if (!entry) return null; // course no longer in catalog — nothing to replay
+    const nine = (last.holes || []).length > 0 && last.holes.length <= 9;
+    const firstHole = nine ? Number(last.holes[0] && last.holes[0].number) : 1;
+    return {
+      course: last.courseId,
+      holeCount: nine ? "9" : "18",
+      layoutId: nine ? (firstHole >= 10 ? "back" : "front") : "",
+      tee: last.tee || "",
+      name: physicalCourseName(last.courseId) || entry.name,
+      detail: [
+        nine ? `${firstHole >= 10 ? "Back" : "Front"} 9` : "18 holes",
+        last.tee ? `${last.tee} tees` : ""
+      ].filter(Boolean).join(" · ")
+    };
+  }
+
+  function renderQuickStart() {
+    if (!els.quickStartSlot) return;
+    const show = !roundStarted && !editingRoundId;
+    const setup = show ? describeLastRoundSetup() : null;
+    els.quickStartSlot.hidden = !setup;
+    if (!setup) { els.quickStartSlot.innerHTML = ""; return; }
+    els.quickStartSlot.innerHTML = `
+      <button type="button" class="quick-start-card" id="quickStartButton">
+        <span class="qs-eyebrow">Play it again</span>
+        <span class="qs-course">${escapeHtml(setup.name)}</span>
+        <span class="qs-meta">${escapeHtml(setup.detail)}</span>
+        <span class="qs-go">Start scoring →</span>
+      </button>`;
+    const button = els.quickStartSlot.querySelector("#quickStartButton");
+    if (button) button.addEventListener("click", () => applyQuickStart(setup));
+  }
+
+  function applyQuickStart(setup) {
+    // Same field order restoreInProgressRound uses — course first, then hole
+    // count (which re-renders the layout options), then tee/layout.
+    els.roundDate.value = today;
+    els.roundCourse.value = setup.course;
+    renderRoundSetupOptions();
+    els.roundHoleCount.value = setup.holeCount;
+    renderRoundSetupOptions();
+    if (setup.course === DEERWOOD_COURSE_ID) {
+      if (setup.holeCount === "9") {
+        els.roundLayout.value = setup.layoutId;
+      } else {
+        const [front, back] = String(setup.layoutId).split("-");
+        if (DEERWOOD_NINE_IDS.includes(front)) els.roundFrontNine.value = front;
+        if (DEERWOOD_NINE_IDS.includes(back)) els.roundBackNine.value = back;
+      }
+    } else if (setup.holeCount === "9" && setup.layoutId) {
+      els.roundLayout.value = setup.layoutId;
+    }
+    if (setup.tee) els.roundTee.value = setup.tee;
+    renderRoundSetupOptions();
+    SETUP_CHIP_ROW_IDS.forEach((id) => setupChipRowsTapped.add(id));
+    syncAllChipsToSelects();
+    startRound();
+    showToast(`Round started — ${setup.name}, ${setup.detail}.`);
   }
 
   function syncAllChipsToSelects() {
@@ -3048,13 +3172,12 @@
             ${penaltyInputCell(hole)}
             ${girInputCell(hole)}
           </div>
-          ${cardFlowMode === "narrative" ? "" : `${renderScorePills(hole)}${renderPuttsPills(hole)}`}
+          ${renderScorePills(hole)}${renderPuttsPills(hole)}
           <div class="card-extra">
             ${cardFlowMode === "narrative" ? `
               ${renderClubsHitPills(hole)}
               ${renderShotTracker(hole)}
               ${renderFairwayPills(hole)}
-              ${renderPuttsPills(hole)}
               ${renderFirstPuttPills(hole)}
               ${renderPenPills(hole)}
               ${renderPenaltyClubRow(hole)}
@@ -3063,7 +3186,6 @@
                 <span>What happened on this hole?</span>
                 <textarea class="card-note-input" data-hole="${hole.number}" rows="2" placeholder="Drove left, chipped twice, 2-putt from 12ft… (tap the mic on your keyboard for voice)">${escapeHtml(getHoleNote(hole.number))}</textarea>
               </label>
-              ${renderScorePills(hole)}
             ` : `
               ${renderFirstPuttPills(hole)}
               ${renderFairwayPills(hole)}
@@ -3167,6 +3289,34 @@
     // a fresh hole; this catches the case where the new card already had
     // a score from a prior visit.)
     updateRoundPreview();
+  }
+
+  // Tap a score, walk to the next tee — the card advances itself. SPEED
+  // mode only: there score is the whole job, so entry becomes literally one
+  // tap per hole; in detailed mode the user still has putts/clubs below and
+  // an auto-jump would fight them. Only from the card being played, only
+  // INTO a hole with no score yet (so tapping back to fix hole 4 never
+  // yanks the view forward), never off the last hole (the Review CTA is
+  // the next step there). Edit mode is naturally immune: every hole
+  // already has a value.
+  let autoAdvanceTimer = null;
+  function maybeAutoAdvanceAfterScore(holeNumber) {
+    if (currentEntryMode !== "speed") return;
+    if (viewMode !== "card") return;
+    const stack = els.scorecardGrid.querySelector(".scorecard-cards");
+    if (!stack) return;
+    const cards = [...stack.querySelectorAll(".scorecard-card")];
+    const idx = cards.findIndex((c) => c.dataset.holeNumber === String(holeNumber));
+    if (idx === -1 || idx !== getActiveCardIndex()) return;
+    if (idx >= cards.length - 1) return;
+    const next = cards[idx + 1].querySelector(".score-input");
+    if (!(next instanceof HTMLInputElement) || next.value.trim() !== "") return;
+    if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
+    autoAdvanceTimer = setTimeout(() => {
+      autoAdvanceTimer = null;
+      if (viewMode !== "card" || getActiveCardIndex() !== idx) return;
+      setActiveCardIndex(idx + 1);
+    }, 450);
   }
 
   function getCardCount() {
@@ -3323,6 +3473,7 @@
           // subsequent auto-recalcs don't blow it away.
           const scoreInput = stack.querySelector(`.score-input[data-hole="${holeNumber}"]`);
           if (scoreInput) delete scoreInput.dataset.autoScore;
+          maybeAutoAdvanceAfterScore(holeNumber);
         }
         return;
       }
@@ -8942,7 +9093,8 @@
     activeGameId: null,
     entryView: "hole",       // hole | grid
     holeIndex: 0,
-    confirmingDeleteId: null
+    confirmingDeleteId: null,
+    editingStake: false      // summary view: stake input open
   };
 
   function saveGamesState() {
@@ -9056,6 +9208,7 @@
 
   function renderGames() {
     if (!els.gamesRoot) return;
+    syncWakeLock();
     let html = "";
     switch (gamesUi.view) {
       case "pick": html = renderGamePickView(); break;
@@ -9196,7 +9349,7 @@
         ${optionToggles ? `<h3 class="games-section-title">Options</h3>${optionToggles}` : ""}
         <label class="game-setup-field game-stake-field">
           ${escapeHtml(meta.stakeLabel || "$ per point")} <span class="games-hint-inline">(optional — leave blank for bragging rights)</span>
-          <input type="number" inputmode="decimal" min="0" step="0.25" class="game-stake-input" placeholder="0">
+          <input type="text" inputmode="decimal" class="game-stake-input" placeholder="0">
         </label>
         <button type="button" class="primary-button" data-game-action="start">Start game →</button>
       </div>`;
@@ -9209,7 +9362,14 @@
       return Boolean(b.bingo || b.bango || b.bongo);
     }
     if (meta && meta.needsScores) {
-      return game.players.every((p) => Number.isFinite(hole.scores[p.id]) && hole.scores[p.id] > 0);
+      const scored = game.players.every((p) => Number.isFinite(hole.scores[p.id]) && hole.scores[p.id] > 0);
+      // Wolf: a fully-scored hole with no partner/Lone-Wolf pick is worth 0
+      // points in the engine — counting it "complete" hides real money from
+      // the settle-up. The pick is part of entering the hole.
+      if (game.gameType === "wolf") {
+        return scored && Boolean(hole.wolf && hole.wolf.wolfId);
+      }
+      return scored;
     }
     return false;
   }
@@ -9237,7 +9397,13 @@
         ${standings}
         ${entry}
         <div class="games-finish-row">
-          <span class="games-hint">${doneCount}/${game.holes.length} holes entered</span>
+          <span class="games-hint">${(() => {
+            const counts = gameScoreCounts(game);
+            const uneven = counts.length > 1 && new Set(counts.map((c) => c.count)).size > 1;
+            return uneven
+              ? `${doneCount}/${game.holes.length} complete — ${escapeHtml(counts.map((c) => `${c.name} ${c.count}`).join(" · "))}`
+              : `${doneCount}/${game.holes.length} holes entered`;
+          })()}</span>
           <button type="button" class="primary-button" data-game-action="finish">Finish game</button>
         </div>
       </div>`;
@@ -9304,7 +9470,7 @@
       <div class="game-hole-entry">
         <div class="game-hole-nav">
           <button type="button" class="card-step" data-game-nav="-1" ${idx === 0 ? "disabled" : ""}>‹</button>
-          <strong>Hole ${hole.number}</strong>
+          <span class="game-hole-title">Hole ${hole.number} <em>of ${game.holes.length}</em></span>
           <button type="button" class="card-step" data-game-nav="1" ${idx >= game.holes.length - 1 ? "disabled" : ""}>›</button>
         </div>
         ${parRow}
@@ -9371,6 +9537,28 @@
       <p class="games-hint">Tap a row to jump to that hole.</p>`;
   }
 
+  // Forgiving stake reader: users type "$5", "5.00", "5," — take the number,
+  // reject garbage loudly instead of silently starting a stakeless game.
+  function parseStakeValue(raw) {
+    const text = String(raw == null ? "" : raw).trim();
+    if (!text) return { empty: true, value: null };
+    const cleaned = Number(text.replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(cleaned) || cleaned <= 0) return { empty: false, value: null, bad: text };
+    return { empty: false, value: cleaned };
+  }
+
+  // Per-player entered-hole counts — the honest answer to "why doesn't the
+  // app see my 18 holes?" (a match hole only counts when EVERYONE has a
+  // score on it).
+  function gameScoreCounts(game) {
+    const meta = Games.GAME_BY_ID[game.gameType];
+    if (!meta || !meta.needsScores) return [];
+    return game.players.map((p) => ({
+      name: p.name,
+      count: game.holes.filter((h) => Number.isFinite(h.scores[p.id]) && h.scores[p.id] > 0).length
+    }));
+  }
+
   function renderGameSummaryView() {
     const game = getActiveGame();
     if (!game) return renderGamesHomeView();
@@ -9378,19 +9566,54 @@
     const computed = computeGame(game);
     const lines = gameStandingsLines(game);
     const stake = game.options && Number.isFinite(game.options.stake) ? game.options.stake : null;
+    // A match-style game "finished" before it was mathematically decided
+    // settles on the current lead — say so, or the payout looks wrong next
+    // to the standings line.
+    const matchStates = game.gameType === "nassau"
+      ? [computed.front, computed.back, computed.overall]
+      : (game.gameType === "matchplay" || game.gameType === "bestball") ? [computed] : [];
+    const endedEarly = matchStates.some((m) => m && m.thru > 0 && !m.done);
+    const doneCount = game.holes.filter((h) => gameHoleEntryComplete(game, h)).length;
+    const counts = gameScoreCounts(game);
+    const somebodyEntered = counts.some((c) => c.count > 0);
+    const uneven = counts.length > 1 && new Set(counts.map((c) => c.count)).size > 1;
+    const countsLine = counts.map((c) => `${c.name} ${c.count}`).join(" · ");
+    // The stake row is always present and always fixable — 'we forgot to
+    // set a stake on the first tee' shouldn't cost the settle-up.
+    const stakeRow = (gamesUi.editingStake || !stake) ? `
+      <div class="game-stake-late-row">
+        <input class="game-stake-late-input" type="text" inputmode="decimal" placeholder="${stake ? String(stake) : "$ stake"}" value="${stake ? String(stake) : ""}">
+        <button type="button" class="games-count-chip small" data-game-action="set-stake">${stake ? "Save" : "Set stake"}</button>
+      </div>` : `
+      <p class="games-hint game-stake-line">Stake: $${stake.toFixed(2)}${meta && meta.stakeLabel ? ` (${escapeHtml(meta.stakeLabel.replace("$ ", ""))})` : ""}
+        <button type="button" class="game-stake-edit" data-game-action="edit-stake">Edit</button></p>`;
     let settleHtml = "";
     if (stake && computed) {
       const settlement = Games.computeSettlement(game, computed, stake);
-      if (settlement && settlement.transfers.length) {
+      const earlyNote = endedEarly
+        ? `<p class="games-hint game-settle-note">Called early — settled on the standings as they sit.</p>` : "";
+      const unevenNote = (uneven && doneCount > 0)
+        ? `<p class="games-hint game-settle-note">Uneven entry — ${escapeHtml(countsLine)} holes. ${game.gameType === "stableford"
+            ? "Missing holes score 0 points for that player."
+            : "Only holes with everyone's score count."}</p>` : "";
+      if (doneCount === 0) {
+        settleHtml = `<h3 class="games-section-title">Settle up</h3>${stakeRow}<p class="games-hint">${somebodyEntered
+          ? `No hole has a score for every player yet — entered so far: ${escapeHtml(countsLine)}. Fill in the missing scores, then finish.`
+          : "No holes entered — nothing to settle."}</p>`;
+      } else if (settlement && settlement.transfers.length) {
         settleHtml = `
           <h3 class="games-section-title">Settle up</h3>
+          ${stakeRow}
+          ${earlyNote}${unevenNote}
           <ul class="game-settle-list">
             ${settlement.transfers.map((t) => `
-              <li><strong>${escapeHtml(gamePlayerName(game, t.from))}</strong> pays <strong>${escapeHtml(gamePlayerName(game, t.to))}</strong> $${t.amount.toFixed(2)}</li>`).join("")}
+              <li><span class="settle-who"><strong>${escapeHtml(gamePlayerName(game, t.from))}</strong> pays <strong>${escapeHtml(gamePlayerName(game, t.to))}</strong></span><span class="settle-amount">$${t.amount.toFixed(2)}</span></li>`).join("")}
           </ul>`;
       } else if (settlement) {
-        settleHtml = `<h3 class="games-section-title">Settle up</h3><p class="games-hint">All square — nobody owes anything.</p>`;
+        settleHtml = `<h3 class="games-section-title">Settle up</h3>${stakeRow}${earlyNote}${unevenNote}<p class="games-hint">All square — nobody owes anything.</p>`;
       }
+    } else {
+      settleHtml = `<h3 class="games-section-title">Settle up</h3>${stakeRow}<p class="games-hint">No stake set — bragging rights only. Add one above to settle up, even now.</p>`;
     }
     let extras = "";
     if (game.gameType === "skins" && computed && computed.carrying > 0) {
@@ -9399,14 +9622,18 @@
     return `
       <div class="games-summary">
         <button type="button" class="games-back" data-game-action="home">← Games</button>
-        <h2>${escapeHtml(meta ? meta.name : "")} — final</h2>
-        <div class="game-standings final">
-          ${lines.map((l) => `<div class="game-standings-line">${escapeHtml(l)}</div>`).join("")}
+        <div class="game-final-hero">
+          <p class="game-final-eyebrow">${game.status === "final" ? "Final" : "Finishing up"}</p>
+          <h2 class="game-final-name">${escapeHtml(meta ? meta.name : "")}</h2>
+          <div class="game-final-standings">
+            ${lines.map((l) => `<div class="game-standings-line">${escapeHtml(l)}</div>`).join("")}
+          </div>
         </div>
         ${extras}
         ${settleHtml}
         ${game.status === "active" ? `<button type="button" class="primary-button" data-game-action="confirm-finish">Confirm final →</button>
-        <button type="button" class="games-back-secondary" data-game-action="resume-play">← Keep playing</button>` : ""}
+        <button type="button" class="games-back-secondary" data-game-action="resume-play">← Keep playing</button>`
+        : `<button type="button" class="games-back-secondary" data-game-action="reopen">Reopen game — fix a score</button>`}
       </div>`;
   }
 
@@ -9434,11 +9661,38 @@
       if (action === "setup") { gamesUi.view = "setup"; }
       if (action === "toggle-view") { gamesUi.entryView = gamesUi.entryView === "grid" ? "hole" : "grid"; }
       if (action === "start") { startGameFromSetup(); return; }
-      if (action === "finish") { gamesUi.view = "summary"; }
-      if (action === "resume-play") { gamesUi.view = "play"; }
+      if (action === "finish") { gamesUi.view = "summary"; gamesUi.editingStake = false; }
+      if (action === "resume-play") { gamesUi.view = "play"; gamesUi.editingStake = false; }
       if (action === "confirm-finish") {
         const game = getActiveGame();
         if (game) { game.status = "final"; saveGamesState(); }
+      }
+      if (action === "reopen") {
+        // Finality is a UI state, not a contract — a fat-fingered score
+        // discovered after Confirm shouldn't leave the money wrong forever.
+        const game = getActiveGame();
+        if (game) {
+          game.status = "active";
+          saveGamesState();
+          gamesUi.view = "play";
+          gamesUi.holeIndex = firstIncompleteGameHole(game);
+        }
+      }
+      if (action === "edit-stake") { gamesUi.editingStake = true; }
+      if (action === "set-stake") {
+        const game = getActiveGame();
+        const input = els.gamesRoot.querySelector(".game-stake-late-input");
+        if (game && input) {
+          const parsed = parseStakeValue(input.value);
+          if (parsed.bad) {
+            showToast(`Couldn't read "${parsed.bad}" as a stake — digits only, like 5.`);
+            return;
+          }
+          game.options = { ...(game.options || {}), stake: parsed.value };
+          saveGamesState();
+          gamesUi.editingStake = false;
+          showToast(parsed.value ? `Stake set — $${parsed.value.toFixed(2)}.` : "Stake cleared.");
+        }
       }
       renderGames();
       return;
@@ -9580,8 +9834,14 @@
       options[opt.id] = toggle ? toggle.checked : Boolean(opt.default);
     });
     const stakeInput = els.gamesRoot.querySelector(".game-stake-input");
-    const stakeVal = stakeInput ? Number(stakeInput.value) : NaN;
-    if (Number.isFinite(stakeVal) && stakeVal > 0) options.stake = stakeVal;
+    const parsedStake = parseStakeValue(stakeInput ? stakeInput.value : "");
+    if (parsedStake.bad) {
+      // A stake the user typed but we can't read must never silently become
+      // "no stake" — that's an 18-holes-later surprise on the settle screen.
+      showToast(`Couldn't read "${parsedStake.bad}" as a stake — digits only, like 5.`);
+      return;
+    }
+    if (parsedStake.value) options.stake = parsedStake.value;
     const teams = meta.teams ? [[players[0].id, players[1].id], [players[2].id, players[3].id]] : null;
     const game = {
       id: makeId("game"),
@@ -9730,7 +9990,42 @@
     // Refresh the snapshot panel on Profile entry so timestamps don't drift
     // (e.g. "2 min ago" should re-evaluate without a full reload).
     if (targetName === "profile") renderSnapshotPanel();
+    syncWakeLock();
   }
+
+  // ---- Screen wake lock ---------------------------------------------------
+  //
+  // Keep the screen awake while actually scoring — a live round on the
+  // rounds tab, or a live game on the games tab. iOS releases the lock
+  // whenever the app is pocketed; the visibilitychange hook re-acquires on
+  // wake. Feature-detected, fails silent (Safari 16.4+ / installed PWAs).
+  let screenWakeLock = null;
+  function wantsWakeLock() {
+    const roundsLive = roundStarted && !editingRoundId
+      && !!document.querySelector('.tab-panel[data-tab-panel="rounds"].active');
+    const gameLive = gamesUi.view === "play"
+      && !!document.querySelector('.tab-panel[data-tab-panel="games"].active');
+    return roundsLive || gameLive;
+  }
+  async function syncWakeLock() {
+    if (!("wakeLock" in navigator)) return;
+    const want = wantsWakeLock() && document.visibilityState === "visible";
+    try {
+      if (want && !screenWakeLock) {
+        screenWakeLock = await navigator.wakeLock.request("screen");
+        screenWakeLock.addEventListener("release", () => { screenWakeLock = null; });
+      } else if (!want && screenWakeLock) {
+        const lock = screenWakeLock;
+        screenWakeLock = null;
+        await lock.release();
+      }
+    } catch {
+      screenWakeLock = null;
+    }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") syncWakeLock();
+  });
 
   function refreshRoundSetup() {
     resetRoundChrome();
@@ -10136,7 +10431,9 @@
     if (editingRoundId) {
       clearEditState();
       showToast("Edit cancelled.");
-    } else {
+      return;
+    }
+    const doReset = () => {
       clearInProgressRound();
       resetPendingHoles(); resetReviewState();
       resetPendingSurvey(); syncSurveyUiFromState();
@@ -10144,7 +10441,32 @@
       resetRoundSetupState();
       resetRoundChrome();
       renderScorecard(getSelectedRoundCourse());
-    }
+    };
+    // Reset was a silent one-tap wipe of the live round — in a
+    // localStorage-only app that's unrecoverable. With real entries on the
+    // card it now routes through the destructive-confirm sheet.
+    const snapshot = captureInProgressRound();
+    const scored = snapshot.holes.filter((h) => {
+      const score = Number(h.score);
+      return Number.isFinite(score) && score > 0;
+    }).length;
+    if (!roundTouched || !scored) { doReset(); return; }
+    const courseName = els.roundCourse && els.roundCourse.selectedOptions[0]
+      ? els.roundCourse.selectedOptions[0].textContent : "";
+    openDestructiveConfirm({
+      title: "Discard this round?",
+      message: "The round in progress will be wiped. This cannot be undone.",
+      facts: [
+        courseName && `Course: ${courseName}`,
+        `${scored} hole${scored === 1 ? "" : "s"} scored`
+      ],
+      confirmLabel: "Discard round",
+      showBackupHint: false,
+      onConfirm: () => {
+        doReset();
+        showToast("Round discarded.");
+      }
+    });
   });
 
   if (els.startRoundButton) {

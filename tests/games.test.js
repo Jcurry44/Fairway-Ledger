@@ -351,6 +351,57 @@ test("settlement: match play winner takes the stake", () => {
   assert.deepEqual(s.transfers, [{ from: "a", to: "b", amount: 10 }]);
 });
 
+test("settlement: match play called early pays whoever is up (the 9-of-18 bug)", () => {
+  // The real-world repro: an 18-hole match, the group stops after 9 with a
+  // clear leader, taps Finish. Pre-fix this settled as "all square" while
+  // the standings read "9 UP" on the same screen.
+  const g = fakeGame("matchplay", ["a", "b"]);
+  const early = G.computeSettlement(g, { winner: null, leader: 0, thru: 9, done: false }, 5);
+  assert.equal(early.nets.a, 5);
+  assert.equal(early.nets.b, -5);
+});
+
+test("settlement: match play called early while all square pushes", () => {
+  const g = fakeGame("matchplay", ["a", "b"]);
+  const s = G.computeSettlement(g, { winner: null, leader: null, thru: 9, done: false }, 5);
+  assert.deepEqual(s.transfers, []);
+});
+
+test("settlement: match play with zero holes entered pushes", () => {
+  const g = fakeGame("matchplay", ["a", "b"]);
+  const s = G.computeSettlement(g, { winner: null, leader: null, thru: 0, done: false }, 5);
+  assert.deepEqual(s.transfers, []);
+});
+
+test("settlement: nassau called early pays started bets on the lead, skips untouched bets", () => {
+  // 9 holes of a Nassau: front decided, back never started, overall mid-way.
+  const g = fakeGame("nassau", ["a", "b"]);
+  const computed = {
+    front: { winner: 1, leader: 1, thru: 9, done: true },
+    back: { winner: null, leader: null, thru: 0, done: false },
+    overall: { winner: null, leader: 1, thru: 9, done: false }
+  };
+  const s = G.computeSettlement(g, computed, 5);
+  assert.equal(s.nets.b, 10); // front + overall on the lead; back untouched
+  assert.equal(s.nets.a, -10);
+});
+
+test("settlement: best ball called early pays the leading team per player", () => {
+  const g = fakeGame("bestball", ["a", "b", "c", "d"], [["a", "b"], ["c", "d"]]);
+  const s = G.computeSettlement(g, { winner: null, leader: 1, thru: 6, done: false }, 5);
+  assert.equal(s.nets.c, 5);
+  assert.equal(s.nets.d, 5);
+  assert.equal(s.nets.a, -5);
+  assert.equal(s.nets.b, -5);
+});
+
+test("matchBetWinner: finished match → winner, live match → leader, untouched → null", () => {
+  assert.equal(G.matchBetWinner({ winner: 1, leader: 1, thru: 18, done: true }), 1);
+  assert.equal(G.matchBetWinner({ winner: null, leader: 0, thru: 4, done: false }), 0);
+  assert.equal(G.matchBetWinner({ winner: null, leader: null, thru: 0, done: false }), null);
+  assert.equal(G.matchBetWinner(null), null);
+});
+
 test("settlement: nassau sums the three bets", () => {
   const g = fakeGame("nassau", ["a", "b"]);
   const computed = {

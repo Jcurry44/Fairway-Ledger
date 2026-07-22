@@ -1,20 +1,33 @@
 // Fairway Ledger service worker.
 //
-// Strategy: network-first with a cached fallback, plus a precached app shell
-// so the whole app keeps working on a phone with zero signal (range trips,
-// underground parking garages, dead spots on the course).
+// Strategy (2026-07-21 rework):
+//   - Same-origin subresources: cache-first with background revalidate
+//     (stale-while-revalidate). On-course launch speed comes from here —
+//     with 1-2 bars of LTE, every asset used to wait on the network before
+//     the cache fallback fired; now a cached hit paints immediately and the
+//     refresh happens behind it.
+//   - Navigations: network-first with a 2.5s cap, then cached shell. The
+//     browser's own sw.js update check still runs on every navigation, so a
+//     capped-to-cache boot does not delay picking up a new deploy.
+//   - Precache stores the SAME versioned URLs the page requests
+//     (`app.js?v=...`). The old worker precached query-less URLs that were
+//     only fetched at install and then beat fresher runtime `?v=` entries on
+//     every ignoreSearch match — which is how a phone could keep running a
+//     months-old bundle offline forever.
 //
-// Deploy semantics: bump CACHE_VERSION any time you change a file listed in
-// CORE_ASSETS. Old cache buckets are deleted on activate. The fetch handler
-// already does network-first, so for *most* edits you don't strictly need to
-// bump the version — but bumping it is the only way to drop a now-unused
-// asset from a returning visitor's cache.
+// Deploy semantics: bump ASSET_VERSION *and* every `?v=` in index.html
+// together, ALWAYS, for any change to a CORE asset. CACHE_VERSION derives
+// from ASSET_VERSION so the bump also rotates the cache bucket. A deploy
+// without the bump does not reach offline/flaky-signal users — there is no
+// "small enough to skip the bump" edit to core assets.
 
-const CACHE_VERSION = 'fairway-ledger-v85-2026-07-15a';
+const ASSET_VERSION = '2026-07-21b'; // must equal the ?v= buster in index.html
+const CACHE_VERSION = 'fairway-ledger-v87-' + ASSET_VERSION;
 
-// Paths are relative to the SW's location (./sw.js at the project root).
-const CORE_ASSETS = [
-  './',
+// Assets index.html requests WITH the ?v= buster — precached under the
+// exact versioned URL so install always fetches the deployed bytes and
+// runtime refreshes replace (never shadow) the install-time entry.
+const VERSIONED_ASSETS = [
   './index.html',
   './styles.css',
   './app.js',
@@ -28,9 +41,19 @@ const CORE_ASSETS = [
   './data/course-maps/deerwood-aerial-labels-v1.js',
   './lib/course-map-ui.js',
   './lib/games.js',
-  './assets/maps/deerwood/aerial-2024.webp',
   './manifest.json',
   './icon.svg',
+];
+
+// Assets requested with no query string (navigations, JS-loaded media).
+const PLAIN_ASSETS = [
+  './',
+  './assets/maps/deerwood/aerial-2024.webp',
+];
+
+const PRECACHE_URLS = [
+  ...PLAIN_ASSETS,
+  ...VERSIONED_ASSETS.map((path) => `${path}?v=${ASSET_VERSION}`),
 ];
 
 self.addEventListener('install', (event) => {
@@ -40,7 +63,10 @@ self.addEventListener('install', (event) => {
       .then((cache) =>
         // addAll is atomic — if any asset 404s the whole install fails, which
         // is what we want (a half-cached shell is worse than no SW at all).
-        cache.addAll(CORE_ASSETS),
+        // cache:'reload' bypasses the HTTP cache: a revalidated 304 (or a
+        // max-age-stale copy on GitHub Pages) would otherwise abort the
+        // install / precache stale bytes.
+        cache.addAll(PRECACHE_URLS.map((url) => new Request(url, { cache: 'reload' }))),
       )
       .then(() => self.skipWaiting()),
   );
@@ -72,38 +98,69 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  event.respondWith(networkFirst(req));
+  if (req.mode === 'navigate') {
+    event.respondWith(navigationFetch(event, req));
+  } else {
+    event.respondWith(staleWhileRevalidate(event, req));
+  }
 });
 
-async function networkFirst(req) {
+function cachePut(cache, req, response) {
+  if (response && response.status === 200 && response.type === 'basic') {
+    // clone() before reading — the original response gets returned to the
+    // page and can only be consumed once. Quota errors are non-fatal.
+    cache.put(req, response.clone()).catch(() => {});
+  }
+  return response;
+}
+
+// Subresources: cached bytes paint NOW, the network refreshes behind them.
+// An exact (versioned) match is authoritative. A miss goes to the network —
+// never straight to an ignoreSearch fallback, so a freshly-deployed
+// index.html online always gets freshly-deployed assets, not a stale
+// bundle. ignoreSearch is strictly the offline last resort.
+async function staleWhileRevalidate(event, req) {
   const cache = await caches.open(CACHE_VERSION);
+  const cached = await cache.match(req);
+  const refresh = fetch(req)
+    .then((fresh) => cachePut(cache, req, fresh));
+  if (cached) {
+    event.waitUntil(refresh.catch(() => {}));
+    return cached;
+  }
   try {
-    const fresh = await fetch(req);
-    // Only cache successful, same-origin "basic" responses. Skip opaque /
-    // redirect / error responses so we never serve garbage as a fallback.
-    if (fresh && fresh.status === 200 && fresh.type === 'basic') {
-      // clone() before reading — the original response gets returned to the
-      // page and can only be consumed once.
-      cache.put(req, fresh.clone()).catch(() => {
-        // Quota errors, etc. — non-fatal. The page still gets `fresh`.
-      });
-    }
-    return fresh;
+    return await refresh;
   } catch (err) {
-    // Network failed (offline, DNS, etc.). Try the cache, ignoring the
-    // `?v=...` cache-buster so an older cached bundle still satisfies a
-    // newer URL.
-    const cached = await caches.match(req, { ignoreSearch: true });
-    if (cached) return cached;
-
-    // For top-level navigations with no cached entry, fall back to the
-    // shell so the app still boots offline.
-    if (req.mode === 'navigate') {
-      const shell = await caches.match('./index.html', { ignoreSearch: true });
-      if (shell) return shell;
-    }
-
+    const fallback = await caches.match(req, { ignoreSearch: true });
+    if (fallback) return fallback;
     return Response.error();
+  }
+}
+
+// Navigations: try the network, but never make a golfer on one bar stare at
+// a blank screen — after 2.5s serve the cached shell and let the network
+// response land in cache for next time.
+const NAV_TIMEOUT_MS = 2500;
+
+async function navigationFetch(event, req) {
+  const cache = await caches.open(CACHE_VERSION);
+  const network = fetch(req)
+    .then((fresh) => cachePut(cache, req, fresh));
+  try {
+    return await Promise.race([
+      network,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('nav-timeout')), NAV_TIMEOUT_MS)),
+    ]);
+  } catch (err) {
+    // Timed out or offline. Keep the (possibly still-running) fetch alive so
+    // a slow success still refreshes the cache for the next open.
+    event.waitUntil(network.catch(() => {}));
+    const cached = await caches.match(req, { ignoreSearch: true })
+      || await caches.match('./index.html', { ignoreSearch: true });
+    if (cached) return cached;
+    // Nothing cached (first-ever visit on a dead connection): fall through
+    // to whatever the network eventually does.
+    return network.catch(() => Response.error());
   }
 }
 

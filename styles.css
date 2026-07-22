@@ -788,6 +788,54 @@ select[data-use-chips] {
 
 /* Collapsible in-round chrome: once a round is underway the setup fields tuck
    behind this banner so the screen is just the scorecard. Tap to re-open. */
+/* One-tap "Play it again" replay card — the clubhouse-green hero material,
+   sized as a full-width tappable card above the blank setup form. */
+.quick-start-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  margin: 0 0 16px;
+  padding: 18px 20px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(217, 192, 138, 0.35);
+  background: linear-gradient(150deg, #0d3322 0%, #124530 62%, #175539 100%);
+  box-shadow: 0 14px 40px rgba(13, 51, 34, 0.22), inset 0 -2px 0 rgba(217, 192, 138, 0.4);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.quick-start-card:active { transform: translateY(1px); }
+.quick-start-card .qs-eyebrow {
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #d8c79b;
+}
+.quick-start-card .qs-course {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 600;
+  line-height: 1.15;
+}
+.quick-start-card .qs-meta {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.82);
+}
+.quick-start-card .qs-go {
+  margin-top: 9px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(217, 192, 138, 0.16);
+  border: 1px solid rgba(217, 192, 138, 0.5);
+  color: #f0e3c2;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
 .round-collapse-banner {
   width: 100%;
   display: flex;
@@ -1607,8 +1655,10 @@ body.floating-card-nav-visible .floating-card-nav {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
-  min-width: 40px;
+  /* 44px = Apple's minimum comfortable target — these pills are the app's
+     primary input surface, tapped in wind with a glove half-off. */
+  min-height: 44px;
+  min-width: 44px;
   padding: 4px 12px;
   border: 1.5px solid var(--line, #d6e2d9);
   border-radius: 999px;
@@ -6119,11 +6169,32 @@ td {
     padding-right: 88px;
   }
 
+  /* Sticky bottom tab bar: mid-card (cards run 2+ screens) the top tabs
+     used to scroll away, so any Rounds↔Games switch meant scrolling all the
+     way up. Fixed to the thumb zone instead, clear of the home indicator. */
   .app-tabs {
     overflow-x: auto;
-    position: static;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 60;
+    margin: 0;
+    border-radius: 0;
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -8px 24px rgba(25, 38, 30, 0.10);
     gap: 4px;
-    padding: 5px;
+    padding: 5px 5px calc(5px + env(safe-area-inset-bottom));
+  }
+
+  /* Keep page content (and the round Save button) clear of the fixed bar. */
+  body {
+    padding-bottom: 76px;
+  }
+
+  /* Toasts ride above the fixed tab bar instead of hiding behind it. */
+  .toast {
+    bottom: calc(84px + env(safe-area-inset-bottom));
   }
 
   /* Phone tab bar: classic icon-over-label segments, equal widths. Five
@@ -6877,6 +6948,34 @@ td {
   justify-content: space-between;
   gap: 10px;
   margin-top: 16px;
+}
+
+/* Late stake row on the settle screen — set or fix the stake even after
+   the round (or after Confirm final). */
+.game-stake-late-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 6px 0 10px;
+}
+.game-stake-late-input {
+  width: 110px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  font: inherit;
+}
+.game-stake-line { display: flex; align-items: center; gap: 10px; }
+.game-stake-edit {
+  border: none;
+  background: none;
+  padding: 2px 4px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .game-settle-list {
@@ -8166,4 +8265,195 @@ summary:focus-visible {
   .course-map-label-fields { grid-template-columns: 1fr; }
   .course-map-label-progress { align-items: stretch; flex-direction: column; gap: 7px; }
   .course-map-label-progress p { max-width: none; }
+}
+
+/* ==== Games premium pass (2026-07-21) ====================================
+   The Games tab surfaces were the last unstyled corners of the app — the
+   settle-up (the whole feature's payoff) was a plain bulleted list, the
+   hole-entry screen floated bare on the page, home cards were flat, and
+   the grid looked like Excel. Clubhouse material, everywhere. */
+
+/* The final board: the moment the round built toward. */
+.game-final-hero {
+  margin: 10px 0 14px;
+  padding: 20px 20px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(217, 192, 138, 0.35);
+  background: linear-gradient(150deg, #0d3322 0%, #124530 62%, #175539 100%);
+  box-shadow: 0 14px 40px rgba(13, 51, 34, 0.22), inset 0 -2px 0 rgba(217, 192, 138, 0.4);
+  color: #fff;
+}
+.game-final-eyebrow {
+  margin: 0 0 2px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #d8c79b;
+}
+.game-final-name {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  line-height: 1.1;
+}
+.game-final-hero .game-standings-line {
+  font-family: var(--font-display);
+  font-size: 1.18rem;
+  line-height: 1.35;
+  color: #fdf9ee;
+  border: none;
+  padding: 0;
+}
+
+/* Transfers: card rows, brass tabular money. */
+.game-settle-list {
+  list-style: none;
+  margin: 8px 0 4px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.game-settle-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--gold);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.game-settle-list .settle-amount {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The hole-entry screen gets the same card material as Add Round. */
+.game-hole-entry {
+  margin-top: 12px;
+  padding: 14px 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+.game-hole-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.game-hole-title {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+.game-hole-title em {
+  font-style: normal;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* Home cards: round-row parity; delete recedes to a quiet action. */
+.game-card {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin-bottom: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.game-card-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 16px;
+  border: none;
+  background: none;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.game-card-main strong {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+}
+.game-card-sub {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.game-card-standings {
+  font-size: 0.88rem;
+  color: var(--green-dark);
+  font-weight: 600;
+}
+.game-card-delete {
+  border: none;
+  border-left: 1px solid var(--line);
+  background: none;
+  padding: 0 14px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.game-card-delete.confirming {
+  background: var(--red);
+  color: #fff;
+  font-weight: 700;
+}
+
+/* De-spreadsheet the grid: hairline rows, no cell borders. */
+.game-grid {
+  border-collapse: collapse;
+  width: 100%;
+}
+.game-grid th,
+.game-grid td {
+  border: none;
+  border-bottom: 1px solid var(--line);
+  padding: 9px 10px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.game-grid thead th {
+  border-bottom: 2px solid var(--line);
+  background: none;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.game-grid tbody tr {
+  cursor: pointer;
+}
+.game-grid tbody tr:active {
+  background: var(--panel-soft);
+}
+
+/* Hole-change settle: cards land, they don't teleport. */
+@media (prefers-reduced-motion: no-preference) {
+  .scorecard-card.active,
+  .game-hole-entry {
+    animation: card-settle 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  @keyframes card-settle {
+    from { opacity: 0.35; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 }
