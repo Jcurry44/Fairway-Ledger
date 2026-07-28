@@ -21,8 +21,8 @@
 // without the bump does not reach offline/flaky-signal users — there is no
 // "small enough to skip the bump" edit to core assets.
 
-const ASSET_VERSION = '2026-07-28e'; // must equal the ?v= buster in index.html
-const CACHE_VERSION = 'fairway-ledger-v93-' + ASSET_VERSION;
+const ASSET_VERSION = '2026-07-28f'; // must equal the ?v= buster in index.html
+const CACHE_VERSION = 'fairway-ledger-v94-' + ASSET_VERSION;
 
 // Assets index.html requests WITH the ?v= buster — precached under the
 // exact versioned URL so install always fetches the deployed bytes and

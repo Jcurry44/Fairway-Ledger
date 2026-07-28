@@ -9013,7 +9013,9 @@
         // The owner signs in with their email for the first time here. Email
         // confirmation remains enabled in Supabase; RLS still prevents every
         // account from seeing anyone else's drafts.
-        body: JSON.stringify({ email: config.email, create_user: true, options: { emailRedirectTo: `${location.origin}${location.pathname}` } })
+        // This is the raw GoTrue REST endpoint, whose redirect field is
+        // `redirect_to` (the SDK calls it options.emailRedirectTo).
+        body: JSON.stringify({ email: config.email, create_user: true, redirect_to: `${location.origin}${location.pathname}` })
       });
       if (!response.ok) {
         let detail = "";
