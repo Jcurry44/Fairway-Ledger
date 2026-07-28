@@ -63,7 +63,7 @@ test("makeHole(): blank penalty fields stay blank arrays/strings", () => {
 });
 
 test("ROUND_FIELDS lists all canonical round fields", () => {
-  const expected = ["id", "date", "courseId", "tee", "wind", "note", "narrative", "tag", "entryMode", "survey", "holes"];
+  const expected = ["id", "date", "courseId", "tee", "wind", "note", "narrative", "tag", "entryMode", "survey", "coaching", "holes"];
   assert.deepEqual([...S.ROUND_FIELDS], expected);
 });
 

@@ -1821,7 +1821,7 @@
     try {
       const course = resolveVoiceRecapCourse(input);
       const recap = validateRecap(input, course);
-      const round = makeRound({ id: "__voice_recap_preview__", date: recap.date, courseId: course.id, tee: course.tee, wind: recap.wind || "", tag: recap.tag || "", note: recap.note || "", entryMode: "detailed", holes: recap.holes.map(makeHole) });
+      const round = makeRound({ id: "__voice_recap_preview__", date: recap.date, courseId: course.id, tee: course.tee, wind: recap.wind || "", tag: recap.tag || "", note: recap.note || "", coaching: recap.coaching, entryMode: "detailed", holes: recap.holes.map(makeHole) });
       const totals = roundTotals(round);
       pendingVoiceRecap = { course, recap, round, needsFreshStoreConfirmation: !!options.fromVoiceLink && voiceRecapNeedsFreshStoreConfirmation(state.rounds.length) };
       els.voiceRecapPreviewOutput.innerHTML = `<strong>Ready to add:</strong> ${escapeHtml(course.name)} · ${escapeHtml(recap.date)} · ${totals.gross} (${formatSigned(totals.toPar, 0)}) across ${recap.holes.length} holes.`;
@@ -7648,7 +7648,7 @@
     const teeHoles = known("teeClub"), puttHoles = known("putts"), penaltyHoles = known("penalties");
     const penalties = penaltyHoles.reduce((sum, h) => sum + Number(h.penalties || 0), 0);
     const costly = [...holes].sort((a, b) => (b.score - b.par) - (a.score - a.par)).filter((h) => h.score > h.par).slice(0, 3);
-    const context = holes.filter((h) => h.approachNote || h.result || h.missContext || h.note).slice(0, 4);
+    const context = holes.filter((h) => h.approachNote || h.result || h.missContext || h.note);
     const takeaways = [];
     if (teeHoles.length) {
       const clubs = new Map(); teeHoles.forEach((h) => clubs.set(h.teeClub, (clubs.get(h.teeClub) || 0) + 1));
@@ -7662,7 +7662,9 @@
       : puttHoles.filter((h) => h.putts >= 3).length ? "Practice focus: distance-control putting, because the recap specifically logged three-putts."
       : costly.length ? "Practice focus: revisit the narrated decisions on the highest-scoring holes before changing mechanics."
       : "Practice focus: capture one tee-shot and one approach result per hole next time so the next briefing can be more specific.";
-    return `<section class="post-round-briefing"><div class="briefing-hero"><span>Post-round briefing</span><strong>${totals.gross} <small>${formatSigned(totals.toPar, 0)}</small></strong><p>${escapeHtml(round.narrative || "Scorecard captured. Add shot context to turn the next recap into a sharper coaching report.")}</p></div><div class="briefing-grid"><div><span class="briefing-kicker">Evidence-led takeaways</span><ul>${takeaways.length ? takeaways.map((item) => `<li>${item}</li>`).join("") : "<li>No shot detail was reported; this briefing only uses the scorecard.</li>"}</ul></div><div><span class="briefing-kicker">Practice focus</span><p class="briefing-focus">${escapeHtml(practice)}</p></div></div>${context.length ? `<div class="briefing-context"><span class="briefing-kicker">Recap trail</span>${context.map((h) => `<p><strong>${escapeHtml(h.label || `Hole ${h.number}`)}</strong> ${escapeHtml([h.approachNote, h.result, h.missContext, h.note].filter(Boolean).join(" · "))}</p>`).join("")}</div>` : ""}</section>`;
+    const coaching = round.coaching || {};
+    const coachingHtml = coaching.story || coaching.pattern || coaching.nextRoundCue || (coaching.strengths || []).length || (coaching.practicePlan || []).length ? `<div class="briefing-coaching"><span class="briefing-kicker">Player-reported coaching context</span>${coaching.story ? `<p>${escapeHtml(coaching.story)}</p>` : ""}${coaching.pattern ? `<p><strong>Pattern:</strong> ${escapeHtml(coaching.pattern)}</p>` : ""}${coaching.nextRoundCue ? `<p class="briefing-cue"><strong>Next-round cue:</strong> ${escapeHtml(coaching.nextRoundCue)}</p>` : ""}${coaching.strengths?.length ? `<p><strong>Strengths:</strong> ${coaching.strengths.map(escapeHtml).join(" · ")}</p>` : ""}${coaching.practicePlan?.length ? `<p><strong>Practice plan:</strong> ${coaching.practicePlan.map(escapeHtml).join(" · ")}</p>` : ""}</div>` : "";
+    return `<section class="post-round-briefing"><div class="briefing-hero"><span>Post-round briefing</span><strong>${totals.gross} <small>${formatSigned(totals.toPar, 0)}</small></strong><p>${escapeHtml(round.narrative || "Scorecard captured. Add shot context to turn the next recap into a sharper coaching report.")}</p></div><div class="briefing-grid"><div><span class="briefing-kicker">Evidence-led takeaways</span><ul>${takeaways.length ? takeaways.map((item) => `<li>${item}</li>`).join("") : "<li>No shot detail was reported; this briefing only uses the scorecard.</li>"}</ul></div><div><span class="briefing-kicker">Practice focus</span><p class="briefing-focus">${escapeHtml(practice)}</p></div></div>${coachingHtml}${context.length ? `<div class="briefing-context"><span class="briefing-kicker">Full recap trail</span>${context.map((h) => `<p><strong>${escapeHtml(h.label || `Hole ${h.number}`)}</strong> ${escapeHtml([h.approachNote, h.result, h.missContext, h.note].filter(Boolean).join(" · "))}</p>`).join("")}</div>` : ""}</section>`;
   }
 
   function renderRecentRounds() {

@@ -32,3 +32,8 @@ test("preserves detailed narrated hole context without inventing missing stats",
   assert.equal(recap.holes[0].voiceKnown.putts, false);
   assert.equal(recap.holes[1].voiceKnown.teeClub, false);
 });
+test("preserves player-reported coaching context separately from scored evidence", () => {
+  const recap = validateRecap({ date: "2026-07-28", coaching: { story: "Played better than the score.", pattern: "Open-face protection created push-slices.", nextRoundCue: "Square setup, stock swing.", strengths: ["3-wood"], practicePlan: ["Start-line routine"] }, holes: [{ score: 5 }, { score: 3 }] }, course);
+  assert.equal(recap.coaching.nextRoundCue, "Square setup, stock swing.");
+  assert.deepEqual(recap.coaching.strengths, ["3-wood"]);
+});

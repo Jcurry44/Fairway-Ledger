@@ -89,6 +89,18 @@ For a catalog course, use its exact `course.id` (for example `ridgeview-white`) 
 
 For a post-round voice-coach recap, add only details the golfer actually narrated. `teeClub` also seeds the saved tee-club record; `approachNote`, `result`, and `missContext` remain verbatim context for the briefing. Omitted fields stay unknown—Fairway Ledger does not infer putts, misses, or clubs.
 
+Use an optional `coaching` object for the golfer's own post-round story and plan; it is shown separately from score-derived inference in the briefing:
+
+```json
+"coaching": {
+  "story": "Played better than 81; a few push-fade slices were disproportionately costly.",
+  "pattern": "Protecting against the old left miss with an open face created right-starting push-slices.",
+  "nextRoundCue": "Square setup, normal target, smooth stock swing — do not manufacture fade.",
+  "strengths": ["Controlled 4-iron from about 200", "3-wood", "50-degree bump-and-runs", "Resilient reset"],
+  "practicePlan": ["Start-line routine with a square face", "Rehearse stock-shot commitment"]
+}
+```
+
 ```json
 {
   "date": "2026-07-28",

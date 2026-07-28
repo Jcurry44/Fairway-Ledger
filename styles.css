@@ -6642,6 +6642,10 @@ td {
 .briefing-context .briefing-kicker { margin-top: 12px; color: var(--muted); }
 .briefing-context p { margin: 7px 0 0; color: var(--muted); font-size: .82rem; line-height: 1.4; }
 .briefing-context strong { color: var(--ink); }
+.briefing-coaching { padding: 0 16px 14px; border-top: 1px solid var(--line); }
+.briefing-coaching .briefing-kicker { margin-top: 12px; color: var(--muted); }
+.briefing-coaching p { margin: 8px 0 0; font-size: .84rem; line-height: 1.45; }
+.briefing-cue { padding: 9px 10px; border-left: 3px solid var(--green); background: var(--panel-soft); }
 @media (max-width: 520px) { .briefing-grid { grid-template-columns: 1fr; gap: 12px; } }
 
 /* Picker */
