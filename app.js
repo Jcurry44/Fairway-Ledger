@@ -77,7 +77,7 @@
     makeRound,
     normalizeRound
   } = window.GolfShapes;
-  const { validateRecap, decodeVoiceRecapFragment, VOICE_RECAP_FRAGMENT_KEY } = window.FairwayVoiceRecap;
+  const { validateRecap, decodeVoiceRecapFragment, VOICE_RECAP_FRAGMENT_KEY, voiceRecapNeedsFreshStoreConfirmation } = window.FairwayVoiceRecap;
 
   const {
     classifyAccuracy,
@@ -621,6 +621,8 @@
     voiceRecapPreview: document.getElementById("voiceRecapPreview"),
     voiceRecapApply: document.getElementById("voiceRecapApply"),
     voiceRecapPreviewOutput: document.getElementById("voiceRecapPreviewOutput"),
+    voiceRecapStorageNotice: document.getElementById("voiceRecapStorageNotice"),
+    voiceRecapFreshStoreConfirm: document.getElementById("voiceRecapFreshStoreConfirm"),
     surveyDetails: document.getElementById("surveyDetails"),
     surveySwingThoughts: document.getElementById("surveySwingThoughts"),
     surveyWentWell: document.getElementById("surveyWentWell"),
@@ -1799,7 +1801,20 @@
     return course;
   }
 
-  function previewVoiceRecapPayload(input) {
+  function syncVoiceRecapApplyState() {
+    if (!els.voiceRecapApply) return;
+    const needsConfirmation = pendingVoiceRecap && pendingVoiceRecap.needsFreshStoreConfirmation;
+    els.voiceRecapApply.disabled = !pendingVoiceRecap || (needsConfirmation && (!els.voiceRecapFreshStoreConfirm || !els.voiceRecapFreshStoreConfirm.checked));
+  }
+
+  function renderVoiceRecapStorageNotice() {
+    if (!els.voiceRecapStorageNotice || !els.voiceRecapFreshStoreConfirm) return;
+    const show = !!(pendingVoiceRecap && pendingVoiceRecap.needsFreshStoreConfirmation);
+    els.voiceRecapStorageNotice.hidden = !show;
+    els.voiceRecapFreshStoreConfirm.checked = false;
+  }
+
+  function previewVoiceRecapPayload(input, options = {}) {
     if (!els.voiceRecapPreviewOutput) return;
     pendingVoiceRecap = null;
     if (els.voiceRecapApply) els.voiceRecapApply.disabled = true;
@@ -1808,9 +1823,10 @@
       const recap = validateRecap(input, course);
       const round = makeRound({ id: "__voice_recap_preview__", date: recap.date, courseId: course.id, tee: course.tee, wind: recap.wind || "", tag: recap.tag || "", note: recap.note || "", entryMode: "detailed", holes: recap.holes.map(makeHole) });
       const totals = roundTotals(round);
-      pendingVoiceRecap = { course, recap, round };
+      pendingVoiceRecap = { course, recap, round, needsFreshStoreConfirmation: !!options.fromVoiceLink && voiceRecapNeedsFreshStoreConfirmation(state.rounds.length) };
       els.voiceRecapPreviewOutput.innerHTML = `<strong>Ready to add:</strong> ${escapeHtml(course.name)} · ${escapeHtml(recap.date)} · ${totals.gross} (${formatSigned(totals.toPar, 0)}) across ${recap.holes.length} holes.`;
-      if (els.voiceRecapApply) els.voiceRecapApply.disabled = false;
+      renderVoiceRecapStorageNotice();
+      syncVoiceRecapApplyState();
     } catch (error) {
       els.voiceRecapPreviewOutput.textContent = error.message || "That recap could not be read.";
     }
@@ -1821,6 +1837,7 @@
     try { previewVoiceRecapPayload(JSON.parse(els.voiceRecapInput.value)); }
     catch (error) {
       pendingVoiceRecap = null;
+      renderVoiceRecapStorageNotice();
       if (els.voiceRecapApply) els.voiceRecapApply.disabled = true;
       if (els.voiceRecapPreviewOutput) els.voiceRecapPreviewOutput.textContent = error.message || "That recap could not be read.";
     }
@@ -1843,10 +1860,11 @@
     try {
       const input = decodeVoiceRecapFragment(hash);
       if (els.voiceRecapInput) els.voiceRecapInput.value = JSON.stringify(input, null, 2);
-      previewVoiceRecapPayload(input);
+      previewVoiceRecapPayload(input, { fromVoiceLink: true });
       showToast("Voice recap ready to review.");
     } catch (error) {
       pendingVoiceRecap = null;
+      renderVoiceRecapStorageNotice();
       if (els.voiceRecapApply) els.voiceRecapApply.disabled = true;
       if (els.voiceRecapPreviewOutput) els.voiceRecapPreviewOutput.textContent = error.message || "Voice recap link could not be read.";
       showToast(error.message || "Voice recap link could not be read.");
@@ -1856,6 +1874,10 @@
 
   function applyVoiceRecap() {
     if (!pendingVoiceRecap) return previewVoiceRecap();
+    if (pendingVoiceRecap.needsFreshStoreConfirmation && (!els.voiceRecapFreshStoreConfirm || !els.voiceRecapFreshStoreConfirm.checked)) {
+      showToast("Confirm this is a separate empty copy before saving here.");
+      return;
+    }
     const { course, recap, round } = pendingVoiceRecap;
     ensureSavedCourse(course);
     const newRound = makeRound({ ...round, id: makeId("round") });
@@ -1863,12 +1885,14 @@
     state.rounds.push(newRound);
     saveState();
     pendingVoiceRecap = null;
+    renderVoiceRecapStorageNotice();
     els.voiceRecapInput.value = "";
     els.voiceRecapPreviewOutput.textContent = "Round added. Your original scorecards are unchanged.";
     els.voiceRecapApply.disabled = true;
     renderAll();
     setActiveTab("home");
-    showToast(`Voice recap added: ${recap.date}.`);
+    showRoundDetail(newRound);
+    showToast(`Voice recap added: ${recap.date}. ${state.rounds.length} saved round${state.rounds.length === 1 ? "" : "s"} in this browser.`);
     maybeAutoBackup();
   }
 
@@ -7614,6 +7638,33 @@
       </div>`;
   }
 
+  // A post-round report stays strict about evidence: narrated facts are
+  // labelled reported, while score patterns are explicitly inferences.
+  function renderPostRoundBriefing(round) {
+    const holes = Array.isArray(round.holes) ? round.holes.filter((h) => Number.isFinite(h.score) && h.score > 0) : [];
+    if (!holes.length) return "";
+    const totals = roundTotals(round);
+    const known = (field) => holes.filter((h) => h.voiceKnown && h.voiceKnown[field]);
+    const teeHoles = known("teeClub"), puttHoles = known("putts"), penaltyHoles = known("penalties");
+    const penalties = penaltyHoles.reduce((sum, h) => sum + Number(h.penalties || 0), 0);
+    const costly = [...holes].sort((a, b) => (b.score - b.par) - (a.score - a.par)).filter((h) => h.score > h.par).slice(0, 3);
+    const context = holes.filter((h) => h.approachNote || h.result || h.missContext || h.note).slice(0, 4);
+    const takeaways = [];
+    if (teeHoles.length) {
+      const clubs = new Map(); teeHoles.forEach((h) => clubs.set(h.teeClub, (clubs.get(h.teeClub) || 0) + 1));
+      const [club, count] = [...clubs.entries()].sort((a, b) => b[1] - a[1])[0];
+      takeaways.push(`<strong>Reported:</strong> ${teeHoles.length} tee clubs logged; ${escapeHtml(club)} was used ${count} time${count === 1 ? "" : "s"}.`);
+    }
+    if (puttHoles.length) takeaways.push(`<strong>Reported:</strong> ${puttHoles.length} holes include putts (${puttHoles.reduce((s, h) => s + h.putts, 0)} total on those holes).`);
+    if (penaltyHoles.length) takeaways.push(`<strong>Reported:</strong> ${penalties} penalty stroke${penalties === 1 ? "" : "s"} across ${penaltyHoles.length} narrated holes.`);
+    if (costly.length) takeaways.push(`<strong>Inference from score:</strong> ${costly.map((h) => `${escapeHtml(h.label || `Hole ${h.number}`)} ${formatSigned(h.score - h.par, 0)}`).join(", ")} were the largest over-par holes; causes are unknown unless noted below.`);
+    const practice = penalties > 0 ? "Practice focus: repeat one tee-shot start-line routine; that targets the penalty strokes you reported."
+      : puttHoles.filter((h) => h.putts >= 3).length ? "Practice focus: distance-control putting, because the recap specifically logged three-putts."
+      : costly.length ? "Practice focus: revisit the narrated decisions on the highest-scoring holes before changing mechanics."
+      : "Practice focus: capture one tee-shot and one approach result per hole next time so the next briefing can be more specific.";
+    return `<section class="post-round-briefing"><div class="briefing-hero"><span>Post-round briefing</span><strong>${totals.gross} <small>${formatSigned(totals.toPar, 0)}</small></strong><p>${escapeHtml(round.narrative || "Scorecard captured. Add shot context to turn the next recap into a sharper coaching report.")}</p></div><div class="briefing-grid"><div><span class="briefing-kicker">Evidence-led takeaways</span><ul>${takeaways.length ? takeaways.map((item) => `<li>${item}</li>`).join("") : "<li>No shot detail was reported; this briefing only uses the scorecard.</li>"}</ul></div><div><span class="briefing-kicker">Practice focus</span><p class="briefing-focus">${escapeHtml(practice)}</p></div></div>${context.length ? `<div class="briefing-context"><span class="briefing-kicker">Recap trail</span>${context.map((h) => `<p><strong>${escapeHtml(h.label || `Hole ${h.number}`)}</strong> ${escapeHtml([h.approachNote, h.result, h.missContext, h.note].filter(Boolean).join(" · "))}</p>`).join("")}</div>` : ""}</section>`;
+  }
+
   function renderRecentRounds() {
     // Score badge context (2026-07-06): each round leads with a tone-coded
     // badge judged against the player's OWN average for that round length —
@@ -9097,7 +9148,7 @@
     if (round.wind) bits.push(escapeHtml(formatWind(round.wind)));
     if (round.tag) bits.push(escapeHtml(formatRoundTag(round.tag)));
     els.roundDetailSubtitle.innerHTML = bits.filter(Boolean).join(" · ");
-    els.roundDetailBody.innerHTML = renderRoundScorecard(round);
+    els.roundDetailBody.innerHTML = renderPostRoundBriefing(round) + renderRoundScorecard(round);
     els.roundDetailEditButton.onclick = () => {
       closeRoundDetail();
       loadRoundIntoForm(round);
@@ -10574,8 +10625,10 @@
   if (els.voiceRecapApply) els.voiceRecapApply.addEventListener("click", applyVoiceRecap);
   if (els.voiceRecapInput) els.voiceRecapInput.addEventListener("input", () => {
     pendingVoiceRecap = null;
-    if (els.voiceRecapApply) els.voiceRecapApply.disabled = true;
+    renderVoiceRecapStorageNotice();
+    syncVoiceRecapApplyState();
   });
+  if (els.voiceRecapFreshStoreConfirm) els.voiceRecapFreshStoreConfirm.addEventListener("change", syncVoiceRecapApplyState);
 
   if (els.startRoundButton) {
     els.startRoundButton.addEventListener("click", startRound);

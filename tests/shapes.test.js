@@ -28,6 +28,11 @@ test("HOLE_FIELDS lists all canonical hole fields", () => {
     "firstPuttDistance",
     "bunker",
     "note",
+    "teeClub",
+    "approachNote",
+    "result",
+    "missContext",
+    "voiceKnown",
     "shots",
     "clubsHit",
   ];

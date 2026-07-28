@@ -6624,6 +6624,25 @@ td {
 .voice-import-hint code { font-size: .78rem; }
 .voice-import-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .voice-import-preview { margin-top: 10px; font-size: .86rem; color: var(--green-dark); }
+.voice-storage-notice { margin-top: 10px; padding: 11px; border: 1px solid #d9aa49; border-radius: 10px; background: #fff7e4; color: #6b4c0f; font-size: .84rem; }
+.voice-storage-notice p { color: inherit; margin: 6px 0 9px; }
+.voice-storage-notice label { display: flex; gap: 8px; align-items: flex-start; font-weight: 700; cursor: pointer; }
+
+.post-round-briefing { margin: 0 0 16px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--panel); }
+.briefing-hero { padding: 16px; color: #fff; background: linear-gradient(135deg, #123c30, #1f7a59); }
+.briefing-hero > span, .briefing-kicker { display: block; font-size: .7rem; font-weight: 850; letter-spacing: .09em; text-transform: uppercase; opacity: .78; }
+.briefing-hero strong { display: block; margin: 4px 0; font-family: var(--font-display); font-size: 2.15rem; line-height: 1; }
+.briefing-hero small { font: 800 .92rem var(--font-body); }
+.briefing-hero p { margin: 8px 0 0; color: #e5f1eb; font-size: .86rem; line-height: 1.45; }
+.briefing-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; padding: 14px 16px; }
+.briefing-grid ul { margin: 8px 0 0; padding-left: 18px; color: var(--ink); font-size: .84rem; line-height: 1.45; }
+.briefing-grid li + li { margin-top: 7px; }
+.briefing-focus { margin: 8px 0 0; padding: 10px; border-radius: 9px; background: #f5efe0; color: #58420c; font-size: .84rem; font-weight: 700; line-height: 1.4; }
+.briefing-context { padding: 0 16px 14px; border-top: 1px solid var(--line); }
+.briefing-context .briefing-kicker { margin-top: 12px; color: var(--muted); }
+.briefing-context p { margin: 7px 0 0; color: var(--muted); font-size: .82rem; line-height: 1.4; }
+.briefing-context strong { color: var(--ink); }
+@media (max-width: 520px) { .briefing-grid { grid-template-columns: 1fr; gap: 12px; } }
 
 /* Picker */
 

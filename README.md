@@ -55,6 +55,8 @@ In **Add Round**, open **Apply voice recap**, paste the structured JSON produced
 
 A voice assistant can send an **Open in Fairway Ledger** link instead of showing JSON. The link opens the app directly on **Add Round** with **Apply voice recap** expanded and a validated **Ready to add** preview; the golfer still taps **Apply as new round** to save. The payload is a URL fragment, not a query string, so browsers do not send it to GitHub Pages or server logs. Fairway Ledger removes the fragment from the address bar immediately after reading it, including when it is malformed or too large.
 
+Rounds live only in the current browser/app's local storage. Open the link in the same Fairway Ledger browser profile or installed app that holds your history. If a linked recap opens in a fresh data space, the app makes that explicit and requires a separate confirmation before saving there; it never replaces existing history.
+
 The exact format is:
 
 ```text
@@ -84,6 +86,20 @@ Keep the encoded JSON under 8 KB. A normal 18-hole scorecard is far smaller; omi
 ```
 
 For a catalog course, use its exact `course.id` (for example `ridgeview-white`) and optionally a `tee`; for Deerwood use `id: "deerwood"`, `tee`, and either `nine` for 9 holes or `frontNine` plus `backNine` for 18. Each hole may also include `penalties`, `fringePutts`, `firstPuttDistance`, `fairway`, `gir`, `bunker`, `clubsHit`, `penaltyClubs`, or `shots`.
+
+For a post-round voice-coach recap, add only details the golfer actually narrated. `teeClub` also seeds the saved tee-club record; `approachNote`, `result`, and `missContext` remain verbatim context for the briefing. Omitted fields stay unknown—Fairway Ledger does not infer putts, misses, or clubs.
+
+```json
+{
+  "date": "2026-07-28",
+  "course": { "id": "deerwood", "tee": "White", "frontNine": "buck", "backNine": "doe" },
+  "note": "Buck was scrappy; settled in on Doe.",
+  "holes": [
+    { "score": 5, "teeClub": "Driver", "approachNote": "8-iron from 145 to the middle", "result": "two-putt bogey", "missContext": "tee shot finished right" },
+    { "score": 5, "teeClub": "3W", "putts": 2, "result": "up-and-down missed" }
+  ]
+}
+```
 
 Setup form opens fully blank — no chip pre-selected anywhere. User taps Course, then Tee (auto-revealed for the course's available tees), then Deerwood-specific fields if relevant. Once required setup is satisfied, the big "Start Round →" button enables and reveals the scorecard.
 

@@ -371,6 +371,11 @@
               <p class="voice-import-hint">Use <code>course.id</code> from the Courses list, or <code>deerwood</code> with <code>tee</code> and <code>frontNine</code>/<code>backNine</code>. Include one ordered score entry per hole. Optional: note, wind, tag, and per-hole putts, penalties, notes, clubsHit, or shots.</p>
               <div class="voice-import-actions"><button id="voiceRecapPreview" class="ghost-button" type="button">Preview recap</button><button id="voiceRecapApply" class="primary-button" type="button" disabled>Apply as new round</button></div>
               <div id="voiceRecapPreviewOutput" class="voice-import-preview" aria-live="polite"></div>
+              <div id="voiceRecapStorageNotice" class="voice-storage-notice" hidden>
+                <strong>This is a fresh Fairway Ledger data space.</strong>
+                <p>Your usual history was not replaced—this browser/profile or installed app has no saved rounds. Open the link in the same Fairway Ledger browser/app that holds your history. To save this as the first round in this separate copy, confirm below.</p>
+                <label><input id="voiceRecapFreshStoreConfirm" type="checkbox"> I want to save this as the first round in this copy.</label>
+              </div>
             </details>
 
             <form id="roundForm">
