@@ -9023,9 +9023,11 @@
           const body = await response.json();
           detail = typeof body.message === "string" ? body.message : (typeof body.error_description === "string" ? body.error_description : "");
         } catch {}
-        const guidance = response.status === 403
-          ? " In Supabase, open Authentication → Providers → Email and enable Email."
-          : " Check Supabase Authentication → URL Configuration: the Site URL and Redirect URL must include https://jcurry44.github.io/Fairway-Ledger/.";
+        const guidance = response.status === 429
+          ? " A sign-in email may already be on its way. Check inbox/spam, wait for the Supabase cooldown, then retry once."
+          : response.status === 403
+            ? " In Supabase, open Authentication → Providers → Email and enable Email."
+            : " Check Supabase Authentication → URL Configuration: the Site URL and Redirect URL must include https://jcurry44.github.io/Fairway-Ledger/.";
         throw new Error(`Could not send the sign-in link (${response.status})${detail ? `: ${detail}` : "."}${guidance}`);
       }
       writeVoiceDraftStatus("Secure sign-in link sent. Open it on this phone, then refresh the inbox.");
