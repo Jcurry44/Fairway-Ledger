@@ -103,6 +103,7 @@
     projectUrl: "https://vodtsentyuehvddattkf.supabase.co",
     anonKey: "sb_publishable_Rc0PiwsLZZyccib95d9jAA_qyGpCA5W"
   });
+  const VOICE_DRAFT_AUTH_REDIRECT_URL = "https://jcurry44.github.io/Fairway-Ledger/";
   // Card scorecard sectioning preference. "narrative" reorders the per-hole
   // inputs to match how you experience the hole (tee → approach → green →
   // score). "default" is the original outcome-first layout. As of the
@@ -9015,7 +9016,7 @@
         // account from seeing anyone else's drafts.
         // This is the raw GoTrue REST endpoint, whose redirect field is
         // `redirect_to` (the SDK calls it options.emailRedirectTo).
-        body: JSON.stringify({ email: config.email, create_user: true, redirect_to: `${location.origin}${location.pathname}` })
+        body: JSON.stringify({ email: config.email, create_user: true, redirect_to: VOICE_DRAFT_AUTH_REDIRECT_URL })
       });
       if (!response.ok) {
         let detail = "";
@@ -9030,7 +9031,7 @@
             : " Check Supabase Authentication → URL Configuration: the Site URL and Redirect URL must include https://jcurry44.github.io/Fairway-Ledger/.";
         throw new Error(`Could not send the sign-in link (${response.status})${detail ? `: ${detail}` : "."}${guidance}`);
       }
-      writeVoiceDraftStatus("Secure sign-in link sent. Open it on this phone, then refresh the inbox.");
+      writeVoiceDraftStatus("Secure sign-in link sent. It should return to Fairway Ledger; if it opens the portfolio root, set Supabase Auth Site URL to https://jcurry44.github.io/Fairway-Ledger/, then request one new link.");
     } catch (error) { writeVoiceDraftStatus(error.message); }
   }
 
