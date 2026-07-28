@@ -240,6 +240,45 @@ h2 {
   box-shadow: var(--shadow);
 }
 
+/* Shared voice recap inbox. Kept intentionally distinct from the local
+   scorecard UI: a draft is review material, never a saved round. */
+.voice-draft-inbox {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 18px;
+}
+.voice-inbox-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  padding: 16px;
+  border: 1px solid #dbc781;
+  border-radius: 14px;
+  background: linear-gradient(130deg, #fffdf5, #f6efda);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.voice-inbox-card strong,.voice-inbox-card span { display:block; }
+.voice-inbox-card strong { font-size: 1rem; }
+.voice-inbox-card span { color: var(--muted); font-size: .84rem; margin-top: 3px; }
+.voice-inbox-card em { color: #8c6417; font-style: normal; font-weight: 800; white-space: nowrap; }
+.voice-inbox-empty { padding: 14px 16px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); font-size: .9rem; }
+.voice-settings-grid { display: grid; gap: 9px; margin: 12px 0; }
+.voice-settings-grid input { min-width: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+.voice-draft-sheet { max-width: 700px; }
+.voice-draft-body { display:grid; gap: 14px; max-height: min(64vh, 620px); overflow:auto; padding: 4px 2px 14px; }
+.voice-draft-summary { margin: 0; line-height: 1.5; white-space: pre-wrap; }
+.voice-draft-section { border-top: 1px solid var(--line); padding-top: 13px; }
+.voice-draft-section h4 { margin: 0 0 8px; font-size: .84rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.voice-draft-coaching,.voice-draft-holes { margin:0; padding-left: 20px; display:grid; gap:9px; }
+.voice-draft-holes li { padding-bottom: 9px; border-bottom: 1px solid #edf0ea; }
+.voice-draft-holes p { margin:4px 0 0; line-height:1.45; white-space:pre-wrap; }
+.voice-draft-holes .voice-coaching { color: #725418; font-size:.9rem; }
+.voice-draft-actions { display:flex; flex-wrap:wrap; gap:8px; padding-top: 12px; border-top: 1px solid var(--line); }
+
 .welcome-callout h2 {
   margin: 0 0 6px;
   font-size: 1.3rem;
