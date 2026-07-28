@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { validateRecap, encodeVoiceRecapFragment, decodeVoiceRecapFragment, voiceRecapNeedsFreshStoreConfirmation } = require("../lib/voice-recap.js");
+const Recap = require("../lib/voice-recap.js");
+const { validateRecap, encodeVoiceRecapFragment, decodeVoiceRecapFragment, voiceRecapNeedsFreshStoreConfirmation } = Recap;
+const Shapes = require("../lib/shapes.js");
 const course = { holes: [{ number: 1, label: "Buck 1", par: 4 }, { number: 2, label: "Buck 2", par: 3 }] };
 test("accepts a complete score-only recap and optional hole notes", () => {
   const recap = validateRecap({ date: "2026-07-28", note: "Good day", holes: [{ score: 5, note: "Lost one right" }, { score: 3, putts: 1 }] }, course);
@@ -36,4 +38,27 @@ test("preserves player-reported coaching context separately from scored evidence
   const recap = validateRecap({ date: "2026-07-28", coaching: { story: "Played better than the score.", pattern: "Open-face protection created push-slices.", nextRoundCue: "Square setup, stock swing.", strengths: ["3-wood"], practicePlan: ["Start-line routine"] }, holes: [{ score: 5 }, { score: 3 }] }, course);
   assert.equal(recap.coaching.nextRoundCue, "Square setup, stock swing.");
   assert.deepEqual(recap.coaching.strengths, ["3-wood"]);
+});
+
+const deerwoodDraft = {
+  id: "deerwood-july-28", createdAt: "2026-07-28T20:00:00Z",
+  round: { date: "2026-07-28", courseId: "deerwood-buck-doe-white", tee: "White", holes: [{ number: 1, par: 4, score: 5 }] },
+  recap: { summary: "A full Deerwood recap.", coaching: ["Keep the tee ball in play."], holeNarration: [{ holeNumber: 1, label: "Buck 1", narration: "Missed left but recovered for bogey.", coaching: "Commit to the target." }] }
+};
+test("shared drafts preserve narration and coaching instead of collapsing to scores", () => {
+  const draft = Recap.normalizeDraft(deerwoodDraft);
+  assert.equal(draft.recap.holeNarration[0].narration, "Missed left but recovered for bogey.");
+  assert.equal(draft.round.holes[0].note, "Missed left but recovered for bogey.");
+  assert.equal(Recap.validateDraft(draft).valid, true);
+});
+test("shared drafts reject score-only payloads", () => {
+  const result = Recap.validateDraft({ ...deerwoodDraft, recap: {} });
+  assert.equal(result.valid, false);
+  assert.match(result.errors[0], /score-only/i);
+});
+test("applying a shared draft adds a canonical round and retains recap detail", () => {
+  const round = Recap.toAppliedRound(deerwoodDraft, Shapes.makeRound, () => "new-round");
+  assert.equal(round.id, "new-round");
+  assert.equal(round.voiceRecap.draftId, "deerwood-july-28");
+  assert.equal(round.holes[0].note, "Missed left but recovered for bogey.");
 });

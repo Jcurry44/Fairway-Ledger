@@ -79,6 +79,8 @@
   } = window.GolfShapes;
   const { validateRecap, decodeVoiceRecapFragment, VOICE_RECAP_FRAGMENT_KEY, voiceRecapNeedsFreshStoreConfirmation } = window.FairwayVoiceRecap;
 
+  const VoiceRecap = window.FairwayVoiceRecap;
+
   const {
     classifyAccuracy,
     cloneShot,
@@ -92,6 +94,9 @@
   const BRIEF_COLLAPSED_KEY = "fairwayLedger.briefCollapsed.v1";
   const VIEW_MODE_KEY = "fairwayLedger.viewMode.v1";
   const IN_PROGRESS_KEY = "fairwayLedger.inProgressRound.v1";
+  const VOICE_DRAFT_CONFIG_KEY = "fairwayLedger.voiceDraft.config.v1";
+  const VOICE_DRAFT_SESSION_KEY = "fairwayLedger.voiceDraft.session.v1";
+  const VOICE_DRAFT_APPLIED_KEY = "fairwayLedger.voiceDraft.applied.v1";
   // Card scorecard sectioning preference. "narrative" reorders the per-hole
   // inputs to match how you experience the hole (tee → approach → green →
   // score). "default" is the original outcome-first layout. As of the
@@ -591,6 +596,21 @@
     metricSg: document.getElementById("metricSg"),
     metricHandicap: document.getElementById("metricHandicap"),
     homeInsights: document.getElementById("homeInsights"),
+    voiceDraftInbox: document.getElementById("voiceDraftInbox"),
+    voiceDraftProjectUrl: document.getElementById("voiceDraftProjectUrl"),
+    voiceDraftAnonKey: document.getElementById("voiceDraftAnonKey"),
+    voiceDraftEmail: document.getElementById("voiceDraftEmail"),
+    voiceDraftSaveSettings: document.getElementById("voiceDraftSaveSettings"),
+    voiceDraftRefresh: document.getElementById("voiceDraftRefresh"),
+    voiceDraftStatus: document.getElementById("voiceDraftStatus"),
+    voiceDraftIdentity: document.getElementById("voiceDraftIdentity"),
+    voiceDraftOverlay: document.getElementById("voiceDraftOverlay"),
+    voiceDraftBackdrop: document.getElementById("voiceDraftBackdrop"),
+    voiceDraftClose: document.getElementById("voiceDraftClose"),
+    voiceDraftTitle: document.getElementById("voiceDraftTitle"),
+    voiceDraftBody: document.getElementById("voiceDraftBody"),
+    voiceDraftApply: document.getElementById("voiceDraftApply"),
+    voiceDraftArchive: document.getElementById("voiceDraftArchive"),
     filterCourse: document.getElementById("filterCourse"),
     filterTee: document.getElementById("filterTee"),
     filterWindow: document.getElementById("filterWindow"),
@@ -8847,6 +8867,202 @@
     els.trendChart.innerHTML = `<div class="trend-bars" aria-label="Recent scoring trend">${bars}</div>`;
   }
 
+  // ---- Shared voice-recap inbox -----------------------------------------
+  //
+  // This stays outside `state` on purpose. Cloud drafts are review material,
+  // not local history; they only become a round after the explicit Apply
+  // action below. Supabase's anon key is publishable and RLS protects rows;
+  // no service credential or voice-ingest secret ever reaches this browser.
+  let voiceDrafts = [];
+  let openVoiceDraftId = null;
+
+  function readVoiceDraftConfig() {
+    try {
+      const value = JSON.parse(localStorage.getItem(VOICE_DRAFT_CONFIG_KEY) || "{}");
+      return {
+        projectUrl: typeof value.projectUrl === "string" ? value.projectUrl.replace(/\/$/, "") : "",
+        anonKey: typeof value.anonKey === "string" ? value.anonKey.trim() : "",
+        email: typeof value.email === "string" ? value.email.trim() : ""
+      };
+    } catch { return { projectUrl: "", anonKey: "", email: "" }; }
+  }
+
+  function readVoiceDraftSession() {
+    try { return JSON.parse(localStorage.getItem(VOICE_DRAFT_SESSION_KEY) || "null"); } catch { return null; }
+  }
+
+  function writeVoiceDraftStatus(message) {
+    if (els.voiceDraftStatus) els.voiceDraftStatus.textContent = message;
+  }
+
+  function readAppliedVoiceDraftIds() {
+    try { return new Set(JSON.parse(localStorage.getItem(VOICE_DRAFT_APPLIED_KEY) || "[]")); } catch { return new Set(); }
+  }
+
+  function rememberAppliedVoiceDraft(id) {
+    if (!id) return;
+    const ids = readAppliedVoiceDraftIds(); ids.add(id);
+    try { localStorage.setItem(VOICE_DRAFT_APPLIED_KEY, JSON.stringify([...ids].slice(-100))); } catch {}
+  }
+
+  function isVoiceInboxConfigured() {
+    const { projectUrl, anonKey } = readVoiceDraftConfig();
+    return /^https:\/\/.+\.supabase\.co$/i.test(projectUrl) && anonKey.length > 20;
+  }
+
+  async function getFreshVoiceDraftSession() {
+    const session = readVoiceDraftSession();
+    if (!session || !session.access_token) return null;
+    if (!session.expires_at || session.expires_at * 1000 > Date.now() + 60_000 || !session.refresh_token) return session;
+    const config = readVoiceDraftConfig();
+    const response = await fetch(`${config.projectUrl}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST", headers: { apikey: config.anonKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: session.refresh_token })
+    });
+    if (!response.ok) return session;
+    const refreshed = await response.json();
+    const next = { access_token: refreshed.access_token, refresh_token: refreshed.refresh_token || session.refresh_token, expires_at: refreshed.expires_at || 0 };
+    try { localStorage.setItem(VOICE_DRAFT_SESSION_KEY, JSON.stringify(next)); } catch {}
+    return next;
+  }
+
+  async function voiceSupabaseRequest(path, options = {}) {
+    const config = readVoiceDraftConfig();
+    const session = await getFreshVoiceDraftSession();
+    if (!isVoiceInboxConfigured() || !session || !session.access_token) throw new Error("Connect your secure voice inbox first.");
+    const response = await fetch(`${config.projectUrl}${path}`, {
+      ...options,
+      headers: {
+        apikey: config.anonKey,
+        Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json",
+        ...(options.headers || {})
+      }
+    });
+    if (!response.ok) {
+      if (response.status === 401) throw new Error("Your inbox sign-in expired. Send yourself a new sign-in link in Profile.");
+      throw new Error("Could not reach your private voice inbox.");
+    }
+    return response.status === 204 ? null : response.json();
+  }
+
+  async function refreshVoiceDraftIdentity() {
+    if (!isVoiceInboxConfigured()) return;
+    try {
+      const user = await voiceSupabaseRequest("/auth/v1/user");
+      if (els.voiceDraftIdentity && user && user.id) {
+        els.voiceDraftIdentity.hidden = false;
+        els.voiceDraftIdentity.textContent = `Voice-service routing ID: ${user.id}`;
+      }
+    } catch {
+      if (els.voiceDraftIdentity) els.voiceDraftIdentity.hidden = true;
+    }
+  }
+
+  function renderVoiceDraftInbox() {
+    if (!els.voiceDraftInbox) return;
+    if (!isVoiceInboxConfigured()) {
+      els.voiceDraftInbox.innerHTML = `<div class="voice-inbox-empty">Voice recap inbox is ready to connect in Profile. Drafts stay separate from saved rounds.</div>`;
+      return;
+    }
+    const applied = readAppliedVoiceDraftIds();
+    const pending = voiceDrafts.filter((draft) => draft.status === "pending" && !applied.has(draft.id));
+    if (!pending.length) {
+      els.voiceDraftInbox.innerHTML = `<div class="voice-inbox-empty">No new voice recaps. Finish a spoken recap and its complete draft will appear here.</div>`;
+      return;
+    }
+    els.voiceDraftInbox.innerHTML = pending.map((draft) => {
+      const total = roundTotals(draft.round);
+      const title = draft.recap.title || `${draft.round.date || "New"} voice recap`;
+      const meta = [draft.round.tee ? `${draft.round.tee} tees` : "", total.gross ? `${total.gross} (${formatSigned(total.toPar, 0)})` : "", `${draft.recap.holeNarration.length} narrated holes`].filter(Boolean).join(" · ");
+      return `<button class="voice-inbox-card" type="button" data-open-voice-draft="${escapeHtml(draft.id)}"><span><strong>${escapeHtml(title)}</strong><span>${escapeHtml(meta)}</span></span><em>Review ›</em></button>`;
+    }).join("");
+    els.voiceDraftInbox.querySelectorAll("[data-open-voice-draft]").forEach((button) => button.addEventListener("click", () => openVoiceDraft(button.dataset.openVoiceDraft)));
+  }
+
+  async function refreshVoiceDraftInbox({ quiet = false } = {}) {
+    if (!isVoiceInboxConfigured()) { renderVoiceDraftInbox(); return; }
+    const session = readVoiceDraftSession();
+    if (!session || !session.access_token) { writeVoiceDraftStatus("Saved connection. Send yourself a secure sign-in link to see drafts."); renderVoiceDraftInbox(); return; }
+    try {
+      const rows = await voiceSupabaseRequest("/rest/v1/voice_recap_drafts?select=id,payload,status,created_at,updated_at&status=eq.pending&order=created_at.desc");
+      voiceDrafts = (Array.isArray(rows) ? rows : []).map((row) => VoiceRecap.normalizeDraft({ ...row.payload, id: row.id, status: row.status, createdAt: row.created_at, updatedAt: row.updated_at }));
+      refreshVoiceDraftIdentity();
+      renderVoiceDraftInbox();
+      writeVoiceDraftStatus(`${voiceDrafts.length} pending secure voice recap${voiceDrafts.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      if (!quiet) writeVoiceDraftStatus(error.message);
+      renderVoiceDraftInbox();
+    }
+  }
+
+  async function requestVoiceDraftSignIn() {
+    const config = readVoiceDraftConfig();
+    if (!isVoiceInboxConfigured() || !/^\S+@\S+\.\S+$/.test(config.email)) {
+      writeVoiceDraftStatus("Enter your Supabase project URL, publishable anon key, and email first."); return;
+    }
+    try {
+      const response = await fetch(`${config.projectUrl}/auth/v1/otp`, {
+        method: "POST", headers: { apikey: config.anonKey, "Content-Type": "application/json" },
+        // The owner signs in with their email for the first time here. Email
+        // confirmation remains enabled in Supabase; RLS still prevents every
+        // account from seeing anyone else's drafts.
+        body: JSON.stringify({ email: config.email, create_user: true, options: { emailRedirectTo: `${location.origin}${location.pathname}` } })
+      });
+      if (!response.ok) throw new Error("Could not send the sign-in link. Check Auth settings and the redirect URL.");
+      writeVoiceDraftStatus("Secure sign-in link sent. Open it on this phone, then refresh the inbox.");
+    } catch (error) { writeVoiceDraftStatus(error.message); }
+  }
+
+  function captureVoiceDraftAuthReturn() {
+    const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
+    const accessToken = hash.get("access_token");
+    if (!accessToken) return;
+    try {
+      localStorage.setItem(VOICE_DRAFT_SESSION_KEY, JSON.stringify({ access_token: accessToken, refresh_token: hash.get("refresh_token") || "", expires_at: Number(hash.get("expires_at") || 0) }));
+      history.replaceState(null, document.title, `${location.pathname}${location.search}`);
+      writeVoiceDraftStatus("Secure voice inbox connected.");
+    } catch {}
+  }
+
+  function openVoiceDraft(id) {
+    const draft = voiceDrafts.find((item) => item.id === id);
+    if (!draft || !els.voiceDraftOverlay) return;
+    openVoiceDraftId = id;
+    const validation = VoiceRecap.validateDraft(draft);
+    const total = roundTotals(draft.round);
+    els.voiceDraftTitle.textContent = draft.recap.title || "Voice recap draft";
+    const coaching = draft.recap.coaching.length ? `<section class="voice-draft-section"><h4>Coaching</h4><ul class="voice-draft-coaching">${draft.recap.coaching.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul></section>` : "";
+    const holes = draft.recap.holeNarration.length ? `<section class="voice-draft-section"><h4>Hole-by-hole recap</h4><ol class="voice-draft-holes">${draft.recap.holeNarration.map((item) => `<li><strong>${escapeHtml(item.label || `Hole ${item.holeNumber}`)}</strong>${item.narration ? `<p>${escapeHtml(item.narration)}</p>` : ""}${item.coaching ? `<p class="voice-coaching">Coach: ${escapeHtml(item.coaching)}</p>` : ""}</li>`).join("")}</ol></section>` : "";
+    els.voiceDraftBody.innerHTML = `<div><strong>${total.gross || "—"}${total.gross ? ` (${formatSigned(total.toPar, 0)})` : ""}</strong> · ${escapeHtml(draft.round.date || "Date unconfirmed")} · ${escapeHtml(draft.round.tee || "Tee unconfirmed")}</div>${draft.recap.summary ? `<section class="voice-draft-section"><h4>Round recap</h4><p class="voice-draft-summary">${escapeHtml(draft.recap.summary)}</p></section>` : ""}${coaching}${holes}${validation.valid ? "" : `<p class="voice-inbox-empty">Cannot apply yet: ${escapeHtml(validation.errors[0])}</p>`}`;
+    els.voiceDraftApply.disabled = !validation.valid;
+    els.voiceDraftOverlay.hidden = false; document.body.classList.add("hole-picker-open");
+  }
+
+  function closeVoiceDraft() { if (els.voiceDraftOverlay) els.voiceDraftOverlay.hidden = true; document.body.classList.remove("hole-picker-open"); openVoiceDraftId = null; }
+
+  async function setVoiceDraftRemoteStatus(id, status) {
+    await voiceSupabaseRequest(`/rest/v1/voice_recap_drafts?id=eq.${encodeURIComponent(id)}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify(status === "applied" ? { status, applied_at: new Date().toISOString() } : { status }) });
+  }
+
+  async function applyOpenVoiceDraft() {
+    const draft = voiceDrafts.find((item) => item.id === openVoiceDraftId);
+    if (!draft) return;
+    try {
+      const round = VoiceRecap.toAppliedRound(draft, makeRound, makeId);
+      if (!getCourse(round.courseId)) throw new Error("This draft's course is not available in Fairway Ledger yet.");
+      state.rounds.push(round); saveState(); rememberAppliedVoiceDraft(draft.id); renderAll(); closeVoiceDraft();
+      showToast("Voice recap applied as a new round.");
+      try { await setVoiceDraftRemoteStatus(draft.id, "applied"); } catch { writeVoiceDraftStatus("Round saved locally; inbox status will sync after you sign in again."); }
+    } catch (error) { showToast(error.message); }
+  }
+
+  async function archiveOpenVoiceDraft() {
+    const id = openVoiceDraftId; if (!id) return;
+    try { await setVoiceDraftRemoteStatus(id, "archived"); voiceDrafts = voiceDrafts.filter((draft) => draft.id !== id); closeVoiceDraft(); renderVoiceDraftInbox(); showToast("Voice recap archived."); }
+    catch (error) { showToast(error.message); }
+  }
+
   function renderAll() {
     renderSelectOptions();
     if (!els.roundDate.value) els.roundDate.value = today;
@@ -8860,6 +9076,7 @@
     const rounds = getFilteredRounds();
     renderMetrics(rounds);
     renderHomeInsights(rounds);
+    renderVoiceDraftInbox();
     renderHandicapPanel();
     renderTrend(rounds);
     renderCourseStats(rounds);
@@ -10914,6 +11131,20 @@
   if (els.heatmapDrilldownClose) els.heatmapDrilldownClose.addEventListener("click", closeHeatmapDrilldown);
   if (els.roundDetailBackdrop) els.roundDetailBackdrop.addEventListener("click", closeRoundDetail);
   if (els.roundDetailClose) els.roundDetailClose.addEventListener("click", closeRoundDetail);
+  if (els.voiceDraftBackdrop) els.voiceDraftBackdrop.addEventListener("click", closeVoiceDraft);
+  if (els.voiceDraftClose) els.voiceDraftClose.addEventListener("click", closeVoiceDraft);
+  if (els.voiceDraftApply) els.voiceDraftApply.addEventListener("click", applyOpenVoiceDraft);
+  if (els.voiceDraftArchive) els.voiceDraftArchive.addEventListener("click", archiveOpenVoiceDraft);
+  if (els.voiceDraftSaveSettings) els.voiceDraftSaveSettings.addEventListener("click", () => {
+    const next = {
+      projectUrl: (els.voiceDraftProjectUrl?.value || "").trim().replace(/\/$/, ""),
+      anonKey: (els.voiceDraftAnonKey?.value || "").trim(),
+      email: (els.voiceDraftEmail?.value || "").trim()
+    };
+    try { localStorage.setItem(VOICE_DRAFT_CONFIG_KEY, JSON.stringify(next)); } catch {}
+    renderVoiceDraftInbox(); requestVoiceDraftSignIn();
+  });
+  if (els.voiceDraftRefresh) els.voiceDraftRefresh.addEventListener("click", () => refreshVoiceDraftInbox());
   if (els.holePickerList) {
     els.holePickerList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-jump-hole]");
@@ -11286,6 +11517,11 @@
   });
 
   async function initializeApp() {
+    captureVoiceDraftAuthReturn();
+    const voiceConfig = readVoiceDraftConfig();
+    if (els.voiceDraftProjectUrl) els.voiceDraftProjectUrl.value = voiceConfig.projectUrl;
+    if (els.voiceDraftAnonKey) els.voiceDraftAnonKey.value = voiceConfig.anonKey;
+    if (els.voiceDraftEmail) els.voiceDraftEmail.value = voiceConfig.email;
     sampleCourses = await loadCourseCatalog();
     sampleRounds = buildSampleRounds();
     state = loadState();
@@ -11295,6 +11531,7 @@
     initSelectChips();
     renderAll();
     setActiveTab(localStorage.getItem(ACTIVE_TAB_KEY) || "home");
+    refreshVoiceDraftInbox({ quiet: true });
     // Offer to restore any in-progress round entry that was interrupted
     // (page reload, phone restart, accidental tab close, etc).
     maybeResumeInProgressRound();

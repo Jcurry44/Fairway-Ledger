@@ -15,9 +15,9 @@
     <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
          icon, theme color in the browser chrome, and a standalone display
          mode instead of a tab. -->
-    <link rel="manifest" href="./manifest.json?v=2026-07-28b">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-07-28b">
-    <link rel="apple-touch-icon" href="./icon.svg?v=2026-07-28b">
+    <link rel="manifest" href="./manifest.json?v=2026-07-28c">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-07-28c">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-07-28c">
     <meta name="theme-color" content="#1f7a59">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -37,19 +37,19 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap"></noscript>
 
-    <link rel="stylesheet" href="./styles.css?v=2026-07-28b">
-    <script src="./data/courses.js?v=2026-07-28b" defer></script>
-    <script src="./data/course-maps/deerwood-runtime.js?v=2026-07-28b" defer></script>
-    <script src="./lib/golf-math.js?v=2026-07-28b" defer></script>
-    <script src="./lib/shapes.js?v=2026-07-28b" defer></script>
-    <script src="./lib/voice-recap.js?v=2026-07-28b" defer></script>
-    <script src="./lib/gps.js?v=2026-07-28b" defer></script>
-    <script src="./lib/course-map.js?v=2026-07-28b" defer></script>
-    <script src="./lib/course-map-labels.js?v=2026-07-28b" defer></script>
-    <script src="./data/course-maps/deerwood-aerial-labels-v1.js?v=2026-07-28b" defer></script>
-    <script src="./lib/course-map-ui.js?v=2026-07-28b" defer></script>
-    <script src="./lib/games.js?v=2026-07-28b" defer></script>
-    <script src="./app.js?v=2026-07-28b" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-07-28c">
+    <script src="./data/courses.js?v=2026-07-28c" defer></script>
+    <script src="./data/course-maps/deerwood-runtime.js?v=2026-07-28c" defer></script>
+    <script src="./lib/golf-math.js?v=2026-07-28c" defer></script>
+    <script src="./lib/shapes.js?v=2026-07-28c" defer></script>
+    <script src="./lib/voice-recap.js?v=2026-07-28c" defer></script>
+    <script src="./lib/gps.js?v=2026-07-28c" defer></script>
+    <script src="./lib/course-map.js?v=2026-07-28c" defer></script>
+    <script src="./lib/course-map-labels.js?v=2026-07-28c" defer></script>
+    <script src="./data/course-maps/deerwood-aerial-labels-v1.js?v=2026-07-28c" defer></script>
+    <script src="./lib/course-map-ui.js?v=2026-07-28c" defer></script>
+    <script src="./lib/games.js?v=2026-07-28c" defer></script>
+    <script src="./app.js?v=2026-07-28c" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -161,6 +161,8 @@
               <button class="welcome-secondary" type="button" id="welcomeSampleButton">Try with sample data</button>
             </div>
           </section>
+
+          <section id="voiceDraftInbox" class="voice-draft-inbox" data-home-section="overview" aria-label="Voice recap drafts"></section>
 
           <!-- Hero stat: the one number that matters, big, on deep green,
                with the scoring sparkline built in. Rendered by
@@ -712,6 +714,19 @@
             <p class="profile-bag-hint" id="courseApiKeyStatus"></p>
           </article>
 
+          <article class="panel wide-panel" id="voiceDraftSettingsPanel">
+            <div class="panel-heading"><div><p class="eyebrow">Private sync</p><h2>Shared voice recaps</h2></div></div>
+            <p class="profile-bag-hint">Receive a finished voice recap here as a reviewable draft. Your round history stays on this device until you explicitly apply a draft.</p>
+            <div class="voice-settings-grid">
+              <input id="voiceDraftProjectUrl" type="url" inputmode="url" autocomplete="off" placeholder="Supabase project URL" aria-label="Supabase project URL">
+              <input id="voiceDraftAnonKey" type="text" autocomplete="off" placeholder="Publishable anon key" aria-label="Supabase publishable anon key">
+              <input id="voiceDraftEmail" type="email" inputmode="email" autocomplete="email" placeholder="Your email for secure sign-in" aria-label="Email for secure voice recap sign-in">
+            </div>
+            <div class="course-api-row"><button type="button" class="primary-button" id="voiceDraftSaveSettings">Save &amp; send sign-in link</button><button type="button" class="ghost-button" id="voiceDraftRefresh">Refresh inbox</button></div>
+            <p class="profile-bag-hint" id="voiceDraftStatus">Not connected. Setup requires your own private sync project.</p>
+            <p class="profile-bag-hint" id="voiceDraftIdentity" hidden></p>
+          </article>
+
           <article class="panel wide-panel">
             <div class="panel-heading">
               <div>
@@ -967,6 +982,16 @@
         <div class="round-detail-actions">
           <button id="roundDetailEditButton" class="ghost-button" type="button">Edit this round</button>
         </div>
+      </div>
+    </div>
+
+    <div id="voiceDraftOverlay" class="hole-picker-overlay" hidden>
+      <button id="voiceDraftBackdrop" class="hole-picker-backdrop" type="button" aria-label="Close voice recap"></button>
+      <div class="hole-picker-sheet voice-draft-sheet" role="dialog" aria-modal="true" aria-labelledby="voiceDraftTitle">
+        <div class="hole-picker-handle" aria-hidden="true"></div>
+        <div class="hole-picker-header"><h3 id="voiceDraftTitle">Voice recap draft</h3><button id="voiceDraftClose" class="hole-picker-close" type="button" aria-label="Close">&times;</button></div>
+        <div id="voiceDraftBody" class="voice-draft-body"></div>
+        <div class="voice-draft-actions"><button id="voiceDraftApply" type="button" class="primary-button">Apply as new round</button><button id="voiceDraftArchive" type="button" class="ghost-button">Archive draft</button></div>
       </div>
     </div>
 
