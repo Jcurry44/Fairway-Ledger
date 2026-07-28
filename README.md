@@ -47,6 +47,23 @@ Per-physical-course filtering throughout: Deerwood's six per-nine/tee catalog en
 
 ## Add Round
 
+### Voice recap import
+
+In **Add Round**, open **Apply voice recap**, paste the structured JSON produced by a voice conversation, preview it, then apply it. It always creates a new round and uses the same canonical persistence/scoring path as manual rounds. The recap must include a date, a route, and one ordered score for every hole.
+
+```json
+{
+  "date": "2026-07-28",
+  "course": { "id": "deerwood", "tee": "White", "frontNine": "buck", "backNine": "doe" },
+  "wind": "10",
+  "tag": "casual",
+  "note": "Driver was loose early; putted well on Doe.",
+  "holes": [{ "score": 5, "putts": 2, "note": "Right rough" }]
+}
+```
+
+For a catalog course, use its exact `course.id` (for example `ridgeview-white`) and optionally a `tee`; for Deerwood use `id: "deerwood"`, `tee`, and either `nine` for 9 holes or `frontNine` plus `backNine` for 18. Each hole may also include `penalties`, `fringePutts`, `firstPuttDistance`, `fairway`, `gir`, `bunker`, `clubsHit`, `penaltyClubs`, or `shots`.
+
 Setup form opens fully blank — no chip pre-selected anywhere. User taps Course, then Tee (auto-revealed for the course's available tees), then Deerwood-specific fields if relevant. Once required setup is satisfied, the big "Start Round →" button enables and reveals the scorecard.
 
 Two scorecard views, persisted per user:

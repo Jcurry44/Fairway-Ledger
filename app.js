@@ -77,6 +77,7 @@
     makeRound,
     normalizeRound
   } = window.GolfShapes;
+  const { validateRecap } = window.FairwayVoiceRecap;
 
   const {
     classifyAccuracy,
@@ -570,6 +571,7 @@
   };
 
   let sampleRounds = [];
+  let pendingVoiceRecap = null;
   let state = {
     courses: [],
     rounds: [],
@@ -615,6 +617,10 @@
     roundSetup: document.getElementById("roundSetup"),
     roundSetupBanner: document.getElementById("roundSetupBanner"),
     roundNote: document.getElementById("roundNote"),
+    voiceRecapInput: document.getElementById("voiceRecapInput"),
+    voiceRecapPreview: document.getElementById("voiceRecapPreview"),
+    voiceRecapApply: document.getElementById("voiceRecapApply"),
+    voiceRecapPreviewOutput: document.getElementById("voiceRecapPreviewOutput"),
     surveyDetails: document.getElementById("surveyDetails"),
     surveySwingThoughts: document.getElementById("surveySwingThoughts"),
     surveyWentWell: document.getElementById("surveyWentWell"),
@@ -1768,6 +1774,65 @@
   function ensureSavedCourse(course) {
     if (!course || state.courses.some((candidate) => candidate.id === course.id)) return;
     state.courses.push(course);
+  }
+
+  // Voice systems should send a course object rather than trying to infer the
+  // app's generated Deerwood route ids. This resolver turns that compact
+  // description into the exact same course object used by manual entry.
+  function resolveVoiceRecapCourse(input) {
+    const descriptor = input.course || (input.courseId ? { id: input.courseId, tee: input.tee } : null);
+    if (!descriptor || typeof descriptor !== "object") throw new Error("Include course.id in the recap.");
+    const id = String(descriptor.id || "");
+    if (id === DEERWOOD_COURSE_ID) {
+      const tee = DEERWOOD_TEE_OPTIONS.includes(descriptor.tee) ? descriptor.tee : "White";
+      if (descriptor.nine) {
+        if (!DEERWOOD_NINE_IDS.includes(descriptor.nine)) throw new Error("Deerwood nine must be buck, doe, or fawn.");
+        return buildDeerwoodCourse("9", descriptor.nine, tee);
+      }
+      const front = descriptor.frontNine || "buck";
+      const back = descriptor.backNine || "doe";
+      if (!DEERWOOD_NINE_IDS.includes(front) || !DEERWOOD_NINE_IDS.includes(back)) throw new Error("Deerwood frontNine and backNine must be buck, doe, or fawn.");
+      return buildDeerwoodCourse("18", `${front}-${back}`, tee);
+    }
+    const course = getCourse(id);
+    if (!course) throw new Error(`Course '${id}' was not found. Use a course.id from the Courses list.`);
+    return course;
+  }
+
+  function previewVoiceRecap() {
+    if (!els.voiceRecapInput || !els.voiceRecapPreviewOutput) return;
+    pendingVoiceRecap = null;
+    if (els.voiceRecapApply) els.voiceRecapApply.disabled = true;
+    try {
+      const input = JSON.parse(els.voiceRecapInput.value);
+      const course = resolveVoiceRecapCourse(input);
+      const recap = validateRecap(input, course);
+      const round = makeRound({ id: "__voice_recap_preview__", date: recap.date, courseId: course.id, tee: course.tee, wind: recap.wind || "", tag: recap.tag || "", note: recap.note || "", entryMode: "detailed", holes: recap.holes.map(makeHole) });
+      const totals = roundTotals(round);
+      pendingVoiceRecap = { course, recap, round };
+      els.voiceRecapPreviewOutput.innerHTML = `<strong>Ready to add:</strong> ${escapeHtml(course.name)} · ${escapeHtml(recap.date)} · ${totals.gross} (${formatSigned(totals.toPar, 0)}) across ${recap.holes.length} holes.`;
+      if (els.voiceRecapApply) els.voiceRecapApply.disabled = false;
+    } catch (error) {
+      els.voiceRecapPreviewOutput.textContent = error.message || "That recap could not be read.";
+    }
+  }
+
+  function applyVoiceRecap() {
+    if (!pendingVoiceRecap) return previewVoiceRecap();
+    const { course, recap, round } = pendingVoiceRecap;
+    ensureSavedCourse(course);
+    const newRound = makeRound({ ...round, id: makeId("round") });
+    newRound.narrative = generateRoundNarrative(newRound, state.rounds);
+    state.rounds.push(newRound);
+    saveState();
+    pendingVoiceRecap = null;
+    els.voiceRecapInput.value = "";
+    els.voiceRecapPreviewOutput.textContent = "Round added. Your original scorecards are unchanged.";
+    els.voiceRecapApply.disabled = true;
+    renderAll();
+    setActiveTab("home");
+    showToast(`Voice recap added: ${recap.date}.`);
+    maybeAutoBackup();
   }
 
   function getFilteredRounds() {
@@ -10467,6 +10532,12 @@
         showToast("Round discarded.");
       }
     });
+  });
+  if (els.voiceRecapPreview) els.voiceRecapPreview.addEventListener("click", previewVoiceRecap);
+  if (els.voiceRecapApply) els.voiceRecapApply.addEventListener("click", applyVoiceRecap);
+  if (els.voiceRecapInput) els.voiceRecapInput.addEventListener("input", () => {
+    pendingVoiceRecap = null;
+    if (els.voiceRecapApply) els.voiceRecapApply.disabled = true;
   });
 
   if (els.startRoundButton) {

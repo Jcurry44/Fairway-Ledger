@@ -6616,6 +6616,15 @@ td {
   font-size: 0.72rem;
 }
 
+.voice-import { margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-soft); }
+.voice-import summary { cursor: pointer; font-weight: 800; color: var(--green-dark); }
+.voice-import summary span { margin-left: 6px; color: var(--muted); font-size: .78rem; font-weight: 600; }
+.voice-import p { margin: 10px 0; color: var(--muted); font-size: .84rem; }
+.voice-import textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); font: .75rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.voice-import-hint code { font-size: .78rem; }
+.voice-import-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.voice-import-preview { margin-top: 10px; font-size: .86rem; color: var(--green-dark); }
+
 /* Picker */
 
 .games-count-row {
