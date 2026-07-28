@@ -97,6 +97,12 @@
   const VOICE_DRAFT_CONFIG_KEY = "fairwayLedger.voiceDraft.config.v1";
   const VOICE_DRAFT_SESSION_KEY = "fairwayLedger.voiceDraft.session.v1";
   const VOICE_DRAFT_APPLIED_KEY = "fairwayLedger.voiceDraft.applied.v1";
+  // Browser-safe Supabase connection defaults. These are intentionally
+  // public client values; the ingest and service-role secrets never ship.
+  const VOICE_DRAFT_DEFAULT_CONFIG = Object.freeze({
+    projectUrl: "https://vodtsentyuehvddattkf.supabase.co",
+    anonKey: "sb_publishable_Rc0PiwsLZZyccib95d9jAA_qyGpCA5W"
+  });
   // Card scorecard sectioning preference. "narrative" reorders the per-hole
   // inputs to match how you experience the hole (tee → approach → green →
   // score). "default" is the original outcome-first layout. As of the
@@ -8880,11 +8886,11 @@
     try {
       const value = JSON.parse(localStorage.getItem(VOICE_DRAFT_CONFIG_KEY) || "{}");
       return {
-        projectUrl: typeof value.projectUrl === "string" ? value.projectUrl.replace(/\/$/, "") : "",
-        anonKey: typeof value.anonKey === "string" ? value.anonKey.trim() : "",
+        projectUrl: typeof value.projectUrl === "string" && value.projectUrl.trim() ? value.projectUrl.replace(/\/$/, "") : VOICE_DRAFT_DEFAULT_CONFIG.projectUrl,
+        anonKey: typeof value.anonKey === "string" && value.anonKey.trim() ? value.anonKey.trim() : VOICE_DRAFT_DEFAULT_CONFIG.anonKey,
         email: typeof value.email === "string" ? value.email.trim() : ""
       };
-    } catch { return { projectUrl: "", anonKey: "", email: "" }; }
+    } catch { return { ...VOICE_DRAFT_DEFAULT_CONFIG, email: "" }; }
   }
 
   function readVoiceDraftSession() {
