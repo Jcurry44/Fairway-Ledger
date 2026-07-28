@@ -15,9 +15,9 @@
     <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
          icon, theme color in the browser chrome, and a standalone display
          mode instead of a tab. -->
-    <link rel="manifest" href="./manifest.json?v=2026-07-28a">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-07-28a">
-    <link rel="apple-touch-icon" href="./icon.svg?v=2026-07-28a">
+    <link rel="manifest" href="./manifest.json?v=2026-07-28b">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-07-28b">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-07-28b">
     <meta name="theme-color" content="#1f7a59">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -37,19 +37,19 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap"></noscript>
 
-    <link rel="stylesheet" href="./styles.css?v=2026-07-28a">
-    <script src="./data/courses.js?v=2026-07-28a" defer></script>
-    <script src="./data/course-maps/deerwood-runtime.js?v=2026-07-28a" defer></script>
-    <script src="./lib/golf-math.js?v=2026-07-28a" defer></script>
-    <script src="./lib/shapes.js?v=2026-07-28a" defer></script>
-    <script src="./lib/voice-recap.js?v=2026-07-28a" defer></script>
-    <script src="./lib/gps.js?v=2026-07-28a" defer></script>
-    <script src="./lib/course-map.js?v=2026-07-28a" defer></script>
-    <script src="./lib/course-map-labels.js?v=2026-07-28a" defer></script>
-    <script src="./data/course-maps/deerwood-aerial-labels-v1.js?v=2026-07-28a" defer></script>
-    <script src="./lib/course-map-ui.js?v=2026-07-28a" defer></script>
-    <script src="./lib/games.js?v=2026-07-28a" defer></script>
-    <script src="./app.js?v=2026-07-28a" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-07-28b">
+    <script src="./data/courses.js?v=2026-07-28b" defer></script>
+    <script src="./data/course-maps/deerwood-runtime.js?v=2026-07-28b" defer></script>
+    <script src="./lib/golf-math.js?v=2026-07-28b" defer></script>
+    <script src="./lib/shapes.js?v=2026-07-28b" defer></script>
+    <script src="./lib/voice-recap.js?v=2026-07-28b" defer></script>
+    <script src="./lib/gps.js?v=2026-07-28b" defer></script>
+    <script src="./lib/course-map.js?v=2026-07-28b" defer></script>
+    <script src="./lib/course-map-labels.js?v=2026-07-28b" defer></script>
+    <script src="./data/course-maps/deerwood-aerial-labels-v1.js?v=2026-07-28b" defer></script>
+    <script src="./lib/course-map-ui.js?v=2026-07-28b" defer></script>
+    <script src="./lib/games.js?v=2026-07-28b" defer></script>
+    <script src="./app.js?v=2026-07-28b" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -365,8 +365,8 @@
             </div>
 
             <details class="voice-import" id="voiceImport">
-              <summary>Apply voice recap <span>Paste JSON → preview → save</span></summary>
-              <p>One complete scorecard is added as a new round; nothing existing is replaced.</p>
+              <summary>Apply voice recap <span>Open link or paste JSON → preview → save</span></summary>
+              <p>A voice link opens this review ready to confirm. One complete scorecard is added as a new round; nothing existing is replaced.</p>
               <textarea id="voiceRecapInput" rows="9" spellcheck="false" placeholder='{"date":"2026-07-28","course":{"id":"deerwood","tee":"White","frontNine":"buck","backNine":"doe"},"holes":[{"score":5},{"score":4}]}'></textarea>
               <p class="voice-import-hint">Use <code>course.id</code> from the Courses list, or <code>deerwood</code> with <code>tee</code> and <code>frontNine</code>/<code>backNine</code>. Include one ordered score entry per hole. Optional: note, wind, tag, and per-hole putts, penalties, notes, clubsHit, or shots.</p>
               <div class="voice-import-actions"><button id="voiceRecapPreview" class="ghost-button" type="button">Preview recap</button><button id="voiceRecapApply" class="primary-button" type="button" disabled>Apply as new round</button></div>

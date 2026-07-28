@@ -51,6 +51,27 @@ Per-physical-course filtering throughout: Deerwood's six per-nine/tee catalog en
 
 In **Add Round**, open **Apply voice recap**, paste the structured JSON produced by a voice conversation, preview it, then apply it. It always creates a new round and uses the same canonical persistence/scoring path as manual rounds. The recap must include a date, a route, and one ordered score for every hole.
 
+### Phone-friendly voice links
+
+A voice assistant can send an **Open in Fairway Ledger** link instead of showing JSON. The link opens the app directly on **Add Round** with **Apply voice recap** expanded and a validated **Ready to add** preview; the golfer still taps **Apply as new round** to save. The payload is a URL fragment, not a query string, so browsers do not send it to GitHub Pages or server logs. Fairway Ledger removes the fragment from the address bar immediately after reading it, including when it is malformed or too large.
+
+The exact format is:
+
+```text
+https://jcurry44.github.io/Fairway-Ledger/#voice-recap=<base64url(UTF-8 JSON recap)>
+```
+
+The JSON recap is exactly the schema below. For a reusable JavaScript link-generation recipe, a voice workflow can use:
+
+```js
+const payload = JSON.stringify(recap);
+const base64url = btoa(unescape(encodeURIComponent(payload)))
+  .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+const openInFairwayLedger = `https://jcurry44.github.io/Fairway-Ledger/#voice-recap=${base64url}`;
+```
+
+Keep the encoded JSON under 8 KB. A normal 18-hole scorecard is far smaller; omit verbose shot traces if a provider imposes a shorter link limit.
+
 ```json
 {
   "date": "2026-07-28",

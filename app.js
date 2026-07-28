@@ -77,7 +77,7 @@
     makeRound,
     normalizeRound
   } = window.GolfShapes;
-  const { validateRecap } = window.FairwayVoiceRecap;
+  const { validateRecap, decodeVoiceRecapFragment, VOICE_RECAP_FRAGMENT_KEY } = window.FairwayVoiceRecap;
 
   const {
     classifyAccuracy,
@@ -1799,12 +1799,11 @@
     return course;
   }
 
-  function previewVoiceRecap() {
-    if (!els.voiceRecapInput || !els.voiceRecapPreviewOutput) return;
+  function previewVoiceRecapPayload(input) {
+    if (!els.voiceRecapPreviewOutput) return;
     pendingVoiceRecap = null;
     if (els.voiceRecapApply) els.voiceRecapApply.disabled = true;
     try {
-      const input = JSON.parse(els.voiceRecapInput.value);
       const course = resolveVoiceRecapCourse(input);
       const recap = validateRecap(input, course);
       const round = makeRound({ id: "__voice_recap_preview__", date: recap.date, courseId: course.id, tee: course.tee, wind: recap.wind || "", tag: recap.tag || "", note: recap.note || "", entryMode: "detailed", holes: recap.holes.map(makeHole) });
@@ -1815,6 +1814,44 @@
     } catch (error) {
       els.voiceRecapPreviewOutput.textContent = error.message || "That recap could not be read.";
     }
+  }
+
+  function previewVoiceRecap() {
+    if (!els.voiceRecapInput) return;
+    try { previewVoiceRecapPayload(JSON.parse(els.voiceRecapInput.value)); }
+    catch (error) {
+      pendingVoiceRecap = null;
+      if (els.voiceRecapApply) els.voiceRecapApply.disabled = true;
+      if (els.voiceRecapPreviewOutput) els.voiceRecapPreviewOutput.textContent = error.message || "That recap could not be read.";
+    }
+  }
+
+  function clearVoiceRecapFragment() {
+    // Fragments never leave the device in HTTP requests, but remove them as
+    // soon as read so browser history and copied URLs do not retain a recap.
+    history.replaceState(null, "", `${location.pathname}${location.search}`);
+  }
+
+  function loadVoiceRecapFromFragment() {
+    const prefix = `#${VOICE_RECAP_FRAGMENT_KEY}=`;
+    if (!location.hash.startsWith(prefix)) return false;
+    const hash = location.hash;
+    clearVoiceRecapFragment();
+    setActiveTab("rounds");
+    const importPanel = document.getElementById("voiceImport");
+    if (importPanel) importPanel.open = true;
+    try {
+      const input = decodeVoiceRecapFragment(hash);
+      if (els.voiceRecapInput) els.voiceRecapInput.value = JSON.stringify(input, null, 2);
+      previewVoiceRecapPayload(input);
+      showToast("Voice recap ready to review.");
+    } catch (error) {
+      pendingVoiceRecap = null;
+      if (els.voiceRecapApply) els.voiceRecapApply.disabled = true;
+      if (els.voiceRecapPreviewOutput) els.voiceRecapPreviewOutput.textContent = error.message || "Voice recap link could not be read.";
+      showToast(error.message || "Voice recap link could not be read.");
+    }
+    return true;
   }
 
   function applyVoiceRecap() {
@@ -11206,6 +11243,9 @@
     // Offer to restore any in-progress round entry that was interrupted
     // (page reload, phone restart, accidental tab close, etc).
     maybeResumeInProgressRound();
+    // A phone link from a voice conversation wins over the remembered tab and
+    // opens the same preview/explicit-apply path as pasted JSON.
+    loadVoiceRecapFromFragment();
   }
 
   initializeApp();
