@@ -62,3 +62,19 @@ test("applying a shared draft adds a canonical round and retains recap detail", 
   assert.equal(round.voiceRecap.draftId, "deerwood-july-28");
   assert.equal(round.holes[0].note, "Missed left but recovered for bogey.");
 });
+test("the app's course route, not the draft, is the authority on hole identity", () => {
+  const route = { tee: "White", holes: [{ number: 1, label: "Buck 1", par: 4, yards: 377, hcp: 5 }] };
+  const lyingDraft = { ...deerwoodDraft, round: { ...deerwoodDraft.round, tee: "white", holes: [{ number: 7, par: 3, yards: 120, score: 5, putts: 2 }] } };
+  const round = Recap.toAppliedRound(lyingDraft, Shapes.makeRound, () => "merged-round", route);
+  assert.equal(round.holes[0].number, 1);
+  assert.equal(round.holes[0].label, "Buck 1");
+  assert.equal(round.holes[0].par, 4);
+  assert.equal(round.holes[0].yards, 377);
+  assert.equal(round.holes[0].score, 5);
+  assert.equal(round.holes[0].putts, 2);
+  assert.equal(round.tee, "White");
+});
+test("a hole-count mismatch with the selected route refuses to apply", () => {
+  const route = { tee: "White", holes: [{ number: 1, par: 4 }, { number: 2, par: 3 }] };
+  assert.throws(() => Recap.toAppliedRound(deerwoodDraft, Shapes.makeRound, () => "x", route), /1 scored holes but the selected route has 2/);
+});
