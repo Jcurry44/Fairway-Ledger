@@ -15,9 +15,9 @@
     <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
          icon, theme color in the browser chrome, and a standalone display
          mode instead of a tab. -->
-    <link rel="manifest" href="./manifest.json?v=2026-07-28h">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-07-28h">
-    <link rel="apple-touch-icon" href="./icon.svg?v=2026-07-28h">
+    <link rel="manifest" href="./manifest.json?v=2026-07-29a">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-07-29a">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-07-29a">
     <meta name="theme-color" content="#1f7a59">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -37,19 +37,19 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap"></noscript>
 
-    <link rel="stylesheet" href="./styles.css?v=2026-07-28h">
-    <script src="./data/courses.js?v=2026-07-28h" defer></script>
-    <script src="./data/course-maps/deerwood-runtime.js?v=2026-07-28h" defer></script>
-    <script src="./lib/golf-math.js?v=2026-07-28h" defer></script>
-    <script src="./lib/shapes.js?v=2026-07-28h" defer></script>
-    <script src="./lib/voice-recap.js?v=2026-07-28h" defer></script>
-    <script src="./lib/gps.js?v=2026-07-28h" defer></script>
-    <script src="./lib/course-map.js?v=2026-07-28h" defer></script>
-    <script src="./lib/course-map-labels.js?v=2026-07-28h" defer></script>
-    <script src="./data/course-maps/deerwood-aerial-labels-v1.js?v=2026-07-28h" defer></script>
-    <script src="./lib/course-map-ui.js?v=2026-07-28h" defer></script>
-    <script src="./lib/games.js?v=2026-07-28h" defer></script>
-    <script src="./app.js?v=2026-07-28h" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-07-29a">
+    <script src="./data/courses.js?v=2026-07-29a" defer></script>
+    <script src="./data/course-maps/deerwood-runtime.js?v=2026-07-29a" defer></script>
+    <script src="./lib/golf-math.js?v=2026-07-29a" defer></script>
+    <script src="./lib/shapes.js?v=2026-07-29a" defer></script>
+    <script src="./lib/voice-recap.js?v=2026-07-29a" defer></script>
+    <script src="./lib/gps.js?v=2026-07-29a" defer></script>
+    <script src="./lib/course-map.js?v=2026-07-29a" defer></script>
+    <script src="./lib/course-map-labels.js?v=2026-07-29a" defer></script>
+    <script src="./data/course-maps/deerwood-aerial-labels-v1.js?v=2026-07-29a" defer></script>
+    <script src="./lib/course-map-ui.js?v=2026-07-29a" defer></script>
+    <script src="./lib/games.js?v=2026-07-29a" defer></script>
+    <script src="./app.js?v=2026-07-29a" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -722,7 +722,8 @@
               <input id="voiceDraftAnonKey" type="text" autocomplete="off" placeholder="Publishable anon key" aria-label="Supabase publishable anon key">
               <input id="voiceDraftEmail" type="email" inputmode="email" autocomplete="email" placeholder="Your email for secure sign-in" aria-label="Email for secure voice recap sign-in">
             </div>
-            <div class="course-api-row"><button type="button" class="primary-button" id="voiceDraftSaveSettings">Save &amp; send sign-in link</button><button type="button" class="ghost-button" id="voiceDraftRefresh">Refresh inbox</button></div>
+            <div class="course-api-row"><button type="button" class="primary-button" id="voiceDraftSaveSettings">Save &amp; send sign-in email</button><button type="button" class="ghost-button" id="voiceDraftRefresh">Refresh inbox</button></div>
+            <div class="course-api-row voice-code-row"><input id="voiceDraftCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="6-digit code from the email" aria-label="Sign-in code from the email"><button type="button" class="ghost-button" id="voiceDraftVerifyCode">Sign in with code</button></div>
             <p class="profile-bag-hint" id="voiceDraftStatus">Not connected. Setup requires your own private sync project.</p>
             <p class="profile-bag-hint" id="voiceDraftIdentity" hidden></p>
           </article>

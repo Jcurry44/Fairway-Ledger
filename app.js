@@ -609,6 +609,8 @@
     voiceDraftEmail: document.getElementById("voiceDraftEmail"),
     voiceDraftSaveSettings: document.getElementById("voiceDraftSaveSettings"),
     voiceDraftRefresh: document.getElementById("voiceDraftRefresh"),
+    voiceDraftCode: document.getElementById("voiceDraftCode"),
+    voiceDraftVerifyCode: document.getElementById("voiceDraftVerifyCode"),
     voiceDraftStatus: document.getElementById("voiceDraftStatus"),
     voiceDraftIdentity: document.getElementById("voiceDraftIdentity"),
     voiceDraftOverlay: document.getElementById("voiceDraftOverlay"),
@@ -9009,14 +9011,16 @@
       writeVoiceDraftStatus("Enter your Supabase project URL, publishable anon key, and email first."); return;
     }
     try {
-      const response = await fetch(`${config.projectUrl}/auth/v1/otp`, {
+      // The owner signs in with their email for the first time here. Email
+      // confirmation remains enabled in Supabase; RLS still prevents every
+      // account from seeing anyone else's drafts.
+      // GoTrue only reads `redirect_to` from the URL query (or a form body),
+      // never from a JSON body — the official SDK sends it as a query
+      // parameter too. A JSON-body redirect field is silently ignored and
+      // the link falls back to the project Site URL.
+      const response = await fetch(`${config.projectUrl}/auth/v1/otp?redirect_to=${encodeURIComponent(VOICE_DRAFT_AUTH_REDIRECT_URL)}`, {
         method: "POST", headers: { apikey: config.anonKey, "Content-Type": "application/json" },
-        // The owner signs in with their email for the first time here. Email
-        // confirmation remains enabled in Supabase; RLS still prevents every
-        // account from seeing anyone else's drafts.
-        // This is the raw GoTrue REST endpoint, whose redirect field is
-        // `redirect_to` (the SDK calls it options.emailRedirectTo).
-        body: JSON.stringify({ email: config.email, create_user: true, redirect_to: VOICE_DRAFT_AUTH_REDIRECT_URL })
+        body: JSON.stringify({ email: config.email, create_user: true })
       });
       if (!response.ok) {
         let detail = "";
@@ -9031,7 +9035,37 @@
             : " Check Supabase Authentication → URL Configuration: the Site URL and Redirect URL must include https://jcurry44.github.io/Fairway-Ledger/.";
         throw new Error(`Could not send the sign-in link (${response.status})${detail ? `: ${detail}` : "."}${guidance}`);
       }
-      writeVoiceDraftStatus("Secure sign-in link sent. It should return to Fairway Ledger; if it opens the portfolio root, set Supabase Auth Site URL to https://jcurry44.github.io/Fairway-Ledger/, then request one new link.");
+      writeVoiceDraftStatus("Sign-in email sent. Fastest path: type its 6-digit code below — that finishes sign-in right here, even in the installed app. The email link also works when it opens Fairway Ledger itself.");
+    } catch (error) { writeVoiceDraftStatus(error.message); }
+  }
+
+  // Code-based sign-in is the reliable path on phones: an emailed link opens
+  // in the default browser, and an installed PWA (iOS especially) has a
+  // separate storage partition — the session would land outside the app.
+  // Typing the emailed 6-digit code verifies inside THIS partition, with no
+  // dependence on Site URL / redirect configuration at all.
+  async function verifyVoiceDraftEmailCode() {
+    const config = readVoiceDraftConfig();
+    const code = (els.voiceDraftCode?.value || "").replace(/\D/g, "");
+    if (!isVoiceInboxConfigured() || !/^\S+@\S+\.\S+$/.test(config.email)) {
+      writeVoiceDraftStatus("Save your connection details and send a sign-in email first."); return;
+    }
+    if (!/^\d{6,10}$/.test(code)) { writeVoiceDraftStatus("Enter the 6-digit code from the sign-in email."); return; }
+    try {
+      const response = await fetch(`${config.projectUrl}/auth/v1/verify`, {
+        method: "POST", headers: { apikey: config.anonKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "email", email: config.email, token: code })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.access_token) {
+        const detail = typeof body.msg === "string" ? body.msg : (typeof body.error_description === "string" ? body.error_description : "");
+        throw new Error(`Could not verify the code${detail ? ` (${detail})` : ""}. Codes expire quickly — send a fresh sign-in email and use the newest code. If the email shows no code, add {{ .Token }} to the Supabase Magic Link template.`);
+      }
+      const expiresAt = Number(body.expires_at || 0) || Math.floor(Date.now() / 1000) + (Number(body.expires_in) || 3600);
+      localStorage.setItem(VOICE_DRAFT_SESSION_KEY, JSON.stringify({ access_token: body.access_token, refresh_token: body.refresh_token || "", expires_at: expiresAt }));
+      if (els.voiceDraftCode) els.voiceDraftCode.value = "";
+      writeVoiceDraftStatus("Secure voice inbox connected.");
+      refreshVoiceDraftInbox();
     } catch (error) { writeVoiceDraftStatus(error.message); }
   }
 
@@ -9070,8 +9104,9 @@
     const draft = voiceDrafts.find((item) => item.id === openVoiceDraftId);
     if (!draft) return;
     try {
-      const round = VoiceRecap.toAppliedRound(draft, makeRound, makeId);
-      if (!getCourse(round.courseId)) throw new Error("This draft's course is not available in Fairway Ledger yet.");
+      const course = getCourse(draft.round.courseId);
+      if (!course) throw new Error("This draft's course is not available in Fairway Ledger yet.");
+      const round = VoiceRecap.toAppliedRound(draft, makeRound, makeId, course);
       state.rounds.push(round); saveState(); rememberAppliedVoiceDraft(draft.id); renderAll(); closeVoiceDraft();
       showToast("Voice recap applied as a new round.");
       try { await setVoiceDraftRemoteStatus(draft.id, "applied"); } catch { writeVoiceDraftStatus("Round saved locally; inbox status will sync after you sign in again."); }
@@ -11166,6 +11201,8 @@
     renderVoiceDraftInbox(); requestVoiceDraftSignIn();
   });
   if (els.voiceDraftRefresh) els.voiceDraftRefresh.addEventListener("click", () => refreshVoiceDraftInbox());
+  if (els.voiceDraftVerifyCode) els.voiceDraftVerifyCode.addEventListener("click", verifyVoiceDraftEmailCode);
+  if (els.voiceDraftCode) els.voiceDraftCode.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); verifyVoiceDraftEmailCode(); } });
   if (els.holePickerList) {
     els.holePickerList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-jump-hole]");
