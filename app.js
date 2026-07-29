@@ -7696,6 +7696,91 @@
     return `<section class="post-round-briefing"><div class="briefing-hero"><span>Post-round briefing</span><strong>${totals.gross} <small>${formatSigned(totals.toPar, 0)}</small></strong><p>${escapeHtml(round.narrative || "Scorecard captured. Add shot context to turn the next recap into a sharper coaching report.")}</p></div><div class="briefing-grid"><div><span class="briefing-kicker">Evidence-led takeaways</span><ul>${takeaways.length ? takeaways.map((item) => `<li>${item}</li>`).join("") : "<li>No shot detail was reported; this briefing only uses the scorecard.</li>"}</ul></div><div><span class="briefing-kicker">Practice focus</span><p class="briefing-focus">${escapeHtml(practice)}</p></div></div>${coachingHtml}${context.length ? `<div class="briefing-context"><span class="briefing-kicker">Full recap trail</span>${context.map((h) => `<p><strong>${escapeHtml(h.label || `Hole ${h.number}`)}</strong> ${escapeHtml([h.approachNote, h.result, h.missContext, h.note].filter(Boolean).join(" · "))}</p>`).join("")}</div>` : ""}</section>`;
   }
 
+  // ---- The Postgame Brief -------------------------------------------------
+  //
+  // The premium rendering of a spoken postgame recap — the same job the
+  // nightly board brief does for the portfolio: verdict first, the story,
+  // the numbers that decided it, then the narrated walk. One renderer serves
+  // both the inbox review sheet (before Apply) and the saved round forever
+  // after; review IS a preview of what you keep.
+  function renderPostgameBrief(round) {
+    const recap = (round.voiceRecap && round.voiceRecap.recap) || {};
+    const holes = Array.isArray(round.holes) ? round.holes.filter((h) => Number.isFinite(Number(h.score)) && Number(h.score) > 0) : [];
+    if (!holes.length) return "";
+    const parKnown = holes.every((h) => Number.isFinite(Number(h.par)) && Number(h.par) > 0);
+    const gross = holes.reduce((sum, h) => sum + Number(h.score), 0);
+    const toPar = parKnown ? gross - holes.reduce((sum, h) => sum + Number(h.par), 0) : null;
+    const dateText = (() => {
+      try { return new Date(`${round.date}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }); }
+      catch { return round.date || ""; }
+    })();
+    const eyebrowBits = [dateText, round.tee ? `${round.tee} tees` : ""].filter(Boolean).join(" · ");
+    const splits = parKnown && holes.length > 9 ? getScorecardSections(holes).map((section) => {
+      const sum = section.holes.reduce((s, h) => s + Number(h.score), 0);
+      return `${escapeHtml(section.label)} ${sum}`;
+    }).join(" · ") : "";
+
+    // Momentum arc: par is the baseline; birdies dip below in green, blowups
+    // rise above in warmer tones. The round's shape in one glance.
+    const arc = parKnown ? `<div class="pgb-arc" aria-label="Hole-by-hole momentum">${holes.map((h) => {
+      const delta = Number(h.score) - Number(h.par);
+      const tier = delta <= -1 ? "good" : delta === 0 ? "par" : delta === 1 ? "bogey" : delta === 2 ? "double" : "worse";
+      const size = delta === 0 ? 0 : Math.min(3, Math.abs(delta));
+      const label = (h.number === 1 || h.number % 3 === 0) ? `<span class="pgb-arc-num">${h.number}</span>` : `<span class="pgb-arc-num"></span>`;
+      return `<div class="pgb-arc-col" title="${escapeHtml(h.label || `Hole ${h.number}`)}: ${h.score} (${formatSigned(delta, 0)})"><div class="pgb-arc-lane up">${delta > 0 ? `<i class="pgb-arc-bar ${tier} s${size}"></i>` : ""}</div><div class="pgb-arc-base"></div><div class="pgb-arc-lane down">${delta < 0 ? `<i class="pgb-arc-bar ${tier} s${size}"></i>` : ""}</div>${label}</div>`;
+    }).join("")}</div>` : "";
+
+    // The numbers that decided it — only chips the recap actually supports.
+    const mix = { birdie: 0, par: 0, bogey: 0, worse: 0 };
+    if (parKnown) holes.forEach((h) => {
+      const d = Number(h.score) - Number(h.par);
+      if (d <= -1) mix.birdie += 1; else if (d === 0) mix.par += 1; else if (d === 1) mix.bogey += 1; else mix.worse += 1;
+    });
+    const puttHoles = holes.filter((h) => Number.isFinite(Number(h.putts)));
+    const firEligible = holes.filter((h) => h.fairway && h.fairway !== "na");
+    const girHoles = holes.filter((h) => typeof h.gir === "boolean");
+    const penaltyTotal = holes.reduce((s, h) => s + (Number.isFinite(Number(h.penalties)) ? Number(h.penalties) : 0), 0);
+    const chips = [];
+    if (parKnown) {
+      chips.push(`<div class="pgb-chip tone-good"><strong>${mix.birdie}</strong><span>Birdie+</span></div>`);
+      chips.push(`<div class="pgb-chip"><strong>${mix.par}</strong><span>Pars</span></div>`);
+      chips.push(`<div class="pgb-chip tone-warm"><strong>${mix.bogey}</strong><span>Bogeys</span></div>`);
+      chips.push(`<div class="pgb-chip tone-hot"><strong>${mix.worse}</strong><span>Doubles+</span></div>`);
+    }
+    if (firEligible.length) chips.push(`<div class="pgb-chip"><strong>${firEligible.filter((h) => h.fairway === "hit").length}/${firEligible.length}</strong><span>Fairways</span></div>`);
+    if (girHoles.length) chips.push(`<div class="pgb-chip"><strong>${girHoles.filter((h) => h.gir).length}/${girHoles.length}</strong><span>Greens</span></div>`);
+    if (puttHoles.length >= Math.max(3, holes.length / 2)) chips.push(`<div class="pgb-chip"><strong>${puttHoles.reduce((s, h) => s + Number(h.putts), 0)}</strong><span>Putts${puttHoles.length < holes.length ? `·${puttHoles.length}h` : ""}</span></div>`);
+    if (penaltyTotal > 0) chips.push(`<div class="pgb-chip tone-hot"><strong>${penaltyTotal}</strong><span>Penalt${penaltyTotal === 1 ? "y" : "ies"}</span></div>`);
+
+    const coachingLines = Array.isArray(recap.coaching) ? recap.coaching.filter(Boolean) : [];
+    const cue = typeof recap.nextRoundCue === "string" && recap.nextRoundCue.trim() ? recap.nextRoundCue.trim() : "";
+    const narration = Array.isArray(recap.holeNarration) ? recap.holeNarration : [];
+    const holeByNumber = new Map(holes.map((h) => [Number(h.number), h]));
+    const walk = narration.map((item) => {
+      const hole = holeByNumber.get(Number(item.holeNumber));
+      const mark = hole && parKnown ? renderScoreMark(Number(hole.score), Number(hole.par)) : (hole ? `<span class="pgb-walk-score">${hole.score}</span>` : "");
+      return `<div class="pgb-walk-row"><div class="pgb-walk-mark">${mark}</div><div class="pgb-walk-body"><strong>${escapeHtml(item.label || (hole && hole.label) || `Hole ${item.holeNumber}`)}</strong>${item.narration ? `<p>${escapeHtml(item.narration)}</p>` : ""}${item.coaching ? `<p class="pgb-walk-coach">${escapeHtml(item.coaching)}</p>` : ""}</div></div>`;
+    }).join("");
+    const receivedAt = round.voiceRecap && round.voiceRecap.receivedAt ? (() => { try { return new Date(round.voiceRecap.receivedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); } catch { return ""; } })() : "";
+
+    return `
+      <section class="pgb">
+        <header class="pgb-hero">
+          <span class="pgb-eyebrow">Postgame Brief${eyebrowBits ? ` · ${eyebrowBits}` : ""}</span>
+          <div class="pgb-scoreline"><strong class="pgb-gross">${gross}</strong>${toPar != null ? `<span class="pgb-topar ${toPar <= 0 ? "good" : ""}">${formatSigned(toPar, 0)}</span>` : ""}</div>
+          ${recap.title ? `<h3 class="pgb-verdict">${escapeHtml(recap.title)}</h3>` : ""}
+          ${splits ? `<p class="pgb-splits">${splits}</p>` : ""}
+        </header>
+        ${arc}
+        ${recap.summary ? `<div class="pgb-story"><span class="pgb-kicker">The round</span><p>${escapeHtml(recap.summary)}</p></div>` : ""}
+        ${chips.length ? `<div class="pgb-chips">${chips.join("")}</div>` : ""}
+        ${coachingLines.length ? `<div class="pgb-decided"><span class="pgb-kicker">What decided it</span>${coachingLines.map((line) => `<div class="pgb-card">${escapeHtml(line)}</div>`).join("")}</div>` : ""}
+        ${cue ? `<div class="pgb-cue"><span class="pgb-kicker">Next round, one thought</span><p>${escapeHtml(cue)}</p></div>` : ""}
+        ${walk ? `<div class="pgb-walk"><span class="pgb-kicker">The walk</span>${walk}</div>` : ""}
+        <footer class="pgb-foot">Spoken postgame brief${receivedAt ? ` · received ${receivedAt}` : ""}</footer>
+      </section>`;
+  }
+
   function renderRecentRounds() {
     // Score badge context (2026-07-06): each round leads with a tone-coded
     // badge judged against the player's OWN average for that round length —
@@ -9085,11 +9170,16 @@
     if (!draft || !els.voiceDraftOverlay) return;
     openVoiceDraftId = id;
     const validation = VoiceRecap.validateDraft(draft);
-    const total = roundTotals(draft.round);
-    els.voiceDraftTitle.textContent = draft.recap.title || "Voice recap draft";
-    const coaching = draft.recap.coaching.length ? `<section class="voice-draft-section"><h4>Coaching</h4><ul class="voice-draft-coaching">${draft.recap.coaching.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul></section>` : "";
-    const holes = draft.recap.holeNarration.length ? `<section class="voice-draft-section"><h4>Hole-by-hole recap</h4><ol class="voice-draft-holes">${draft.recap.holeNarration.map((item) => `<li><strong>${escapeHtml(item.label || `Hole ${item.holeNumber}`)}</strong>${item.narration ? `<p>${escapeHtml(item.narration)}</p>` : ""}${item.coaching ? `<p class="voice-coaching">Coach: ${escapeHtml(item.coaching)}</p>` : ""}</li>`).join("")}</ol></section>` : "";
-    els.voiceDraftBody.innerHTML = `<div><strong>${total.gross || "—"}${total.gross ? ` (${formatSigned(total.toPar, 0)})` : ""}</strong> · ${escapeHtml(draft.round.date || "Date unconfirmed")} · ${escapeHtml(draft.round.tee || "Tee unconfirmed")}</div>${draft.recap.summary ? `<section class="voice-draft-section"><h4>Round recap</h4><p class="voice-draft-summary">${escapeHtml(draft.recap.summary)}</p></section>` : ""}${coaching}${holes}${validation.valid ? "" : `<p class="voice-inbox-empty">Cannot apply yet: ${escapeHtml(validation.errors[0])}</p>`}`;
+    els.voiceDraftTitle.textContent = draft.recap.title || "Postgame brief";
+    // Review IS the brief: render the draft through the same Postgame Brief
+    // the saved round will show, with the app's course route supplying hole
+    // identity (par/labels) for display exactly as Apply will.
+    const course = getCourse(draft.round.courseId);
+    const previewHoles = course && Array.isArray(course.holes) && course.holes.length === draft.round.holes.length
+      ? course.holes.map((canonical, index) => ({ ...draft.round.holes[index], number: canonical.number, label: canonical.label || String(canonical.number), par: canonical.par }))
+      : draft.round.holes;
+    const previewRound = { ...draft.round, holes: previewHoles, tee: (course && course.tee) || draft.round.tee, voiceRecap: { recap: draft.recap, receivedAt: draft.createdAt } };
+    els.voiceDraftBody.innerHTML = `${renderPostgameBrief(previewRound) || `<p class="voice-inbox-empty">This draft has no scored holes yet.</p>`}${validation.valid ? "" : `<p class="voice-inbox-empty">Cannot apply yet: ${escapeHtml(validation.errors[0])}</p>`}`;
     els.voiceDraftApply.disabled = !validation.valid;
     els.voiceDraftOverlay.hidden = false; document.body.classList.add("hole-picker-open");
   }
@@ -9423,7 +9513,7 @@
     if (round.wind) bits.push(escapeHtml(formatWind(round.wind)));
     if (round.tag) bits.push(escapeHtml(formatRoundTag(round.tag)));
     els.roundDetailSubtitle.innerHTML = bits.filter(Boolean).join(" · ");
-    els.roundDetailBody.innerHTML = renderPostRoundBriefing(round) + renderRoundScorecard(round);
+    els.roundDetailBody.innerHTML = (round.voiceRecap ? renderPostgameBrief(round) : renderPostRoundBriefing(round)) + renderRoundScorecard(round);
     els.roundDetailEditButton.onclick = () => {
       closeRoundDetail();
       loadRoundIntoForm(round);

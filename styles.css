@@ -8533,3 +8533,75 @@ summary:focus-visible {
     to { opacity: 1; transform: translateY(0); }
   }
 }
+
+/* ===== The Postgame Brief ================================================
+   The premium rendering of a spoken recap — verdict-led like the nightly
+   board brief, dressed in the clubhouse identity. One block serves the
+   inbox review sheet and the saved round's detail view. */
+
+.pgb { display: grid; gap: 14px; }
+.pgb-kicker { display: block; font-size: .68rem; font-weight: 850; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+
+.pgb-hero { position: relative; overflow: hidden; padding: 18px 18px 16px; border-radius: 16px; color: #f4f8f2; background: linear-gradient(140deg, #0e3626 0%, #17573d 58%, #1e6b4a 100%); box-shadow: var(--shadow); }
+.pgb-hero::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 90% at 100% 0%, rgba(217, 192, 138, 0.18), transparent 55%); }
+.pgb-eyebrow { display: block; font-size: .68rem; font-weight: 850; letter-spacing: .11em; text-transform: uppercase; color: #cfe2d4; }
+.pgb-scoreline { display: flex; align-items: baseline; gap: 12px; margin-top: 6px; }
+.pgb-gross { font-family: var(--font-display); font-size: 3.4rem; font-weight: 700; line-height: .95; letter-spacing: -0.01em; }
+.pgb-topar { font-size: 1rem; font-weight: 850; padding: 3px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.14); color: #f6e9c8; font-variant-numeric: tabular-nums; }
+.pgb-topar.good { background: rgba(236, 252, 240, 0.92); color: #11422c; }
+.pgb-verdict { margin: 10px 0 0; font-family: var(--font-display); font-size: 1.22rem; font-weight: 600; line-height: 1.3; color: #fdfbf3; }
+.pgb-splits { margin: 7px 0 0; font-size: .8rem; font-weight: 700; color: #cfe2d4; font-variant-numeric: tabular-nums; }
+
+.pgb-arc { display: flex; gap: 3px; align-items: stretch; padding: 12px 14px 8px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); overflow-x: auto; }
+.pgb-arc-col { flex: 1 1 0; min-width: 11px; display: grid; grid-template-rows: 26px 2px 26px 14px; justify-items: center; }
+.pgb-arc-lane { display: flex; width: 100%; justify-content: center; }
+.pgb-arc-lane.up { align-items: flex-end; }
+.pgb-arc-lane.down { align-items: flex-start; }
+.pgb-arc-base { width: 100%; background: var(--line); border-radius: 1px; }
+.pgb-arc-bar { display: block; width: 7px; border-radius: 3px; }
+.pgb-arc-bar.s1 { height: 10px; } .pgb-arc-bar.s2 { height: 17px; } .pgb-arc-bar.s3 { height: 24px; }
+.pgb-arc-bar.good { background: var(--green); }
+.pgb-arc-bar.bogey { background: var(--gold); }
+.pgb-arc-bar.double { background: #c96f38; }
+.pgb-arc-bar.worse { background: #c0492f; }
+.pgb-arc-col[title] { cursor: default; }
+.pgb-arc-num { font-size: .58rem; font-weight: 800; color: var(--muted); padding-top: 3px; font-variant-numeric: tabular-nums; }
+
+.pgb-story { padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.pgb-story p { margin: 0; font-size: .95rem; line-height: 1.62; color: var(--ink); white-space: pre-wrap; }
+.pgb-story p::first-letter { font-family: var(--font-display); font-size: 2.1em; font-weight: 700; float: left; line-height: .82; padding: 3px 7px 0 0; color: var(--green-dark); }
+
+.pgb-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.pgb-chip { display: grid; gap: 1px; justify-items: center; padding: 9px 4px 7px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.pgb-chip strong { font-family: var(--font-display); font-size: 1.22rem; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
+.pgb-chip span { font-size: .6rem; font-weight: 850; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.pgb-chip.tone-good strong { color: var(--green); }
+.pgb-chip.tone-warm strong { color: var(--gold); }
+.pgb-chip.tone-hot strong { color: #b23b2b; }
+
+.pgb-decided { padding: 14px 16px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.pgb-card { position: relative; margin: 0 0 8px; padding: 10px 12px 10px 15px; font-size: .88rem; line-height: 1.5; color: var(--ink); background: var(--panel-soft); border-radius: 10px; }
+.pgb-card::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: var(--gold); }
+.pgb-card:last-child { margin-bottom: 2px; }
+
+.pgb-cue { padding: 16px; border-radius: 14px; color: #f4f8f2; background: linear-gradient(120deg, #11422c, #1e6b4a); box-shadow: var(--shadow); }
+.pgb-cue .pgb-kicker { color: #cfe2d4; margin-bottom: 6px; }
+.pgb-cue p { margin: 0; font-family: var(--font-display); font-size: 1.18rem; font-weight: 600; line-height: 1.4; }
+
+.pgb-walk { padding: 14px 16px 6px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.pgb-walk-row { display: grid; grid-template-columns: 40px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--panel-soft); }
+.pgb-walk-row:first-of-type { border-top: 0; }
+.pgb-walk-mark { display: flex; justify-content: center; padding-top: 2px; }
+.pgb-walk-score { font-weight: 800; font-size: .95rem; color: var(--ink); }
+.pgb-walk-body strong { display: block; font-size: .78rem; font-weight: 850; letter-spacing: .05em; text-transform: uppercase; color: var(--green-dark); }
+.pgb-walk-body p { margin: 3px 0 0; font-size: .88rem; line-height: 1.5; color: var(--ink); white-space: pre-wrap; }
+.pgb-walk-body .pgb-walk-coach { color: var(--green-dark); font-size: .84rem; font-style: italic; }
+.pgb-walk-body .pgb-walk-coach::before { content: "⛳ "; font-style: normal; }
+
+.pgb-foot { font-size: .72rem; font-weight: 700; color: var(--muted); text-align: right; padding-right: 2px; }
+
+@media (max-width: 480px) {
+  .pgb-gross { font-size: 2.9rem; }
+  .pgb-chips { grid-template-columns: repeat(4, 1fr); }
+  .pgb-arc-col { min-width: 9px; }
+}

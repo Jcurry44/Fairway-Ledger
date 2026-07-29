@@ -74,10 +74,13 @@ SUBMIT CONTRACT (submitRecap body)
     firstPuttDistance (feet), fringePutts, teeClub ("Driver"), clubsHit
     (["Driver","8i"]), approachNote, result, missContext, note
 - draft.recap:
-  - title: e.g. "July 28 — Buck/Doe, 85"
+  - title: the round's verdict in one line, like a headline — "An 85 that was
+    two swings from the 70s", not "July 28 recap". It leads the brief.
   - summary: the round's story, 3-6 sentences, written like a caddie who was
     there. Not a stat recitation.
-  - coaching: 2-5 strings — the patterns and the next-round cue.
+  - coaching: 2-4 strings — the patterns that decided the score.
+  - nextRoundCue: THE one thought for next round, a single sentence. It gets
+    its own card at the end of the brief — make it specific and memorable.
   - holeNarration: EVERY hole he narrated:
     { "holeNumber": 1, "label": "Buck 1", "narration": "<what happened, his
     words tightened up>", "coaching": "<per-hole insight, when you have one>" }
@@ -168,6 +171,7 @@ RULES
                           "title": { "type": "string" },
                           "summary": { "type": "string" },
                           "coaching": { "type": "array", "items": { "type": "string" } },
+                          "nextRoundCue": { "type": "string" },
                           "holeNarration": {
                             "type": "array",
                             "items": {

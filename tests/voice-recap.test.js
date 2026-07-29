@@ -51,6 +51,11 @@ test("shared drafts preserve narration and coaching instead of collapsing to sco
   assert.equal(draft.round.holes[0].note, "Missed left but recovered for bogey.");
   assert.equal(Recap.validateDraft(draft).valid, true);
 });
+test("the next-round cue survives normalization for the brief's pin card", () => {
+  const draft = Recap.normalizeDraft({ ...deerwoodDraft, recap: { ...deerwoodDraft.recap, nextRoundCue: "  Square setup, stock swing.  " } });
+  assert.equal(draft.recap.nextRoundCue, "Square setup, stock swing.");
+  assert.equal(Recap.normalizeDraft(deerwoodDraft).recap.nextRoundCue, "");
+});
 test("shared drafts reject score-only payloads", () => {
   const result = Recap.validateDraft({ ...deerwoodDraft, recap: {} });
   assert.equal(result.valid, false);
