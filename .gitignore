@@ -18,3 +18,4 @@ data/course-source/**/imagery/
 
 # Local Claude Code preview config — per-environment, not shared
 .claude/
+supabase/.secret.local

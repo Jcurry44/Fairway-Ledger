@@ -4,9 +4,37 @@
 survive context resets. Each entry has the original prompt/thought + my
 take + a rough effort estimate.*
 
-Last updated: 2026-07-21 (convenience + settle-trust batch — see below)
+Last updated: 2026-07-29 (voice-inbox pipeline unblock — see below)
 
 ---
+
+## 2026-07-29 — Voice postgame-brief pipeline: unblocked and live (deploy 2026-07-29a)
+
+Joe + Sol (ChatGPT voice) built a postgame-brief → Supabase inbox flow on
+07-28; sign-in kept misrouting and the pipeline had no working middle. Four
+commits (`092df7e..5af6d6e`), 199/199 tests, live-verified after push:
+
+1. **Magic-link root cause fixed** — `redirect_to` was in the JSON body,
+   which GoTrue ignores (query-string only, matching the official SDK);
+   every link fell back to Site URL. Now a query param.
+2. **6-digit code sign-in** — completes inside the installed PWA's own
+   storage partition (an emailed link opens in the browser instead — on
+   iOS those are SEPARATE stores). Needs `{{ .Token }}` in the Supabase
+   Magic Link email template.
+3. **Apply-time course authority** — the catalog overwrites draft holes'
+   number/label/par/yards/hcp; a voice draft can't corrupt analytics and
+   the voice contract shrinks to scores + narrative.
+4. **Ingest auth a GPT can satisfy** — the edge function was never
+   deployed AND required an HMAC that ChatGPT Actions can't compute. Now
+   accepts a static Bearer/`x-fairway-secret` secret (or HMAC for server
+   senders). `docs/VOICE_SETUP.md` = full GPT pack (instructions, OpenAPI
+   schema, troubleshooting, July-28 Deerwood re-send).
+
+**Still needs Joe (~5 min, dashboard + GPT builder):** deploy `ingest-recap`
+via the dashboard editor with JWT verification OFF; set `DRAFT_INGEST_SECRET`
+(value staged in git-ignored `supabase/.secret.local`); add `{{ .Token }}` to
+the Magic Link template; confirm Site URL; sign in from the app (code path);
+build the GPT per `docs/VOICE_SETUP.md`.
 
 ## On branch `games-settle-oncourse-2026-07-21` (NOT pushed; ready to deploy)
 
