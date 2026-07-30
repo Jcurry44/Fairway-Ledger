@@ -12,7 +12,7 @@ Last updated: 2026-07-29 (voice-inbox pipeline unblock — see below)
 
 Joe + Sol (ChatGPT voice) built a postgame-brief → Supabase inbox flow on
 07-28; sign-in kept misrouting and the pipeline had no working middle. Four
-commits (`092df7e..5af6d6e`), 199/199 tests, live-verified after push:
+commits (`092df7e..5af6d6e`), 200/200 tests, live-verified after push:
 
 1. **Magic-link root cause fixed** — `redirect_to` was in the JSON body,
    which GoTrue ignores (query-string only, matching the official SDK);
@@ -34,9 +34,10 @@ commits (`092df7e..5af6d6e`), 199/199 tests, live-verified after push:
 via the dashboard editor with JWT verification OFF; set `DRAFT_INGEST_SECRET`
 (value staged in git-ignored `supabase/.secret.local`); add `{{ .Token }}` to
 the Magic Link template; confirm Site URL; sign in from the app (code path);
-build the GPT per `docs/VOICE_SETUP.md`.
+build the GPT per `docs/VOICE_SETUP.md`. All six steps are now one ordered,
+copy-pasteable checklist at the top of `docs/VOICE_SETUP.md`.
 
-## On branch `games-settle-oncourse-2026-07-21` (NOT pushed; ready to deploy)
+## On branch `games-settle-oncourse-2026-07-21` — merged to main via `e8f0359`
 
 Joe's ask: "using it less and less when I golf — not convenient enough…
 better UI/UX, more premium. Also my wife said the quick score settling

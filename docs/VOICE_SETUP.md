@@ -16,21 +16,64 @@ the voice side only has to carry scores, stats it actually heard, and the
 narrative. A score-only payload is rejected — the recap and coaching ARE the
 product.
 
-## One-time setup (about 10 minutes)
+## Setup checklist (do once, in order — about 10 minutes)
 
-Prerequisite: `supabase/README.md` steps done (function deployed with JWT
-verification off, `DRAFT_INGEST_SECRET` set) and you are signed in inside the
-app so Profile shows your **Voice-service routing ID**.
+Six steps, each naming exactly where it happens and how to tell it worked.
+Steps 1-4 are one-time Supabase dashboard config; step 5 is in the app; step
+6 is in ChatGPT. Do them in this order — later steps depend on earlier ones.
 
-1. ChatGPT → **My GPTs → Create a GPT** (name it e.g. *Fairway Caddie*).
-2. Paste the instruction block below into **Instructions**. Replace
-   `ROUTING_ID_HERE` with the routing ID from the app's Profile card.
-3. **Create new action** → paste the OpenAPI schema below.
-4. Action **Authentication → API Key → Bearer**, paste the
-   `DRAFT_INGEST_SECRET` value. (The secret lives in the GPT's server-side
-   auth config — it is never visible in chat and never in this repo.)
-5. Save the GPT (visibility: **Only me**). Voice chats with this GPT are the
-   postgame brief; a normal ChatGPT voice chat cannot call the action.
+1. **Deploy the ingest function.** Supabase dashboard → **Edge Functions →
+   Deploy a new function → Via Editor**, name it `ingest-recap`, paste in
+   `functions/ingest-recap/index.ts`, deploy, then open the function's
+   details and turn **Enforce JWT verification OFF** (callers authenticate
+   with the ingest secret instead — with verification on, the platform
+   rejects them before the function runs).
+   *Worked when:* the function list shows `ingest-recap` as deployed and its
+   details panel shows JWT verification **Off**.
+2. **Set the ingest secret.** Same dashboard → **Edge Functions → Secrets →
+   Add secret**, name `DRAFT_INGEST_SECRET`, value = the string staged in
+   `supabase/.secret.local` (open that file locally and copy it — it is
+   git-ignored on purpose, never paste its contents anywhere that gets
+   committed or logged).
+   *Worked when:* `DRAFT_INGEST_SECRET` appears in the Secrets list.
+3. **Add the 6-digit code to the sign-in email.** **Authentication → Email
+   Templates → Magic Link**, add `{{ .Token }}` to the body, e.g.
+   `<p>Your sign-in code: {{ .Token }}</p>` above the link, and Save.
+   *Worked when:* the template editor shows `{{ .Token }}` in the saved
+   body (or: request a sign-in email in step 5 and confirm it contains a
+   6-digit code).
+4. **Confirm the Site URL.** **Authentication → URL Configuration** → Site
+   URL is `https://jcurry44.github.io/Fairway-Ledger/`, and that same URL
+   is also present under Redirect URLs.
+   *Worked when:* both fields show that exact URL (trailing slash
+   included).
+5. **Sign in from the app.** In Fairway Ledger, **Profile → Shared voice
+   recaps** → enter your email → **Save & send sign-in email** → open the
+   email → type the 6-digit code into **Sign in with code**.
+   *Worked when:* the Profile card now shows a **Voice-service routing ID**
+   (a UUID) — copy it, you need it for step 6.
+6. **Build the GPT.** ChatGPT → **My GPTs → Create a GPT** (name it e.g.
+   *Fairway Caddie*):
+   1. Paste the instruction block below into **Instructions**, replacing
+      `ROUTING_ID_HERE` with the routing ID from step 5.
+   2. **Create new action** → paste the OpenAPI schema below.
+   3. Action **Authentication → API Key → Bearer**, paste the same
+      `DRAFT_INGEST_SECRET` value from step 2. (The secret lives in the
+      GPT's server-side auth config — it is never visible in chat and
+      never in this repo.)
+   4. Save the GPT (visibility: **Only me**).
+   *Worked when:* the GPT saves without error and shows one action,
+   `submitRecap`, pointed at `.../functions/v1/ingest-recap`.
+
+### End-to-end smoke check (run once, after all six steps)
+
+Open the *Fairway Caddie* GPT and talk through a short round (even a fake
+2-3 hole one). Confirm the totals when it reads them back, let it call
+`submitRecap`. You should hear back that the brief is waiting in the inbox —
+no 401/404/422/500 (see Troubleshooting below if you do). Then open Fairway
+Ledger, **Profile → Refresh inbox**, confirm the draft appears, tap **Apply**,
+and confirm it lands as a saved round with the recap attached. That closes
+the loop from voice to the app.
 
 ## GPT instructions (paste verbatim, then set the routing ID)
 
