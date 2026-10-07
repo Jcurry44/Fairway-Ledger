@@ -149,6 +149,10 @@
   const today = new Date().toISOString().slice(0, 10);
 
   let sampleCourses = [];
+  // Set when a write to localStorage failed even after pruning snapshots.
+  // While true the in-memory state is the only copy of recent changes, so a
+  // blocking banner stays on screen until a save succeeds or the user exports.
+  let storageBlocked = false;
   let selectedCourseDetailId = null;
   let editingRoundId = null;
   let viewMode = readInitialViewMode();
@@ -944,10 +948,10 @@
   }
 
   function loadCourseCatalog() {
-    const courses = window.__golfCourseCatalog;
+    const courses = window.FairwayCourseCatalog && window.FairwayCourseCatalog.courses;
     if (!Array.isArray(courses)) {
-      console.error("Course catalog is missing. Make sure data/courses.js loads before app.js.");
-      els.courseList.innerHTML = emptyState("Course catalog could not load. Make sure data/courses.js is present alongside app.js.");
+      console.error("Course catalog is missing. Make sure lib/course-catalog.js loads before app.js.");
+      els.courseList.innerHTML = emptyState("Course catalog could not load. Make sure lib/course-catalog.js is present alongside app.js.");
       return [];
     }
     return courses.map(normalizeCourse);
@@ -1222,16 +1226,54 @@
     };
     if (!missingDefaultCourses.length && JSON.stringify(updatedCourses) === JSON.stringify(saved.courses)) return saved;
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+    // Guarded: a full localStorage must not abort loading. The migrated
+    // state is returned either way and the next saveState() retries.
+    writeCanonical(JSON.stringify(migrated));
     return migrated;
   }
 
+  // Write the canonical state key through the quota guard. Never throws,
+  // never clears the key, never drops in-memory state. Returns true if saved.
+  function writeCanonical(json) {
+    const result = snapshotStore.writeGuarded(STORAGE_KEY, json);
+    if (result.ok) {
+      if (storageBlocked) {
+        storageBlocked = false;
+        updateStorageBanner();
+      }
+      return true;
+    }
+    storageBlocked = true;
+    updateStorageBanner();
+    return false;
+  }
+
   function saveState() {
-    const json = JSON.stringify(state);
-    localStorage.setItem(STORAGE_KEY, json);
+    let json;
+    try { json = JSON.stringify(state); }
+    catch (error) {
+      console.error("Could not serialize golf data", error);
+      storageBlocked = true;
+      updateStorageBanner();
+      return;
+    }
+    if (!writeCanonical(json)) return;
     // Best-effort autosave snapshot. Throttled + deduped inside takeSnapshot
     // so this stays cheap even on a per-keystroke save path.
     takeSnapshot("autosave", { json });
+  }
+
+  // Persistent, blocking banner shown on every tab while storageBlocked.
+  function updateStorageBanner() {
+    const banner = document.getElementById("storageBanner");
+    if (!banner) return;
+    banner.hidden = !storageBlocked;
+    document.body.classList.toggle("storage-blocked", storageBlocked);
+  }
+
+  function storageUsageText() {
+    const mb = snapshotStore.usageBytes() / 1000000;
+    return `Storage used: ${mb.toFixed(1)} MB of about 5 MB`;
   }
 
   // ---- Snapshot system: rolling backups in localStorage ------------------
@@ -1248,6 +1290,8 @@
   // Autosave snapshots are deduped by JSON and gated to one per this
   // interval, so saving 30 rounds in a row doesn't burn through the cap.
   const SNAPSHOT_AUTO_MIN_INTERVAL_MS = 10 * 60 * 1000;
+  // Total snapshot bytes (string length) kept; oldest autosaves go first.
+  const SNAPSHOT_MAX_BYTES = 2500000;
 
   const SNAPSHOT_REASON_LABELS = {
     autosave: "Autosave",
@@ -1258,95 +1302,36 @@
     "pre-restore": "Before Restore"
   };
 
-  let lastSnapshotJson = null;
-  let lastSnapshotAt = 0;
+  // List/prune/take/read/guarded-write logic lives in lib/snapshots.js so it
+  // is unit-tested in Node. These wrappers keep every call site unchanged.
+  const snapshotStore = window.FairwaySnapshots.create({
+    storage: localStorage,
+    prefix: SNAPSHOT_KEY_PREFIX,
+    max: SNAPSHOT_MAX,
+    maxBytes: SNAPSHOT_MAX_BYTES,
+    minIntervalMs: SNAPSHOT_AUTO_MIN_INTERVAL_MS
+  });
 
   function listSnapshots() {
-    const out = [];
-    try {
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!key || !key.startsWith(SNAPSHOT_KEY_PREFIX)) continue;
-        try {
-          const raw = JSON.parse(localStorage.getItem(key));
-          if (!raw || !raw.state) continue;
-          out.push({
-            key,
-            takenAt: raw.takenAt || null,
-            reason: raw.reason || "autosave",
-            roundCount: Number.isFinite(raw.roundCount)
-              ? raw.roundCount
-              : (Array.isArray(raw.state.rounds) ? raw.state.rounds.length : 0),
-            courseCount: Number.isFinite(raw.courseCount)
-              ? raw.courseCount
-              : (Array.isArray(raw.state.courses) ? raw.state.courses.length : 0),
-            bytes: (localStorage.getItem(key) || "").length
-          });
-        } catch {}
-      }
-    } catch {}
-    out.sort((a, b) => (b.takenAt || "").localeCompare(a.takenAt || ""));
-    return out;
+    return snapshotStore.list();
   }
 
   function pruneSnapshots(extraDrop = 0) {
-    const snaps = listSnapshots();
-    const keepCount = Math.max(0, SNAPSHOT_MAX - extraDrop);
-    if (snaps.length <= keepCount) return;
-    snaps.slice(keepCount).forEach((s) => {
-      try { localStorage.removeItem(s.key); } catch {}
-    });
+    snapshotStore.prune(extraDrop);
   }
 
   function takeSnapshot(reason = "autosave", opts = {}) {
-    const force = opts.force === true;
-    const providedJson = typeof opts.json === "string" ? opts.json : null;
-    try {
-      const stateJson = providedJson != null ? providedJson : JSON.stringify(state);
-      const now = Date.now();
-      if (!force && reason === "autosave") {
-        // Skip if state hasn't changed since the last snapshot, OR if we
-        // already snapped recently. Avoids 20 near-identical autosaves
-        // pushing out the meaningful pre-destructive ones.
-        if (stateJson === lastSnapshotJson) return null;
-        if (now - lastSnapshotAt < SNAPSHOT_AUTO_MIN_INTERVAL_MS) return null;
-      }
-      const takenAt = new Date(now).toISOString();
-      const key = SNAPSHOT_KEY_PREFIX + takenAt.replace(/[:.]/g, "-");
-      const payload = {
-        takenAt,
-        reason,
-        roundCount: Array.isArray(state.rounds) ? state.rounds.length : 0,
-        courseCount: Array.isArray(state.courses) ? state.courses.length : 0,
-        state: JSON.parse(stateJson)
-      };
-      const serialized = JSON.stringify(payload);
-      try {
-        localStorage.setItem(key, serialized);
-      } catch (quotaErr) {
-        // Quota exceeded — drop oldest snapshots and retry once. The
-        // committed state in STORAGE_KEY is untouched either way.
-        pruneSnapshots(3);
-        try { localStorage.setItem(key, serialized); }
-        catch { return null; }
-      }
-      lastSnapshotJson = stateJson;
-      lastSnapshotAt = now;
-      pruneSnapshots();
-      return key;
-    } catch {
-      return null;
+    let json = typeof opts.json === "string" ? opts.json : null;
+    if (json == null) {
+      try { json = JSON.stringify(state); } catch (error) { return null; }
     }
+    return snapshotStore.take(reason, { force: opts.force === true, json });
   }
 
   function restoreSnapshot(snapshotKey) {
-    let payload = null;
-    try {
-      payload = JSON.parse(localStorage.getItem(snapshotKey));
-    } catch {}
-    if (!payload || !payload.state) return false;
+    const payload = snapshotStore.read(snapshotKey);
+    if (!payload) return false;
     const incoming = payload.state;
-    if (!Array.isArray(incoming.courses) || !Array.isArray(incoming.rounds)) return false;
     // Snap the CURRENT state first, so a restore can itself be undone.
     takeSnapshot("pre-restore", { force: true });
     const normalized = {
@@ -1360,8 +1345,7 @@
   }
 
   function deleteSnapshot(snapshotKey) {
-    try { localStorage.removeItem(snapshotKey); return true; }
-    catch { return false; }
+    return snapshotStore.remove(snapshotKey);
   }
 
   // In-progress round auto-save. Captures the user's mid-entry form state to
@@ -1661,7 +1645,9 @@
   }
 
   function writeBackupMeta(meta) {
-    localStorage.setItem(BACKUP_META_KEY, JSON.stringify(meta));
+    // Best-effort: backup bookkeeping must never throw into a save/export path.
+    try { localStorage.setItem(BACKUP_META_KEY, JSON.stringify(meta)); return true; }
+    catch (error) { console.warn("Could not write backup meta", error); return false; }
   }
 
   function unbackedRoundCount() {
@@ -9415,6 +9401,8 @@
     if (!els.snapshotList) return;
     const snaps = listSnapshots();
     if (els.snapshotCap) els.snapshotCap.textContent = String(SNAPSHOT_MAX);
+    const usageEl = document.getElementById("storageUsage");
+    if (usageEl) usageEl.textContent = storageUsageText();
     if (els.snapshotBackupStatus) {
       const meta = readBackupMeta();
       const unbacked = unbackedRoundCount();
@@ -10503,7 +10491,8 @@
         button.setAttribute("aria-selected", String(isActive));
       }
     });
-    localStorage.setItem(ACTIVE_TAB_KEY, targetName);
+    // UI preference only: a full localStorage must not abort tab switching/init.
+    try { localStorage.setItem(ACTIVE_TAB_KEY, targetName); } catch {}
     updateFloatingNavVisibility();
     // Refresh the snapshot panel on Profile entry so timestamps don't drift
     // (e.g. "2 min ago" should re-evaluate without a full reload).
@@ -10685,7 +10674,7 @@
           body.setAttribute("hidden", "");
           toggle.textContent = "Show";
           toggle.setAttribute("aria-expanded", "false");
-          localStorage.setItem(BRIEF_COLLAPSED_KEY, "1");
+          try { localStorage.setItem(BRIEF_COLLAPSED_KEY, "1"); } catch {}
         } else {
           body.removeAttribute("hidden");
           toggle.textContent = "Hide";
@@ -11591,6 +11580,29 @@
   }
 
   els.exportButton.addEventListener("click", () => triggerBackupDownload());
+
+  // Storage-full banner: Export always works (it serializes in-memory state);
+  // "Free space" removes only autosave snapshots, then retries the save.
+  const storageExportButton = document.getElementById("storageBannerExport");
+  if (storageExportButton) {
+    storageExportButton.addEventListener("click", () => triggerBackupDownload({ toast: "Export ready. Keep this file safe." }));
+  }
+  const storageFreeButton = document.getElementById("storageBannerFree");
+  if (storageFreeButton) {
+    storageFreeButton.addEventListener("click", () => {
+      const removed = snapshotStore.pruneAutosaves(1);
+      saveState();
+      renderSnapshotPanel();
+      showToast(storageBlocked
+        ? "Still full. Export now, then clear browser data for other sites."
+        : `Freed space (${removed} old autosave${removed === 1 ? "" : "s"} removed). Saved.`);
+    });
+  }
+  window.addEventListener("beforeunload", (event) => {
+    if (!storageBlocked) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
 
   // Auto-backup: after a NEW round is saved (not an edit), if the user has
   // ≥AUTO_BACKUP_ROUND_THRESHOLD unbacked rounds, trigger an export download.

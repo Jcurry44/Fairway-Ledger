@@ -21,7 +21,7 @@
 // without the bump does not reach offline/flaky-signal users — there is no
 // "small enough to skip the bump" edit to core assets.
 
-const ASSET_VERSION = '2026-07-29b'; // must equal the ?v= buster in index.html
+const ASSET_VERSION = '2026-10-07a'; // must equal the ?v= buster in index.html
 const CACHE_VERSION = 'fairway-ledger-v96-' + ASSET_VERSION;
 
 // Assets index.html requests WITH the ?v= buster — precached under the
@@ -31,8 +31,9 @@ const VERSIONED_ASSETS = [
   './index.html',
   './styles.css',
   './app.js',
-  './data/courses.js',
   './data/course-maps/deerwood-runtime.js',
+  './lib/course-catalog.js',
+  './lib/snapshots.js',
   './lib/golf-math.js',
   './lib/shapes.js',
   './lib/voice-recap.js',

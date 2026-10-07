@@ -18,7 +18,7 @@ Open `index.html` locally to run it directly from the filesystem.
 - **`lib/course-map-labels.js`** — strict GeoJSON boundary for user-traced Deerwood map labels. It accepts only conservative aerial observations (sand candidates, visible water, greens, tees, tree canopy) and personal aim points tied to a canonical physical hole and the verified 2024 map.
 - **`lib/course-map-ui.js`** — interactive Deerwood map controller for pan/zoom, live GPS, aim targets, recorded-shot overlays, and explicit draft-label tracing. It consumes only the trusted map runtime and never reads the rejected legacy hazards.
 - **`tools/build_deerwood_aerial.py`** — reproducible NYSDOP aerial builder. It verifies the four source checksums, mosaics their world-file positions, excludes the near-infrared band, and writes the browser WebP plus exact spatial metadata.
-- **`data/courses.js`** — course catalog. 25 entries covering Deerwood Golf Course (per-nine, per-tee), Ridgeview, Lake County, and five Western New York courses (Arrowhead, Diamond Hawk, Glen Oak, Harvest Hill, Seneca Hickory Stick) including all their tee variants.
+- **`lib/course-catalog.js`** — course catalog (moved from data/courses.js in H0a; exposes `window.FairwayCourseCatalog = { courses, version }`). 25 entries covering Deerwood Golf Course (per-nine, per-tee), Ridgeview, Lake County, and five Western New York courses (Arrowhead, Diamond Hawk, Glen Oak, Harvest Hill, Seneca Hickory Stick) including all their tee variants.
 - **`sw.js`** — service worker (network-first with offline fallback). Whole app shell is precached so it works on a phone with zero signal.
 - **`manifest.json` + `icon.svg`** — PWA manifest. Installs to home screen as a real-looking app with its own icon.
 

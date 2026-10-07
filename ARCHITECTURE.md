@@ -8,7 +8,7 @@ the whole architecture.
 
 ```
 index.html
-  ├─ <script src="data/courses.js">        ── global: COURSES
+  ├─ <script src="lib/course-catalog.js">  ── global: FairwayCourseCatalog (+ lib/snapshots.js: FairwaySnapshots)
   ├─ <script src="lib/golf-math.js">       ── global: window.GolfMath
   ├─ <script src="lib/shapes.js">          ── global: window.GolfShapes
   └─ <script src="app.js">                 ── one IIFE; binds the above into scope

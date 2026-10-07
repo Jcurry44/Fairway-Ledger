@@ -8605,3 +8605,35 @@ summary:focus-visible {
   .pgb-chips { grid-template-columns: repeat(4, 1fr); }
   .pgb-arc-col { min-width: 9px; }
 }
+
+/* Storage-full banner (H0a): persistent, above every tab, hard to miss. */
+.storage-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10000;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px;
+  background: #8c1d18;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1.3;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+.storage-banner[hidden] { display: none; }
+.storage-banner button {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 2px solid #fff;
+  border-radius: 8px;
+  background: #fff;
+  color: #8c1d18;
+  font-weight: 700;
+  font-size: 15px;
+}
+.storage-banner .storage-banner-free { background: transparent; color: #fff; }
+body.storage-blocked { padding-top: 120px; }
