@@ -10506,7 +10506,7 @@
   // rounds tab, or a live game on the games tab. iOS releases the lock
   // whenever the app is pocketed; the visibilitychange hook re-acquires on
   // wake. Feature-detected, fails silent (Safari 16.4+ / installed PWAs).
-  let screenWakeLock = null;
+  var screenWakeLock = null;
   function wantsWakeLock() {
     const roundsLive = roundStarted && !editingRoundId
       && !!document.querySelector('.tab-panel[data-tab-panel="rounds"].active');
