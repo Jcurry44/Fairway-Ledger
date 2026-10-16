@@ -28,7 +28,7 @@ GO WITH FIXES, final look = GO WITH RIDE-ALONGS, all applied. Each phone needs o
 - Builds only while Records › Season is on screen (cached per year): the story
   replays every round, ~190 ms at 300 rounds on a desktop CPU.
 
-**Handicap fix (branch `ledger-hcp9-2026-10-16`, e5fb3a0, deploy 2026-10-16c, NOT live yet):**
+**Handicap fix (LIVE: main `35abbe7`, deployed 2026-10-16c with Joe's go, live-verified 10.4 / 5):**
 a 9-hole round on an 18-hole non-Deerwood course kept the 18-hole course id, so
 lib/golf-math.js scored it against the 18-hole Course Rating (a 44 vs 71.2 = −22).
 Two ordinary nines took a 9.9 index to 0.0 (Trends › Handicap, the live in-round
