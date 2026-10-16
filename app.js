@@ -619,6 +619,13 @@
     metricBestRoundCard: document.getElementById("metricBestRoundCard"),
     metricGir: document.getElementById("metricGir"),
     metricGirBasis: document.getElementById("metricGirBasis"),
+    nineteenthOverlay: document.getElementById("nineteenthOverlay"),
+    nineteenthBackdrop: document.getElementById("nineteenthBackdrop"),
+    nineteenthClose: document.getElementById("nineteenthClose"),
+    nineteenthBody: document.getElementById("nineteenthBody"),
+    nineteenthShare: document.getElementById("nineteenthShare"),
+    nineteenthDone: document.getElementById("nineteenthDone"),
+    eclecticPanel: document.getElementById("eclecticPanel"),
     metricSg: document.getElementById("metricSg"),
     metricHandicap: document.getElementById("metricHandicap"),
     homeInsights: document.getElementById("homeInsights"),
@@ -8749,6 +8756,238 @@
       </article>`).join("");
   }
 
+  // ---- Eclectic + the 19th Hole (2026-10-16) ----------------------------
+  // An eclectic is your best-ever score on every physical hole of a course,
+  // added up: the dream round you have already played, one hole at a time.
+  // Tee variants pool by physical course; Deerwood keeps one board per nine.
+  const Eclectic = window.FairwayEclectic;
+  let eclecticCourse = null;
+
+  function eclecticOpts() {
+    return {
+      courseKey: (round) => physicalCourseName(round.courseId),
+      holeKey: (round, hole) => (isDeerwoodCourseId(round.courseId)
+        ? physicalHoleId(round.courseId, hole)
+        : `${physicalCourseName(round.courseId)}:${hole.number}`),
+      groupKey: (round, hole) => {
+        if (!isDeerwoodCourseId(round.courseId)) return null;
+        const parts = String(physicalHoleId(round.courseId, hole) || "").split(":");
+        return parts.length >= 3 ? parts[1] : null;
+      }
+    };
+  }
+
+  function eclecticToPar(total, par) {
+    const d = total - par;
+    return d === 0 ? "E" : formatSigned(d, 0);
+  }
+
+  function renderEclecticPanel() {
+    if (!els.eclecticPanel || !Eclectic) return;
+    let boards;
+    try { boards = Eclectic.buildBoards(state.rounds, eclecticOpts()); } catch { boards = new Map(); }
+    const list = [...boards.values()].filter((b) => b.holes.size).sort((a, b) => b.plays - a.plays);
+    if (!list.length) {
+      els.eclecticPanel.innerHTML = emptyState("Save a round and your eclectic starts: your best-ever score on every hole, added up.");
+      return;
+    }
+    if (!eclecticCourse || !boards.has(eclecticCourse)) eclecticCourse = list[0].courseKey;
+    const board = boards.get(eclecticCourse);
+    const nem = Eclectic.nemesis(board);
+    const chips = list.length > 1 ? `
+      <div class="eclectic-courses" role="tablist" aria-label="Course">
+        ${list.map((b) => `<button type="button" class="eclectic-chip${b.courseKey === eclecticCourse ? " is-on" : ""}" data-eclectic-course="${escapeHtml(b.courseKey)}" aria-pressed="${b.courseKey === eclecticCourse}">${escapeHtml(b.courseKey)}</button>`).join("")}
+      </div>` : "";
+    const groupNames = [...board.groups.keys()];
+    const nineLabel = (name) => (name === "all" ? "" : name.charAt(0).toUpperCase() + name.slice(1));
+    const groupsHtml = groupNames.map((name) => {
+      const group = board.groups.get(name);
+      const cells = group.holeKeys.map((key) => board.holes.get(key)).filter(Boolean);
+      const rows = cells.map((cell) => {
+        const isNem = nem && nem.key === cell.key;
+        const tags = [
+          isNem ? `<span class="eclectic-tag eclectic-tag-nemesis">◆ Nemesis</span>` : "",
+          cell.birdieOrBetter ? `<span class="eclectic-tag">● Birdied</span>` : ""
+        ].join("");
+        return `
+          <button type="button" class="eclectic-row" data-eclectic-round="${escapeHtml(String(cell.bestRoundId || ""))}" data-eclectic-key="${escapeHtml(cell.key)}">
+            <span class="eclectic-hole">${escapeHtml(/^\d+$/.test(String(cell.label)) ? `Hole ${cell.label}` : cell.label)}<small>Par ${cell.par}</small></span>
+            <span class="eclectic-best">${renderScoreMark(cell.best, cell.par)}</span>
+            <span class="eclectic-meta">${cell.plays} play${cell.plays === 1 ? "" : "s"} · avg ${formatSigned(cell.avgVsPar, 1)}${tags ? `<span class="eclectic-tags">${tags}</span>` : ""}</span>
+          </button>`;
+      }).join("");
+      // Scorecard strip: nine columns a line (hole, par, best mark), the way
+      // a real card reads. The full hole-by-hole rows sit one tap away.
+      const strips = [];
+      for (let i = 0; i < cells.length; i += 9) {
+        const slice = cells.slice(i, i + 9);
+        const total = slice.reduce((sum, cell) => sum + cell.best, 0);
+        const par = slice.reduce((sum, cell) => sum + cell.par, 0);
+        const label = name !== "all" ? nineLabel(name) : cells.length > 9 ? (i === 0 ? "Out" : "In") : "";
+        strips.push(`
+          <div class="eclectic-strip" role="table" aria-label="${escapeHtml(label || "Eclectic")} eclectic">
+            <div class="eclectic-strip-head"><strong>${escapeHtml(label)}</strong><span>${total} (${eclecticToPar(total, par)})${name !== "all" && !group.complete ? ` · ${group.holeKeys.length} of 9 holes` : ""}</span></div>
+            <div class="eclectic-strip-grid" style="--cols:${slice.length}">
+              ${slice.map((cell) => {
+                const shortLabel = String(cell.label).replace(/^[A-Za-z]+\s+/, "");
+                const isNem = nem && nem.key === cell.key;
+                return `<div class="eclectic-cell${isNem ? " is-nemesis" : ""}" role="cell" aria-label="${escapeHtml(cell.label)}, par ${cell.par}, best ${cell.best}${isNem ? ", nemesis" : ""}">
+                  <span class="ec-hole">${escapeHtml(shortLabel)}</span>
+                  <span class="ec-par">${cell.par}</span>
+                  <span class="ec-best">${renderScoreMark(cell.best, cell.par)}</span>
+                  <span class="ec-flag" aria-hidden="true">${isNem ? "◆" : ""}</span>
+                </div>`;
+              }).join("")}
+            </div>
+          </div>`);
+      }
+      return `<div class="eclectic-group">${strips.join("")}<details class="eclectic-detail"><summary>Hole by hole${name === "all" ? "" : ` · ${escapeHtml(nineLabel(name))}`}</summary><div class="eclectic-rows">${rows}</div></details></div>`;
+    }).join("");
+    const isNines = !(groupNames.length === 1 && groupNames[0] === "all");
+    const allGroup = board.groups.get("all");
+    const headline = isNines
+      ? `<strong>${board.total}</strong><span>${eclecticToPar(board.total, board.par)} across ${board.holes.size} holes</span>`
+      : `<strong>${board.total}</strong><span>${eclecticToPar(board.total, board.par)}${allGroup && !allGroup.complete ? ` · ${board.holes.size} of 18 holes` : ""}</span>`;
+    els.eclecticPanel.innerHTML = `
+      ${chips}
+      <div class="eclectic-hero">
+        <p class="eyebrow">Your ${escapeHtml(eclecticCourse)} eclectic</p>
+        <div class="eclectic-total">${headline}</div>
+        <p class="eclectic-sub">Best-ever score on each hole, from ${board.plays} round${board.plays === 1 ? "" : "s"}. Every round can move it.${nem ? ` Nemesis: ${escapeHtml(/^\d+$/.test(String(nem.label)) ? `Hole ${nem.label}` : nem.label)} (avg ${formatSigned(nem.avgVsPar, 1)}).` : ""}</p>
+      </div>
+      ${groupsHtml}`;
+  }
+
+  function onEclecticPanelClick(event) {
+    const chip = event.target.closest("[data-eclectic-course]");
+    if (chip) {
+      eclecticCourse = chip.dataset.eclecticCourse;
+      renderEclecticPanel();
+      return;
+    }
+    const row = event.target.closest("[data-eclectic-round]");
+    if (!row) return;
+    const round = state.rounds.find((r) => String(r.id) === row.dataset.eclecticRound);
+    if (!round) return;
+    const opts = eclecticOpts();
+    const hole = round.holes.find((h) => opts.holeKey(round, h) === row.dataset.eclecticKey);
+    if (hole) openHeatmapDrilldown(physicalHoleId(round.courseId, hole));
+  }
+
+  // What this round did, computed against the rounds that existed before it.
+  function buildNineteenthHole(newRound, roundsBefore, trophiesBefore) {
+    const totals = roundTotals(newRound);
+    const scored = newRound.holes.filter((h) => Number.isFinite(h.score) && h.score > 0);
+    const lines = [];
+    const holeName = (label) => (/^\d+$/.test(String(label)) ? `Hole ${label}` : String(label));
+    let fell = [];
+    try {
+      fell = Eclectic ? Eclectic.diffRecords(trophiesBefore, computeTrophies(state.rounds), { roundId: newRound.id }) : [];
+    } catch { fell = []; }
+    // A new low gross already says the to-par record fell too.
+    const fellIds = new Set(fell.map((rec) => rec.id));
+    if (fellIds.has("low-18-gross")) fell = fell.filter((rec) => rec.id !== "low-18-topar");
+    if (fellIds.has("low-9-gross")) fell = fell.filter((rec) => rec.id !== "low-9-topar");
+    const recordLine = (rec, priority) => ({
+      priority,
+      mark: "★",
+      kind: "record",
+      text: `<strong>${escapeHtml(rec.label)}</strong> ${escapeHtml(String(rec.to))}${rec.from != null && rec.from !== "" ? ` <span class="nh-was">was ${escapeHtml(String(rec.from))}</span>` : ` <span class="nh-was">new record</span>`}`
+    });
+    fell.forEach((rec) => {
+      const headline = rec.id === "low-18-gross" || rec.id === "low-9-gross";
+      lines.push(recordLine(rec, headline ? 100 : 40));
+    });
+    let delta = null;
+    try { delta = Eclectic ? Eclectic.roundDelta(roundsBefore, newRound, eclecticOpts()) : null; } catch { delta = null; }
+    if (delta) {
+      if (delta.revenge) {
+        lines.push({ priority: 90, mark: "◆", kind: "revenge", text: `<strong>Revenge on ${escapeHtml(holeName(delta.revenge.label))}</strong>, your nemesis: ${delta.revenge.score} on a par ${delta.revenge.par}` });
+      }
+      if (delta.newBirdieHoles.length) {
+        const names = delta.newBirdieHoles.map((h) => escapeHtml(holeName(h.label)));
+        const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0];
+        lines.push({ priority: 80, mark: "●", kind: "birdie", text: `<strong>First birdie ever</strong> on ${list}` });
+      }
+      if (delta.moved.length && delta.holesBefore) {
+        const movedText = delta.moved.slice(0, 3).map((m) => `${escapeHtml(holeName(m.label))} ${m.from}→${m.to}`).join(", ");
+        const more = delta.moved.length > 3 ? ` +${delta.moved.length - 3} more` : "";
+        const sameCoverage = delta.holesBefore === delta.holesAfter;
+        lines.push({ priority: 70, mark: "▲", kind: "eclectic", text: `<strong>Eclectic moved</strong> ${movedText}${more}${sameCoverage ? ` <span class="nh-was">board ${delta.totalBefore} → ${delta.totalAfter}</span>` : ""}` });
+      } else if (!delta.holesBefore) {
+        lines.push({ priority: 30, mark: "▲", kind: "eclectic", text: `<strong>Eclectic started</strong> <span class="nh-was">${delta.holesAfter} holes, ${delta.totalAfter} (${eclecticToPar(delta.totalAfter, delta.parAfter)})</span>` });
+      }
+    }
+    const detail = isDetailRound(newRound);
+    const tile = (label, value, basis) => `<div class="nh-tile"><span>${label}</span><strong>${value}</strong>${basis ? `<small>${basis}</small>` : ""}</div>`;
+    const puttsTile = detail && totals.puttsKnown
+      ? tile("Putts", String(totals.putts), totals.puttsKnown < scored.length ? `on ${totals.puttsKnown} of ${scored.length} holes` : "")
+      : tile("Putts", "—", "not entered");
+    const firTile = detail && totals.firTotal ? tile("Fairways", `${totals.firMade}/${totals.firTotal}`, "") : tile("Fairways", "—", "not entered");
+    const girTile = detail && totals.girTotal ? tile("Greens", `${totals.girMade}/${totals.girTotal}`, "") : tile("Greens", "—", "not entered");
+    const pens = scored.reduce((sum, h) => sum + (Number(h.penalties) || 0), 0);
+    const narrative = String(newRound.narrative || "").split("\n\n")[0] || "";
+    const course = getCourse(newRound.courseId);
+    const courseName = physicalCourseName(newRound.courseId) || (course ? course.name : "");
+    const dateText = (() => {
+      try { return new Date(`${newRound.date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }); } catch { return newRound.date; }
+    })();
+    const shareBits = [`${courseName} ${totals.gross} (${eclecticToPar(totals.gross, totals.par)})`];
+    if (detail && totals.puttsKnown === scored.length && scored.length) shareBits.push(`${totals.putts} putts`);
+    if (fell.length) shareBits.push(`${fell.length} record${fell.length === 1 ? "" : "s"} fell`);
+    if (delta && delta.revenge) shareBits.push(`revenge on ${holeName(delta.revenge.label)}`);
+    if (delta && delta.moved.length && delta.holesBefore === delta.holesAfter) shareBits.push(`eclectic ${delta.totalAfter}`);
+    lines.sort((a, b) => b.priority - a.priority);
+    const lineHtml = (l) => `<li class="nh-line nh-${l.kind}"><span class="nh-mark" aria-hidden="true">${l.mark}</span><span>${l.text}</span></li>`;
+    const top = lines.slice(0, 4);
+    const rest = lines.slice(4);
+    const listHtml = lines.length
+      ? `<ul class="nh-lines">${top.map(lineHtml).join("")}</ul>${rest.length ? `<details class="nh-more"><summary>+${rest.length} more</summary><ul class="nh-lines">${rest.map(lineHtml).join("")}</ul></details>` : ""}`
+      : `<p class="nh-quiet">Nothing fell this time. ${delta && delta.holesAfter ? `Your eclectic here holds at ${delta.totalAfter}.` : ""}</p>`;
+    const html = `
+      <div class="nh-hero">
+        <p class="eyebrow">The 19th Hole</p>
+        <div class="nh-score"><strong>${totals.gross}</strong><span>${eclecticToPar(totals.gross, totals.par)}</span></div>
+        <p class="nh-where">${escapeHtml(courseName)} · ${escapeHtml(dateText)} · ${scored.length} holes</p>
+      </div>
+      ${listHtml}
+      <div class="nh-tiles">${puttsTile}${firTile}${girTile}${tile("Penalties", String(pens), "")}</div>
+      ${narrative ? `<p class="nh-story">${escapeHtml(narrative)}</p>` : ""}`;
+    return { html, share: `${shareBits.join(" · ")} — Fairway Ledger` };
+  }
+
+  function openNineteenthHole(newRound, roundsBefore, trophiesBefore) {
+    const overlay = els.nineteenthOverlay;
+    if (!overlay || !els.nineteenthBody) return false;
+    const { html, share } = buildNineteenthHole(newRound, roundsBefore, trophiesBefore);
+    els.nineteenthBody.innerHTML = html;
+    const close = () => {
+      overlay.hidden = true;
+      document.body.classList.remove("hole-picker-open");
+      document.removeEventListener("keydown", onKey);
+    };
+    function onKey(e) { if (e.key === "Escape") close(); }
+    if (els.nineteenthDone) els.nineteenthDone.onclick = close;
+    if (els.nineteenthClose) els.nineteenthClose.onclick = close;
+    if (els.nineteenthBackdrop) els.nineteenthBackdrop.onclick = close;
+    if (els.nineteenthShare) {
+      els.nineteenthShare.onclick = async () => {
+        try {
+          if (navigator.share) { await navigator.share({ text: share }); return; }
+          await navigator.clipboard.writeText(share);
+          showToast("Copied. Paste it anywhere.");
+        } catch (error) {
+          if (error && error.name === "AbortError") return;
+          showToast(share);
+        }
+      };
+    }
+    document.addEventListener("keydown", onKey);
+    overlay.hidden = false;
+    document.body.classList.add("hole-picker-open");
+    return true;
+  }
+
   function renderTrophyRoom() {
     if (!els.trophyRoomGrid) return;
     const trophies = computeTrophies(state.rounds);
@@ -8856,7 +9095,8 @@
     "tee-club-performance": "clubs",
     "putting-by-distance": "clubs",
     "scrambling": "clubs",
-    "trophy-room": "records"
+    "trophy-room": "records",
+    "eclectic": "records"
     // "stats-explorer": "explorer" — Explorer chip + panel temporarily
     // removed from Home (Jeff: "don't really like it right now"). The
     // computeStatsExplorer / renderStatsExplorer functions stay as dead
@@ -8871,7 +9111,8 @@
   const SUBSECTION_DEFAULTS = {
     trends: "recent-rounds",
     holes: "heatmap",
-    clubs: "tee-club-performance"
+    clubs: "tee-club-performance",
+    records: "trophy-room"
   };
 
   let activeHomeSection = (() => {
@@ -9674,6 +9915,7 @@
     renderCourseList();
     renderProfileBag();
     renderTrophyRoom();
+    renderEclecticPanel();
     renderStatsExplorer();
     renderSnapshotPanel();
     tagHomePanelsWithSections();
@@ -11712,6 +11954,7 @@
     });
   }
   if (els.parTypeSheetBackdrop) els.parTypeSheetBackdrop.addEventListener("click", closeParTypeDetail);
+  if (els.eclecticPanel) els.eclecticPanel.addEventListener("click", onEclecticPanelClick);
   if (els.parTypeSheetClose) els.parTypeSheetClose.addEventListener("click", closeParTypeDetail);
   if (els.parStats) {
     els.parStats.addEventListener("click", (event) => {
@@ -11915,6 +12158,10 @@
           holes
         });
         newRound.narrative = generateRoundNarrative(newRound, state.rounds);
+        // The 19th Hole compares against the world before this round.
+        const roundsBefore = state.rounds.slice();
+        let trophiesBefore = [];
+        try { trophiesBefore = computeTrophies(roundsBefore); } catch { trophiesBefore = []; }
         state.rounds.push(newRound);
         clearInProgressRound();
         resetPendingHoles(); resetReviewState();
@@ -11928,8 +12175,12 @@
         resetRoundChrome();
         renderAll();
         setActiveTab("home");
-        showToast("Round saved.");
         maybeAutoBackup();
+        // Opens only after saveState + the backup gesture ran; any failure
+        // here falls back to the plain toast and never touches the save.
+        let shown = false;
+        try { shown = openNineteenthHole(newRound, roundsBefore, trophiesBefore); } catch { shown = false; }
+        if (!shown) showToast("Round saved.");
       }
     } catch (error) {
       showToast(error.message);

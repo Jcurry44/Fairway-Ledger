@@ -8902,3 +8902,210 @@ body.storage-blocked { padding-top: 120px; }
   .pill.quick-putt { min-height: 48px; }
   .pill.quick-tee { min-height: 50px; }
 }
+
+/* ==== The 19th Hole (post-save payoff) + Eclectic board (2026-10-16) ====
+   Marks are distinct glyphs + words (★ record, ▲ eclectic, ● first birdie,
+   ◆ revenge), so nothing depends on hue. */
+.nineteenth-body { display: grid; gap: 14px; padding: 4px 2px 8px; }
+.nh-hero {
+  border-radius: 14px;
+  padding: 16px 16px 14px;
+  background: linear-gradient(160deg, var(--green-dark), #0b2e1f);
+  color: #f6f1e2;
+}
+.nh-hero .eyebrow { color: var(--gold-soft); margin: 0 0 6px; }
+.nh-score { display: flex; align-items: baseline; gap: 10px; }
+.nh-score strong {
+  font-family: var(--font-display, Georgia, serif);
+  font-size: 3.2rem;
+  line-height: 1;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.nh-score span { font-size: 1.3rem; font-weight: 800; color: var(--gold-soft); }
+.nh-where { margin: 8px 0 0; font-size: 0.84rem; color: rgba(246, 241, 226, 0.82); }
+.nh-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.nh-line {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 8px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel, #fffefa);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+.nh-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--green-dark);
+  color: #fff;
+  font-size: 0.85rem;
+}
+.nh-record .nh-mark { background: var(--gold); color: #1c241f; }
+.nh-was { color: var(--muted); font-size: 0.8rem; }
+.nh-quiet { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.nh-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.nh-tile {
+  display: grid;
+  gap: 2px;
+  padding: 8px 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-soft);
+  text-align: center;
+}
+.nh-tile span { font-size: 0.62rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.nh-tile strong { font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.nh-tile small { font-size: 0.62rem; color: var(--muted); line-height: 1.2; }
+.nh-story { margin: 0; font-size: 0.9rem; line-height: 1.45; color: var(--ink); }
+.nineteenth-actions {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 8px;
+  padding-top: 6px;
+}
+.nineteenth-actions button { min-height: 48px; }
+
+.eclectic-panel { display: grid; gap: 14px; }
+.eclectic-courses { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.eclectic-hero {
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: linear-gradient(160deg, var(--green-dark), #0b2e1f);
+  color: #f6f1e2;
+}
+.eclectic-hero .eyebrow { color: var(--gold-soft); margin: 0 0 4px; }
+.eclectic-total { display: flex; align-items: baseline; gap: 10px; }
+.eclectic-total strong {
+  font-family: var(--font-display, Georgia, serif);
+  font-size: 2.6rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.eclectic-total span { font-weight: 800; color: var(--gold-soft); }
+.eclectic-sub { margin: 8px 0 0; font-size: 0.82rem; line-height: 1.4; color: rgba(246, 241, 226, 0.85); }
+.eclectic-group { display: grid; gap: 6px; }
+.eclectic-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.88rem;
+  padding: 0 2px;
+}
+.eclectic-group-head span { color: var(--muted); font-variant-numeric: tabular-nums; }
+.eclectic-rows { display: grid; gap: 4px; }
+.eclectic-row {
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) 44px minmax(0, 2fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 48px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel, #fffefa);
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+}
+.eclectic-hole { display: grid; font-weight: 800; font-size: 0.9rem; }
+.eclectic-hole small { font-weight: 600; font-size: 0.72rem; color: var(--muted); }
+.eclectic-best { display: flex; justify-content: center; }
+.eclectic-meta { font-size: 0.78rem; color: var(--muted); display: grid; gap: 3px; }
+.eclectic-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.eclectic-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  color: var(--green-dark);
+}
+.eclectic-tag-nemesis { border-color: var(--ink); color: var(--ink); }
+
+.hole-picker-sheet.nineteenth-sheet { max-height: min(92vh, 860px); }
+.nineteenth-body { overflow-y: auto; padding: 4px 14px 8px; }
+.nineteenth-actions { padding: 8px 14px calc(12px + env(safe-area-inset-bottom, 0px)); }
+.nh-more summary {
+  cursor: pointer;
+  list-style: none;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: var(--green-dark);
+}
+.nh-more summary::-webkit-details-marker { display: none; }
+.nh-more[open] summary { margin-bottom: 6px; }
+
+.eclectic-strip {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel, #fffefa);
+  padding: 8px 8px 6px;
+}
+.eclectic-strip-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0 2px 6px;
+  font-size: 0.84rem;
+}
+.eclectic-strip-head span { color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
+.eclectic-strip-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 9), minmax(0, 1fr));
+  gap: 2px;
+}
+.eclectic-cell {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 4px 0 2px;
+  border-radius: 8px;
+}
+.eclectic-cell.is-nemesis { background: #f1ede1; }
+.ec-hole { font-size: 0.72rem; font-weight: 800; color: var(--ink); }
+.ec-par { font-size: 0.62rem; color: var(--muted); }
+.ec-best { min-height: 28px; display: flex; align-items: center; }
+.ec-flag { font-size: 0.6rem; line-height: 1; min-height: 0.6rem; color: var(--ink); }
+.eclectic-detail summary {
+  cursor: pointer;
+  list-style: none;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: var(--green-dark);
+}
+.eclectic-detail summary::-webkit-details-marker { display: none; }
+.eclectic-detail summary::after { content: " ▾"; }
+.eclectic-detail[open] summary::after { content: " ▴"; }
+
+/* Own class: applyHomeSectionUi clears .active on every .home-subchip. */
+.eclectic-chip {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--line, #d8dfd7);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--ink, #1c2a22);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.eclectic-chip.is-on { background: var(--green-dark); border-color: var(--green-dark); color: #fff; }
