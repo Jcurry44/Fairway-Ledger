@@ -4,7 +4,35 @@
 survive context resets. Each entry has the original prompt/thought + my
 take + a rough effort estimate.*
 
-Last updated: 2026-07-29 (voice-inbox pipeline unblock — see below)
+Last updated: 2026-10-16 (revamp wave 1 — see below)
+
+---
+
+## 2026-10-16 — Revamp wave 1 (branch `ledger-revamp-2026-10-16`, NOT pushed)
+
+Joe: "make it something I want to use again — easier logging that still gives
+good analytics, better UI/UX, fun things that keep me coming back." Full idea
+list with verdicts: `docs/IDEAS-2026-10-16.md`. Shipped on the branch:
+
+1. Fixes: local-date rounds (UTC slice dated evening rounds tomorrow), UTC date
+   display, review preview GIR/FIR field names, Play type kept across resume.
+2. P0s: a resumed round could be wiped by "Play it again"/Start Round; Edit on a
+   saved round silently discarded a live round.
+3. Honest data: untouched = unknown; speed rounds leave detail stats; roundTotals
+   counts entered holes only; basis notes on GIR / Putting / Scrambling / Tee club.
+4. Quick entry (new default when Profile never chose): score, putts, tee shot on
+   one screen, auto-advance, More for everything else.
+5. The 19th Hole payoff after every save + Records › Eclectic board (lib/eclectic.js).
+6. Ghost match vs your best round here, pace, hole memory line on the Quick card.
+
+Deploy: ASSET_VERSION / busters 2026-10-16a. Needs Joe's go before pushing (wife +
+dad get Quick as their default unless they chose a mode).
+
+**Wave 2 (in order):** Season Story (timely — WNY season ends in weeks), Miss Cost
+map, One Thing focus (port Haven's engine), "vs you" baseline for the Home SG tile,
+back-nine fade panel, Round card image, chrome-hiding focus mode during a round,
+Detailed-card More disclosure. Later: auto-conditions (catalog coordinates first).
+Dead code to delete: Stats Explorer.
 
 ---
 
