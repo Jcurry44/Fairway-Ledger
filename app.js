@@ -146,7 +146,13 @@
   // submit handler so the browser counts it as a user gesture (required on
   // iOS Safari to allow a programmatic download).
   const AUTO_BACKUP_ROUND_THRESHOLD = 5;
-  const today = new Date().toISOString().slice(0, 10);
+  // Local calendar date, read fresh each time. The old UTC-sliced constant
+  // dated evening rounds (after ~8pm ET) as tomorrow and went stale when the
+  // installed app stayed open past midnight.
+  function todayLocal() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
 
   let sampleCourses = [];
   // Set when a write to localStorage failed even after pruning snapshots.
@@ -1299,7 +1305,8 @@
     "before-clear": "Before Clear",
     "before-sample": "Before Sample Data",
     "before-import": "Before Import",
-    "pre-restore": "Before Restore"
+    "pre-restore": "Before Restore",
+    "before-round-delete": "Before Round Delete"
   };
 
   // List/prune/take/read/guarded-write logic lives in lib/snapshots.js so it
@@ -1412,6 +1419,7 @@
       layoutId,
       tee: els.roundTee ? els.roundTee.value || "" : "",
       wind: els.roundWind ? els.roundWind.value || "" : "",
+      tag: els.roundTag ? els.roundTag.value || "" : "",
       note: els.roundNote ? els.roundNote.value || "" : "",
       // Stash the optional reflection survey — captures only if the user
       // touched at least one field, so an empty draft stays lean.
@@ -1477,6 +1485,15 @@
     try { localStorage.removeItem(IN_PROGRESS_KEY); } catch {}
   }
 
+  // True when the form holds an unsaved live round (persisted draft, a save
+  // still debouncing, or scores typed since Start).
+  function hasLiveRound() {
+    if (editingRoundId) return false;
+    if (loadInProgressRound() || inProgressSaveTimer) return true;
+    if (!roundStarted || !roundTouched) return false;
+    try { return readScorecard(false).some((h) => Number.isFinite(h.score) && h.score > 0); } catch { return false; }
+  }
+
   function loadInProgressRound() {
     try {
       const raw = localStorage.getItem(IN_PROGRESS_KEY);
@@ -1502,6 +1519,7 @@
     if (data.course) els.roundCourse.value = data.course;
     if (data.note) els.roundNote.value = data.note;
     if (els.roundWind) els.roundWind.value = data.wind || "";
+    if (els.roundTag && typeof data.tag === "string") els.roundTag.value = data.tag;
     // Re-render Deerwood option visibility based on the chosen course,
     // then set holeCount/layout/tee in the correct order so the layout
     // dropdown's options match the hole count before we assign a value.
@@ -2291,7 +2309,7 @@
   function applyQuickStart(setup) {
     // Same field order restoreInProgressRound uses — course first, then hole
     // count (which re-renders the layout options), then tee/layout.
-    els.roundDate.value = today;
+    els.roundDate.value = todayLocal();
     els.roundCourse.value = setup.course;
     renderRoundSetupOptions();
     els.roundHoleCount.value = setup.holeCount;
@@ -3960,8 +3978,8 @@
       putts: h.putts,
       firstPuttDistance: h.firstPuttDistance,
       fringePutts: h.fringePutts,
-      fairwayHit: h.fairwayHit,
-      greenInRegulation: h.greenInRegulation,
+      fairway: h.fairway,
+      gir: h.gir,
       clubsHit: h.clubsHit,
       shots: h.shots,
       penaltyClubs: h.penaltyClubs,
@@ -3972,7 +3990,7 @@
     return makeRound({
       id: "__in_progress_review_preview__",
       courseId: els.roundCourse ? els.roundCourse.value : "",
-      date: els.roundDate ? els.roundDate.value : today,
+      date: els.roundDate ? els.roundDate.value : todayLocal(),
       holes,
       wind: els.roundWind ? els.roundWind.value : "",
       tag: els.roundTag ? els.roundTag.value : "",
@@ -5664,7 +5682,9 @@
 
     if (els.heatmapNote) {
       const total = cells.reduce((s, c) => s + c.rounds, 0);
-      els.heatmapNote.textContent = `${cells.length} hole${cells.length === 1 ? "" : "s"} | ${total} round${total === 1 ? "" : "s"} pooled`;
+      // `total` sums per-hole plays, so it counts hole scores, not rounds
+      // (4 rounds of 18 used to read "72 rounds pooled").
+      els.heatmapNote.textContent = `${cells.length} hole${cells.length === 1 ? "" : "s"} | ${total} hole score${total === 1 ? "" : "s"} pooled`;
     }
   }
 
@@ -7905,7 +7925,9 @@
 
     const fmtDate = (d) => {
       try {
-        const date = new Date(d);
+        // Date-only ISO strings parse as UTC midnight (= the previous evening
+        // in ET); anchor at local noon like fmtRowDate does.
+        const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(d)) ? `${d}T12:00:00` : d);
         if (Number.isNaN(date.getTime())) return d;
         return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
       } catch { return d; }
@@ -9197,7 +9219,7 @@
 
   function renderAll() {
     renderSelectOptions();
-    if (!els.roundDate.value) els.roundDate.value = today;
+    if (!els.roundDate.value) els.roundDate.value = todayLocal();
     // Note: roundCourse is intentionally NOT auto-defaulted to Deerwood.
     // Pre-Start-Round, the chips render blank by design; the underlying
     // select might still have a stale value, but the chip-row sync uses
@@ -9486,7 +9508,7 @@
       : "Unknown course";
     const dateStr = (() => {
       try {
-        const d = new Date(round.date);
+        const d = new Date(`${round.date}T12:00:00`);
         if (Number.isNaN(d.getTime())) return round.date;
         return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
       } catch { return round.date; }
@@ -9504,6 +9526,14 @@
     els.roundDetailBody.innerHTML = (round.voiceRecap ? renderPostgameBrief(round) : renderPostRoundBriefing(round)) + renderRoundScorecard(round);
     els.roundDetailEditButton.onclick = () => {
       closeRoundDetail();
+      // Editing loads the saved round into the same form the live round
+      // uses, and save/cancel clear the draft: with a round in progress that
+      // silently threw the live round away. Send the golfer to it instead.
+      if (hasLiveRound()) {
+        setActiveTab("rounds");
+        showToast("You have a round in progress. Save or reset it before editing another.");
+        return;
+      }
       loadRoundIntoForm(round);
       setActiveTab("rounds");
       showToast("Editing round. Make changes and click Update round.");
@@ -10351,7 +10381,7 @@
     const teams = meta.teams ? [[players[0].id, players[1].id], [players[2].id, players[3].id]] : null;
     const game = {
       id: makeId("game"),
-      date: today,
+      date: todayLocal(),
       gameType: meta.id,
       holeCount,
       players,
@@ -10733,7 +10763,7 @@
     // Mark every setup chip row tapped so chips render their selection
     // (otherwise the form would look blank while the user is editing).
     SETUP_CHIP_ROW_IDS.forEach((id) => setupChipRowsTapped.add(id));
-    els.roundDate.value = round.date || today;
+    els.roundDate.value = round.date || todayLocal();
     els.roundNote.value = round.note || "";
     if (els.roundWind) els.roundWind.value = round.wind || "";
     if (els.roundTag) els.roundTag.value = round.tag || "";
@@ -11379,7 +11409,7 @@
       const holes = readScorecard(true);
       ensureSavedCourse(course);
       const note = els.roundNote.value.trim();
-      const date = els.roundDate.value || today;
+      const date = els.roundDate.value || todayLocal();
       // Snapshot the survey draft. surveyHasContent guard means an untouched
       // survey gets stored as a no-op empty shape — fine, just never surfaces.
       const surveyForSave = getPendingSurvey();
