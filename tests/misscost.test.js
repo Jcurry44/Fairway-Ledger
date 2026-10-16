@@ -49,7 +49,11 @@ test("tee misses are priced against fairways hit on the same par", () => {
   // 6 rights in 18 holes played = 6 per 18 -> 6 strokes per 18.
   assert.equal(right.freq18, 6);
   assert.equal(right.per18, 6);
-  assert.equal(res.biggest.id, "tee-right");
+  // 6 misses vs 6 clean holes is a price, but an early read (under 10 a side):
+  // the headline won't promote it, the UI offers it as an early leader.
+  assert.equal(right.early, true);
+  assert.equal(res.biggest, null);
+  assert.equal(res.earlyLeader.id, "tee-right");
   assert.deepEqual(right.pars.map((p) => [p.par, p.misses, p.missAvg, p.clean, p.cleanAvg, p.diff]), [[4, 6, 5.5, 6, 4.5, 1]]);
 });
 
@@ -99,6 +103,69 @@ test("a miss that costs nothing is reported as free, never as a negative cost in
   assert.equal(short.perMiss, -1);
   assert.equal(res.ranked.length, 0);
   assert.equal(res.free[0].id, "tee-short");
+});
+
+// ---- Review fixes (Fable build review 2026-10-16) -----------------------------------
+
+test("10+ holes a side is a firm price that can headline", () => {
+  const holes = rep(10, { par: 4, score: 4, fairway: "hit" }).concat(rep(10, { par: 4, score: 5, fairway: "right" }));
+  const res = M.computeMissCost([round("a", "2026-05-01", holes.slice(0, 10)), round("b", "2026-05-02", holes.slice(10))]);
+  const right = bucket(res, "tee-right");
+  assert.equal(right.early, false);
+  assert.equal(res.biggest.id, "tee-right");
+  assert.equal(res.earlyLeader, null);
+});
+
+test("a par needs 3 clean holes before its misses are compared", () => {
+  // 4 par-4 rights (+1 vs 20 clean par 4s) and 1 par-5 right vs a single clean
+  // par 5 that was an eagle: the par-5 cell is left out, so it stays +1.0.
+  const holes = []
+    .concat(rep(20, { par: 4, score: 4, fairway: "hit" }), rep(5, { par: 4, score: 5, fairway: "right" }))
+    .concat([{ par: 5, score: 3, fairway: "hit" }, { par: 5, score: 6, fairway: "right" }]);
+  const right = bucket(M.computeMissCost([round("a", "2026-05-01", holes)]), "tee-right");
+  assert.equal(right.perMiss, 1);
+  assert.equal(right.unmatched, 1);
+  const p5 = right.pars.find((p) => p.par === 5);
+  assert.equal(p5.diff, null);
+  assert.equal(p5.clean, 1);
+});
+
+test("per-18 frequency uses the logged rate when putts or tee chips are optional per hole", () => {
+  // Putts entered on 9 of 18 holes, 3 of them 3-putts: 6 per 18, not 3.
+  const holes = []
+    .concat(rep(3, { par: 4, score: 6, putts: 3 }), rep(6, { par: 4, score: 4, putts: 2 }))
+    .concat(rep(9, { par: 4, score: 5 }));
+  const many = [1, 2, 3].map((i) => round(`r${i}`, `2026-05-0${i}`, holes));
+  const three = bucket(M.computeMissCost(many), "three-putt");
+  assert.equal(three.freq18, 6);
+  // Tee: par 3s aren't eligible, so 2 rights in 6 logged par 4s of a round with
+  // 12 par 4/5s out of 18 holes = 2/6 x 12 = 4 per 18.
+  const tee = []
+    .concat(rep(2, { par: 4, score: 5, fairway: "right" }), rep(4, { par: 4, score: 4, fairway: "hit" }))
+    .concat(rep(6, { par: 4, score: 4 }), rep(6, { par: 3, score: 3 }));
+  const right = bucket(M.computeMissCost([1, 2, 3].map((i) => round(`t${i}`, `2026-05-1${i}`, tee))), "tee-right");
+  assert.equal(right.freq18, 4);
+});
+
+test("a cost that rounds below 0.1 per 18 is 'no cost so far', not a ranked leak", () => {
+  // Rare and nearly free: 10 long tee shots in 216 holes, only one a stroke
+  // worse -> +0.1 a miss x 0.83 per 18 = 0.08 per 18.
+  const r = Array.from({ length: 12 }, (_, i) => {
+    const holes = rep(18, { par: 4, score: 4, fairway: "hit" });
+    if (i < 10) holes[0] = { par: 4, score: i === 0 ? 5 : 4, fairway: "long" };
+    return round(`x${i}`, `2026-06-${String(i + 1).padStart(2, "0")}`, holes);
+  });
+  const res = M.computeMissCost(r);
+  const b = bucket(res, "tee-long");
+  assert.ok(b.perMiss > 0);
+  assert.equal(b.status, "free");
+  assert.equal(res.ranked.some((x) => x.id === "tee-long"), false);
+});
+
+test("arrow glyphs ask for text presentation (never colour emoji)", () => {
+  const tee = M.FAMILIES.find((f) => f.id === "tee");
+  assert.ok(tee.buckets.find((b) => b.id === "tee-left").glyph.endsWith("\uFE0E"));
+  assert.ok(tee.buckets.find((b) => b.id === "tee-right").glyph.endsWith("\uFE0E"));
 });
 
 // ---- Honest data ---------------------------------------------------------------------
