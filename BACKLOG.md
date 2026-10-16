@@ -8,11 +8,12 @@ Last updated: 2026-10-16 (wave 2: Season Story — see below)
 
 ---
 
-## 2026-10-16 — Wave 2, item 1: Season Story (branch `ledger-season-2026-10-16`, NOT live yet)
+## 2026-10-16 — Wave 2, item 1: Season Story (LIVE: main `03a025c`, deployed 2026-10-16b with Joe's go)
 
 Records › Season (now the Records default): your year in golf from saved rounds.
 Engine `lib/season.js` (pure, 27 tests); UI in app.js "Season Story" block; deploy
-bump 2026-10-16b. Fable build review = GO WITH FIXES (all P1/P2 fixed), then Fable final look.
+bump 2026-10-16b, live-verified (sw.js, season.js, app.js byte-match; no console errors). Fable build review =
+GO WITH FIXES, final look = GO WITH RIDE-ALONGS, all applied. Each phone needs one online open.
 
 - Hero: one honest headline (index fell / shot better / records fell / first season),
   tiles for rounds, best round, scoring avg start → now, index start → now.
