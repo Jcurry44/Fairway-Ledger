@@ -21,7 +21,7 @@
 // without the bump does not reach offline/flaky-signal users — there is no
 // "small enough to skip the bump" edit to core assets.
 
-const ASSET_VERSION = '2026-10-16c'; // must equal the ?v= buster in index.html
+const ASSET_VERSION = '2026-10-16d'; // must equal the ?v= buster in index.html
 const CACHE_VERSION = 'fairway-ledger-v96-' + ASSET_VERSION;
 
 // Assets index.html requests WITH the ?v= buster — precached under the
@@ -45,6 +45,7 @@ const VERSIONED_ASSETS = [
   './lib/games.js',
   './lib/eclectic.js',
   './lib/season.js',
+  './lib/misscost.js',
   './manifest.json',
   './icon.svg',
 ];

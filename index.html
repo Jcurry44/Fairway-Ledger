@@ -15,9 +15,9 @@
     <!-- PWA: makes "Add to Home Screen" install a real-looking app with our
          icon, theme color in the browser chrome, and a standalone display
          mode instead of a tab. -->
-    <link rel="manifest" href="./manifest.json?v=2026-10-16c">
-    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-10-16c">
-    <link rel="apple-touch-icon" href="./icon.svg?v=2026-10-16c">
+    <link rel="manifest" href="./manifest.json?v=2026-10-16d">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg?v=2026-10-16d">
+    <link rel="apple-touch-icon" href="./icon.svg?v=2026-10-16d">
     <meta name="theme-color" content="#1f7a59">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -37,22 +37,23 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap"></noscript>
 
-    <link rel="stylesheet" href="./styles.css?v=2026-10-16c">
-    <script src="./data/course-maps/deerwood-runtime.js?v=2026-10-16c" defer></script>
-    <script src="./lib/course-catalog.js?v=2026-10-16c" defer></script>
-    <script src="./lib/snapshots.js?v=2026-10-16c" defer></script>
-    <script src="./lib/golf-math.js?v=2026-10-16c" defer></script>
-    <script src="./lib/shapes.js?v=2026-10-16c" defer></script>
-    <script src="./lib/voice-recap.js?v=2026-10-16c" defer></script>
-    <script src="./lib/gps.js?v=2026-10-16c" defer></script>
-    <script src="./lib/course-map.js?v=2026-10-16c" defer></script>
-    <script src="./lib/course-map-labels.js?v=2026-10-16c" defer></script>
-    <script src="./data/course-maps/deerwood-aerial-labels-v1.js?v=2026-10-16c" defer></script>
-    <script src="./lib/course-map-ui.js?v=2026-10-16c" defer></script>
-    <script src="./lib/games.js?v=2026-10-16c" defer></script>
-    <script src="./lib/eclectic.js?v=2026-10-16c" defer></script>
-    <script src="./lib/season.js?v=2026-10-16c" defer></script>
-    <script src="./app.js?v=2026-10-16c" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=2026-10-16d">
+    <script src="./data/course-maps/deerwood-runtime.js?v=2026-10-16d" defer></script>
+    <script src="./lib/course-catalog.js?v=2026-10-16d" defer></script>
+    <script src="./lib/snapshots.js?v=2026-10-16d" defer></script>
+    <script src="./lib/golf-math.js?v=2026-10-16d" defer></script>
+    <script src="./lib/shapes.js?v=2026-10-16d" defer></script>
+    <script src="./lib/voice-recap.js?v=2026-10-16d" defer></script>
+    <script src="./lib/gps.js?v=2026-10-16d" defer></script>
+    <script src="./lib/course-map.js?v=2026-10-16d" defer></script>
+    <script src="./lib/course-map-labels.js?v=2026-10-16d" defer></script>
+    <script src="./data/course-maps/deerwood-aerial-labels-v1.js?v=2026-10-16d" defer></script>
+    <script src="./lib/course-map-ui.js?v=2026-10-16d" defer></script>
+    <script src="./lib/games.js?v=2026-10-16d" defer></script>
+    <script src="./lib/eclectic.js?v=2026-10-16d" defer></script>
+    <script src="./lib/season.js?v=2026-10-16d" defer></script>
+    <script src="./lib/misscost.js?v=2026-10-16d" defer></script>
+    <script src="./app.js?v=2026-10-16d" defer></script>
     <script>
       // Register the service worker after the page settles. SW takes over on
       // the *next* visit (skipWaiting + clients.claim inside the SW make it
@@ -151,6 +152,7 @@
           </nav>
 
           <nav class="home-subchips" data-home-section="clubs" aria-label="Clubs">
+            <button class="home-subchip" type="button" data-home-subsection-target="miss-cost">Miss cost</button>
             <button class="home-subchip" type="button" data-home-subsection-target="tee-club-performance">Tee shots</button>
             <button class="home-subchip" type="button" data-home-subsection-target="putting-by-distance">Putting</button>
             <button class="home-subchip" type="button" data-home-subsection-target="scrambling">Scrambling</button>
@@ -282,6 +284,10 @@
                 <span class="panel-note">tap a tier to see the holes</span>
               </div>
               <div id="scoringDistribution" class="scoring-distribution"></div>
+            </article>
+
+            <article class="panel wide-panel mc-panel-wrap" data-panel-id="miss-cost">
+              <div id="missCostPanel" class="mc-panel"></div>
             </article>
 
             <article class="panel wide-panel">
@@ -903,6 +909,19 @@
           <button id="seasonSheetClose" class="hole-picker-close" type="button" aria-label="Close">&times;</button>
         </div>
         <div id="seasonSheetBody" class="sn-sheet-body"></div>
+      </div>
+    </div>
+
+    <!-- Miss Cost drill sheet: BEFORE round detail so a round opens on top. -->
+    <div id="missSheetOverlay" class="hole-picker-overlay" hidden>
+      <button id="missSheetBackdrop" class="hole-picker-backdrop" type="button" aria-label="Close miss detail"></button>
+      <div class="hole-picker-sheet sn-sheet" role="dialog" aria-modal="true" aria-labelledby="missSheetTitle">
+        <div class="hole-picker-handle" aria-hidden="true"></div>
+        <div class="hole-picker-header">
+          <h3 id="missSheetTitle">Miss cost</h3>
+          <button id="missSheetClose" class="hole-picker-close" type="button" aria-label="Close">&times;</button>
+        </div>
+        <div id="missSheetBody" class="sn-sheet-body"></div>
       </div>
     </div>
 

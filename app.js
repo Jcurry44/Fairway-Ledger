@@ -635,6 +635,12 @@
     nineteenthDone: document.getElementById("nineteenthDone"),
     eclecticPanel: document.getElementById("eclecticPanel"),
     seasonPanel: document.getElementById("seasonPanel"),
+    missCostPanel: document.getElementById("missCostPanel"),
+    missSheetOverlay: document.getElementById("missSheetOverlay"),
+    missSheetBackdrop: document.getElementById("missSheetBackdrop"),
+    missSheetClose: document.getElementById("missSheetClose"),
+    missSheetTitle: document.getElementById("missSheetTitle"),
+    missSheetBody: document.getElementById("missSheetBody"),
     seasonSheetOverlay: document.getElementById("seasonSheetOverlay"),
     seasonSheetBackdrop: document.getElementById("seasonSheetBackdrop"),
     seasonSheetClose: document.getElementById("seasonSheetClose"),
@@ -9777,6 +9783,226 @@
     if (drill) openSeasonSheet(drill.dataset.snDrill, drill);
   }
 
+  // ---- Miss Cost map (2026-10-16, wave 2) ---------------------------------
+  // Home › Clubs › Miss cost: what each kind of miss costs you per 18 holes
+  // (lib/misscost.js), ranked, with the holes behind every number. Follows
+  // the Home filters like its sibling panels. Rows reuse the Season Story's
+  // sheet rows (sn-row) and helpers (snDate, snPlural, snFindRound, snHole).
+  const MissCost = window.FairwayMissCost;
+  let missResult = null;
+  let missSheetReturnFocus = null;
+  let missSheetKeyHandler = null;
+
+  const MC_HEADLINE_NOUN = {
+    "tee-left": "Tee shots left",
+    "tee-right": "Tee shots right",
+    "tee-short": "Short tee shots",
+    "tee-long": "Long tee shots",
+    "tee-miss": "Missed fairways",
+    "sand-fairway": "Fairway bunkers",
+    "sand-greenside": "Greenside bunkers",
+    "sand-both": "Double-bunker holes",
+    "three-putt": "3-putts",
+    "penalty": "Penalties"
+  };
+  const mcSigned = (x) => (x > 0 ? `+${x.toFixed(1)}` : x.toFixed(1));
+
+  // Which Home filters are narrowing the rounds, in words (for the basis line).
+  function missFilterWords() {
+    const words = [];
+    [els.filterWindow, els.filterCourse, els.filterTee, els.filterTag].forEach((select) => {
+      if (!select || !select.value || select.value === "all") return;
+      const option = select.options[select.selectedIndex];
+      if (option) words.push(option.textContent.trim());
+    });
+    return words;
+  }
+
+  function renderMissCost(rounds) {
+    if (!els.missCostPanel) return;
+    try {
+      renderMissCostBody(rounds);
+    } catch (error) {
+      console.warn("Miss cost failed", error);
+      missResult = null;
+      els.missCostPanel.innerHTML = emptyState("The miss cost map couldn't be built. Your rounds are safe.");
+    }
+  }
+
+  function renderMissCostBody(rounds) {
+    if (!MissCost) {
+      els.missCostPanel.innerHTML = emptyState("The miss cost map couldn't load. Reload the app to try again.");
+      return;
+    }
+    const res = MissCost.computeMissCost(rounds);
+    missResult = res;
+    const filters = missFilterWords();
+    const filterNote = filters.length ? ` Home filters apply: ${escapeHtml(filters.join(" · "))}.` : "";
+    if (!res.rounds) {
+      els.missCostPanel.innerHTML = emptyState(res.speedRounds
+        ? `Speed rounds only record your score, so there's nothing to price yet. Log tee shots (Left / Fairway / Right) and putts with Quick entry and this shows what each miss costs you.${filterNote}`
+        : `Log tee shots (Left / Fairway / Right) and putts for a few rounds and this shows what each miss costs you.${filterNote}`);
+      return;
+    }
+
+    const best = res.biggest;
+    const famRounds = (bucket) => {
+      const fam = res.families.find((f) => f.id === bucket.family);
+      return fam ? fam.rounds : 0;
+    };
+    const hero = best
+      ? `<section class="mc-hero" aria-labelledby="mcHeadline">
+          <p class="mc-eyebrow">What your misses cost</p>
+          <h2 id="mcHeadline" class="mc-headline">${escapeHtml(MC_HEADLINE_NOUN[best.id] || best.label)} cost you ${best.per18.toFixed(1)} strokes per 18.</h2>
+          <p class="mc-sub">${mcSigned(best.perMiss)} a miss vs ${escapeHtml(best.baselineLabel)} · ${best.freq18.toFixed(1)} per 18 holes · from ${snPlural(famRounds(best), "round")}</p>
+        </section>`
+      : `<section class="mc-hero" aria-labelledby="mcHeadline">
+          <p class="mc-eyebrow">What your misses cost</p>
+          <h2 id="mcHeadline" class="mc-headline">Your misses need a few more holes to price.</h2>
+          <p class="mc-sub">A miss gets a price after ${res.minSample} holes with it and ${res.minSample} clean holes on the same par.</p>
+        </section>`;
+
+    const max = Math.max(0.1, ...res.ranked.map((b) => b.per18));
+    const row = (b, kind) => {
+      let value = "";
+      let sub = "";
+      let bar = "";
+      if (kind === "costs") {
+        value = `<strong>${b.per18.toFixed(1)}</strong><small>per 18</small>`;
+        sub = `${mcSigned(b.perMiss)} a miss · ${b.freq18.toFixed(1)} per 18 holes · ${snPlural(b.n, "hole")}`;
+        bar = `<span class="mc-bar" aria-hidden="true"><span style="width:${Math.max(4, (b.per18 / max) * 100).toFixed(1)}%"></span></span>`;
+      } else if (kind === "thin") {
+        value = `<small>${Math.min(b.matched, res.minSample)} of ${res.minSample}</small>`;
+        sub = b.matched < res.minSample
+          ? `${snPlural(b.n, "hole")} so far; needs ${res.minSample} to price`
+          : `needs ${res.minSample} ${escapeHtml(b.baselineLabel)} holes on the same par (has ${b.baseline})`;
+      } else {
+        value = `<strong>0</strong><small>per 18</small>`;
+        sub = `you score as well as with ${escapeHtml(b.baselineLabel)} · ${snPlural(b.n, "hole")}`;
+      }
+      return `<li><button type="button" class="mc-row is-${kind}" data-mc-bucket="${escapeHtml(b.id)}">
+        <span class="mc-mark" aria-hidden="true">${b.glyph}</span>
+        <span class="mc-row-text"><strong>${escapeHtml(b.label)}</strong><small>${sub}</small>${bar}</span>
+        <span class="mc-row-value">${value}</span>
+        <span class="sn-chev" aria-hidden="true">›</span>
+      </button></li>`;
+    };
+
+    const groups = [];
+    if (res.ranked.length) groups.push(`<ol class="mc-list" aria-label="Misses ranked by strokes per 18">${res.ranked.map((b) => row(b, "costs")).join("")}</ol>`);
+    if (res.thin.length) groups.push(`<h3 class="mc-group-h">Not enough yet</h3><ul class="mc-list">${res.thin.map((b) => row(b, "thin")).join("")}</ul>`);
+    if (res.free.length) groups.push(`<h3 class="mc-group-h">Costs you nothing</h3><ul class="mc-list">${res.free.map((b) => row(b, "free")).join("")}</ul>`);
+
+    const missing = MissCost.missingData(res) || [];
+    const logHints = { tee: "tee shots (Left / Fairway / Right)", sand: "sand (More › Bunker)", putting: "putts" };
+    const hints = missing.map((id) => logHints[id]).filter(Boolean);
+    const basis = [
+      `Each miss is compared with your clean holes on the same par: fairway hit, no sand, 1–2 putts, no penalty.`,
+      `${snPlural(res.rounds, "detail round")}${res.speedRounds ? `; ${snPlural(res.speedRounds, "speed round")} left out` : ""}; blank fields are skipped and penalties count where you recorded one.`
+    ];
+    if (hints.length) basis.push(`Not logged yet: ${hints.join(", ")}.`);
+
+    els.missCostPanel.innerHTML = `${hero}${groups.join("")}<p class="mc-basis">${basis.join(" ")}${filterNote}</p>`;
+  }
+
+  // ---- Miss Cost drill sheet --------------------------------------------------
+
+  function missBucketById(id) {
+    if (!missResult) return null;
+    return missResult.ranked.concat(missResult.thin, missResult.free).find((b) => b.id === id) || null;
+  }
+
+  function missSheetHtml(b) {
+    const res = missResult;
+    const noun = MC_HEADLINE_NOUN[b.id] || b.label;
+    let lede;
+    if (b.status === "costs") {
+      lede = `${escapeHtml(noun)} cost you <strong>${mcSigned(b.perMiss)} a miss</strong> compared with ${escapeHtml(b.baselineLabel)} on the same par. It happens ${b.freq18.toFixed(1)} times per 18 holes, so about <strong>${b.per18.toFixed(1)} strokes per 18</strong>.`;
+    } else if (b.status === "free") {
+      lede = `${escapeHtml(noun)} cost you nothing so far: you score ${b.perMiss < 0 ? `${Math.abs(b.perMiss).toFixed(1)} better` : "the same"} than with ${escapeHtml(b.baselineLabel)} on the same par.`;
+    } else {
+      lede = `${snPlural(b.n, "hole")} so far. A price shows after ${res.minSample} holes with this miss and ${res.minSample} ${escapeHtml(b.baselineLabel)} holes on the same par.`;
+    }
+    // Per-par comparison: two labelled bars (with the miss = solid, clean =
+    // hatched) so the gap reads by length and pattern, never by colour.
+    const maxAvg = Math.max(1, ...b.pars.map((p) => Math.max(p.missAvg || 0, p.cleanAvg || 0)));
+    const parRows = b.pars.map((p) => {
+      const pct = (x) => (x == null ? 0 : Math.max(4, (x / maxAvg) * 100)).toFixed(1);
+      return `<div class="mc-par">
+        <div class="mc-par-head"><strong>Par ${p.par}</strong><span>${p.diff == null ? "no clean holes to compare" : b.status === "thin" ? "too few to price" : `${mcSigned(p.diff)} a hole`}</span></div>
+        <div class="mc-par-bar"><span class="mc-par-label">With the miss</span><span class="mc-par-track"><span class="mc-par-fill is-miss" style="width:${pct(p.missAvg)}%"></span></span><span class="mc-par-num">${p.missAvg.toFixed(2)} <small>(${p.misses})</small></span></div>
+        <div class="mc-par-bar"><span class="mc-par-label">${escapeHtml(b.baselineLabel.charAt(0).toUpperCase() + b.baselineLabel.slice(1))}</span><span class="mc-par-track"><span class="mc-par-fill is-clean" style="width:${pct(p.cleanAvg)}%"></span></span><span class="mc-par-num">${p.cleanAvg == null ? "—" : p.cleanAvg.toFixed(2)} <small>(${p.clean})</small></span></div>
+      </div>`;
+    }).join("");
+    const rows = b.holes.map((h) => {
+      const round = snFindRound(h.roundId);
+      if (!round) return "";
+      const course = physicalCourseName(round.courseId) || "";
+      return `<button type="button" class="sn-row" data-sn-round="${escapeHtml(String(round.id))}">
+        <span class="sn-row-main"><strong>${escapeHtml(snDate(h.date))} · ${escapeHtml(snHole(h.label))}</strong><small>${escapeHtml(course)} · par ${h.par}</small></span>
+        <span class="sn-row-value">${renderScoreMark(h.score, h.par)}</span>
+        <span class="sn-chev" aria-hidden="true">›</span>
+      </button>`;
+    }).join("");
+    return `<p class="sn-lede">${lede}</p>
+      ${parRows ? `<h4 class="sn-sheet-h">Average score, par by par</h4><div class="mc-pars">${parRows}</div>` : ""}
+      ${b.unmatched ? `<p class="sn-note">${snPlural(b.unmatched, "hole")} with this miss ${b.unmatched === 1 ? "is" : "are"} on a par with no ${escapeHtml(b.baselineLabel)} holes to compare, so ${b.unmatched === 1 ? "it's" : "they're"} left out of the price.</p>` : ""}
+      <h4 class="sn-sheet-h">The holes, newest first</h4>
+      <div class="sn-rows">${rows}</div>`;
+  }
+
+  function openMissSheet(id, trigger) {
+    const b = missBucketById(id);
+    if (!b || !els.missSheetOverlay || !els.missSheetBody) return;
+    if (els.missSheetTitle) els.missSheetTitle.textContent = b.label;
+    els.missSheetBody.innerHTML = missSheetHtml(b);
+    els.missSheetBody.scrollTop = 0;
+    if (els.missSheetOverlay.hidden) missSheetReturnFocus = trigger || document.activeElement;
+    els.missSheetOverlay.hidden = false;
+    document.body.classList.add("hole-picker-open");
+    if (!missSheetKeyHandler) {
+      // Capture phase, like the season sheet: one Escape closes only the top
+      // sheet (round detail first).
+      missSheetKeyHandler = (event) => {
+        if (event.key !== "Escape") return;
+        const above = [els.roundDetailOverlay, els.heatmapDrilldownOverlay, els.destructiveConfirmOverlay];
+        if (above.some((overlay) => overlay && !overlay.hidden)) return;
+        closeMissSheet();
+      };
+      document.addEventListener("keydown", missSheetKeyHandler, true);
+    }
+    if (els.missSheetClose) els.missSheetClose.focus({ preventScroll: true });
+  }
+
+  function closeMissSheet(options) {
+    if (!els.missSheetOverlay || els.missSheetOverlay.hidden) return;
+    els.missSheetOverlay.hidden = true;
+    const otherOpen = Array.from(document.querySelectorAll(".hole-picker-overlay")).some((overlay) => !overlay.hidden);
+    if (!otherOpen) document.body.classList.remove("hole-picker-open");
+    if (missSheetKeyHandler) {
+      document.removeEventListener("keydown", missSheetKeyHandler, true);
+      missSheetKeyHandler = null;
+    }
+    const target = missSheetReturnFocus;
+    missSheetReturnFocus = null;
+    if (!(options && options.restoreFocus === false) && target && document.contains(target) && typeof target.focus === "function") {
+      target.focus({ preventScroll: true });
+    }
+  }
+
+  function onMissCostPanelClick(event) {
+    const btn = event.target.closest("[data-mc-bucket]");
+    if (btn) openMissSheet(btn.dataset.mcBucket, btn);
+  }
+
+  function onMissSheetClick(event) {
+    const roundBtn = event.target.closest("[data-sn-round]");
+    if (!roundBtn) return;
+    const round = snFindRound(roundBtn.dataset.snRound);
+    if (round) showRoundDetail(round);
+    else showToast("Round not found.");
+  }
+
   function renderTrophyRoom() {
     if (!els.trophyRoomGrid) return;
     const trophies = computeTrophies(state.rounds);
@@ -9881,6 +10107,7 @@
     "par-3-4-5": "holes",
     "scoring-by-course": "holes",
     "scoring-by-nine": "holes",
+    "miss-cost": "clubs",
     "tee-club-performance": "clubs",
     "putting-by-distance": "clubs",
     "scrambling": "clubs",
@@ -9901,7 +10128,7 @@
   const SUBSECTION_DEFAULTS = {
     trends: "recent-rounds",
     holes: "heatmap",
-    clubs: "tee-club-performance",
+    clubs: "miss-cost",
     records: "season"
   };
 
@@ -10700,6 +10927,7 @@
     renderPuttingPanel(rounds);
     renderScoringDistribution(rounds);
     renderTeeClubPerformance(rounds);
+    renderMissCost(rounds);
     renderScramblingPanel(rounds);
     renderRecentRounds();
     updateBackupBadge();
@@ -11938,6 +12166,7 @@
     if (!link) return;
     const name = link.dataset.openCourseName;
     closeSeasonSheet({ restoreFocus: false });
+    closeMissSheet({ restoreFocus: false });
     [els.roundDetailOverlay, els.bucketSheetOverlay, els.parTypeSheetOverlay].forEach((overlay) => {
       if (overlay && !overlay.hidden) {
         overlay.hidden = true;
@@ -12005,7 +12234,10 @@
     updateFloatingNavVisibility();
     // A season drill sheet belongs to Home; "Edit this round" and course
     // links jump tabs, so it must not float over the new tab.
-    if (targetName !== "home") closeSeasonSheet({ restoreFocus: false });
+    if (targetName !== "home") {
+      closeSeasonSheet({ restoreFocus: false });
+      closeMissSheet({ restoreFocus: false });
+    }
     else if (seasonStale) renderSeasonPanel();
     // Refresh the snapshot panel on Profile entry so timestamps don't drift
     // (e.g. "2 min ago" should re-evaluate without a full reload).
@@ -12824,6 +13056,10 @@
   if (els.parTypeSheetBackdrop) els.parTypeSheetBackdrop.addEventListener("click", closeParTypeDetail);
   if (els.eclecticPanel) els.eclecticPanel.addEventListener("click", onEclecticPanelClick);
   if (els.seasonPanel) els.seasonPanel.addEventListener("click", onSeasonPanelClick);
+  if (els.missCostPanel) els.missCostPanel.addEventListener("click", onMissCostPanelClick);
+  if (els.missSheetBody) els.missSheetBody.addEventListener("click", onMissSheetClick);
+  if (els.missSheetClose) els.missSheetClose.addEventListener("click", () => closeMissSheet());
+  if (els.missSheetBackdrop) els.missSheetBackdrop.addEventListener("click", () => closeMissSheet());
   if (els.seasonSheetBody) els.seasonSheetBody.addEventListener("click", onSeasonSheetClick);
   if (els.seasonSheetClose) els.seasonSheetClose.addEventListener("click", () => closeSeasonSheet());
   if (els.seasonSheetBackdrop) els.seasonSheetBackdrop.addEventListener("click", () => closeSeasonSheet());
@@ -12960,6 +13196,7 @@
       renderDeerwoodByNine(rounds);
       renderParStats(rounds);
       renderHeatmap(rounds);
+      renderMissCost(rounds);
       renderHandicapPanel();
       updateFiltersButtonState();
     });
