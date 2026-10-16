@@ -4,7 +4,24 @@
 survive context resets. Each entry has the original prompt/thought + my
 take + a rough effort estimate.*
 
-Last updated: 2026-10-16 (wave 2: Season Story — see below)
+Last updated: 2026-10-16 (wave 2: Miss Cost map — see below)
+
+---
+
+## 2026-10-16 — Wave 2, item 2: Miss Cost map (branch `ledger-misscost-2026-10-16`, NOT live yet)
+
+Home › Clubs › Miss cost (now the Clubs default): what each kind of miss costs you.
+Engine `lib/misscost.js` (pure, 12 tests); deploy bump 2026-10-16d.
+
+- Each miss is priced against your clean holes on the same par: tee shots left / right /
+  short / long vs fairway hit, fairway / greenside / both bunkers vs no sand, 3-putts vs
+  1-2 putts, penalty holes vs none. Cost per miss × misses per 18 = strokes per 18, ranked.
+- Honest data: detail rounds only, blank fields skipped, 5 misses + 5 clean holes before
+  a price ("Not enough yet" otherwise), a miss that costs nothing says so.
+- Every row opens a sheet: par-by-par averages (solid vs hatched, labelled) and every
+  hole behind the number, opening the round on top. Follows the Home filters.
+- Also fixed: the Home filter handler didn't refresh SG, Putting, Distribution, Tee shots
+  or Scrambling, so they showed all-rounds numbers after a filter change.
 
 ---
 
@@ -60,7 +77,7 @@ Deploy: ASSET_VERSION / busters 2026-10-16a, live-verified (sw.js, app.js, eclec
 200; no console errors). Each phone needs one online open to pick up the new SW. Wife +
 dad get Quick as their default unless they chose a mode in Profile.
 
-**Wave 2 (in order):** ~~Season Story~~ (built, see above), Miss Cost
+**Wave 2 (in order):** ~~Season Story~~ (live), ~~Miss Cost~~ (built, see above)
 map, One Thing focus (port Haven's engine), "vs you" baseline for the Home SG tile,
 back-nine fade panel, Round card image, chrome-hiding focus mode during a round,
 Detailed-card More disclosure. Later: auto-conditions (catalog coordinates first).
