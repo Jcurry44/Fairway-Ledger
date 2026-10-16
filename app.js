@@ -9856,13 +9856,13 @@
       ? `<section class="mc-hero" aria-labelledby="mcHeadline">
           <p class="mc-eyebrow">What your misses cost</p>
           <h2 id="mcHeadline" class="mc-headline">${escapeHtml(MC_HEADLINE_NOUN[best.id] || best.label)} cost you ${best.per18.toFixed(1)} strokes per 18.</h2>
-          <p class="mc-sub">${mcSigned(best.perMiss)} a miss vs ${escapeHtml(best.baselineLabel)} · happens ${best.freq18.toFixed(1)}× per 18 · ${snPlural(famRounds(best), "round")}</p>
+          <p class="mc-sub">${mcSigned(best.perMiss)} a miss vs ${escapeHtml(best.baselineLabel)} · happens ${best.freq18.toFixed(1)}× per 18 · ${snPlural(famRounds(best), "round")}${res.ranked[0] && res.ranked[0] !== best ? ` · early read: ${escapeHtml(res.ranked[0].label.toLowerCase())} may cost more (${res.ranked[0].per18.toFixed(1)})` : ""}</p>
         </section>`
       : lead
       ? `<section class="mc-hero" aria-labelledby="mcHeadline">
           <p class="mc-eyebrow">What your misses cost · early read</p>
           <h2 id="mcHeadline" class="mc-headline">${escapeHtml(MC_HEADLINE_NOUN[lead.id] || lead.label)} look like your costliest miss.</h2>
-          <p class="mc-sub">About ${lead.per18.toFixed(1)} strokes per 18 (${mcSigned(lead.perMiss)} a miss, happens ${lead.freq18.toFixed(1)}× per 18) from ${snPlural(lead.matched, "hole")}; it firms up at ${MissCost.EARLY_SAMPLE}.</p>
+          <p class="mc-sub">About ${lead.per18.toFixed(1)} strokes per 18 (${mcSigned(lead.perMiss)} a miss, happens ${lead.freq18.toFixed(1)}× per 18) from ${snPlural(lead.matched, "hole")} with the miss and ${lead.baseline} without; it firms up at ${MissCost.EARLY_SAMPLE} a side.</p>
         </section>`
       : `<section class="mc-hero" aria-labelledby="mcHeadline">
           <p class="mc-eyebrow">What your misses cost</p>
@@ -9892,7 +9892,7 @@
         }
       } else {
         value = `<strong>0</strong><small>per 18</small>`;
-        sub = b.perMiss > 0
+        sub = b.perMiss >= 0.05
           ? `${mcSigned(b.perMiss)} a miss but rare (${b.freq18.toFixed(1)}× per 18) · ${snPlural(b.n, "hole")}`
           : `you score as well as with ${escapeHtml(b.baselineLabel)} · ${snPlural(b.n, "hole")}`;
       }
@@ -9935,9 +9935,9 @@
     if (b.status === "costs") {
       lede = `${escapeHtml(noun)} cost you <strong>${mcSigned(b.perMiss)} a miss</strong> compared with ${escapeHtml(b.baselineLabel)} on the same par. It happens ${b.freq18.toFixed(1)} times per 18 holes, so about <strong>${b.per18.toFixed(1)} strokes per 18</strong>.${b.early ? ` <span class="mc-tag">early read</span> From ${snPlural(b.matched, "hole")} with the miss and ${b.baseline} without; it firms up at ${MissCost.EARLY_SAMPLE} a side.` : ""}`;
     } else if (b.status === "free") {
-      lede = b.perMiss > 0
+      lede = b.perMiss >= 0.05
         ? `${escapeHtml(noun)} cost you ${mcSigned(b.perMiss)} a miss, but happen only ${b.freq18.toFixed(1)} times per 18 holes, so it comes to less than 0.1 strokes a round so far.`
-        : `${escapeHtml(noun)} cost you nothing so far: you score ${b.perMiss < 0 ? `${Math.abs(b.perMiss).toFixed(1)} better` : "the same"} than with ${escapeHtml(b.baselineLabel)} on the same par.`;
+        : `${escapeHtml(noun)} cost you nothing so far: you score ${b.perMiss <= -0.05 ? `${Math.abs(b.perMiss).toFixed(1)} better` : "about the same"} than with ${escapeHtml(b.baselineLabel)} on the same par.`;
     } else {
       lede = `${snPlural(b.n, "hole")} so far. A price shows after ${res.minSample} holes with this miss and ${res.minSample} ${escapeHtml(b.baselineLabel)} holes on the same par.`;
     }

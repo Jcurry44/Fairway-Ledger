@@ -162,6 +162,28 @@ test("a cost that rounds below 0.1 per 18 is 'no cost so far', not a ranked leak
   assert.equal(res.ranked.some((x) => x.id === "tee-long"), false);
 });
 
+test("sand: in a round that logged sand anywhere, a blank hole counts as 'no sand' (Quick entry)", () => {
+  // Quick entry writes a bunker value only when you were in sand.
+  const quick = (id, d) => round(id, d, []
+    .concat(rep(2, { par: 4, score: 5, bunker: "greenside" }))
+    .concat(rep(4, { par: 4, score: 4 })), "quick");
+  const res = M.computeMissCost([quick("a", "2026-05-01"), quick("b", "2026-05-02"), quick("c", "2026-05-03")]);
+  const g = bucket(res, "sand-greenside");
+  assert.equal(g.n, 6);
+  assert.equal(g.baseline, 12);
+  assert.equal(g.perMiss, 1);
+  // A round with no bunker value anywhere still tells us nothing about sand.
+  const blank = round("z", "2026-05-04", rep(6, { par: 4, score: 4 }));
+  assert.equal(M.computeMissCost([blank]).families.find((f) => f.id === "sand").knownHoles, 0);
+});
+
+test("a miss that would print '+0.0 a miss' is no cost, however often it happens", () => {
+  // 30 rights at +0.03 each (one +1 in 30): frequent but effectively free.
+  const holes = rep(30, { par: 4, score: 4, fairway: "hit" }).concat(rep(29, { par: 4, score: 4, fairway: "right" }), [{ par: 4, score: 5, fairway: "right" }]);
+  const b = bucket(M.computeMissCost([round("a", "2026-05-01", holes)]), "tee-right");
+  assert.equal(b.status, "free");
+});
+
 test("arrow glyphs ask for text presentation (never colour emoji)", () => {
   const tee = M.FAMILIES.find((f) => f.id === "tee");
   assert.ok(tee.buckets.find((b) => b.id === "tee-left").glyph.endsWith("\uFE0E"));
