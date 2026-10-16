@@ -372,27 +372,83 @@ test("estimateRoundDifferential: 18-hole formula (gross - rating) * 113 / slope"
 });
 
 test("estimateRoundDifferential: 9-hole rounds add expected-9-hole differential", () => {
-  // Gross 42 on 9 holes, rating 70.5, slope 130 -> base = (42-70.5)*113/130 = -24.77
-  // With currentIndex 10: expected9 = 0.52*10 + 1.2 = 6.4
-  // Final = -24.77 + 6.4 = -18.37 -> -18.4
-  const holes = Array.from({ length: 9 }, () => ({ score: 42 / 9, par: 4 }));
-  // Use exact gross via integer-ish scores
+  // Rating 70.5 is an 18-hole rating, so a 9-hole round is scored against
+  // half of it (35.25, same slope), the WHS fallback with no 9-hole rating.
+  // 6 fives + 3 fours = 42 -> base = (42 - 35.25) * 113 / 130 = 5.87
+  // With currentIndex 10: expected9 = 0.52*10 + 1.2 = 6.4 -> 12.27 -> 12.3
   const holes9 = Array.from({ length: 9 }, (_, i) => ({ score: i < 6 ? 5 : 4, par: 4 }));
-  // 6 fives + 3 fours = 30 + 12 = 42
   const diff = G.estimateRoundDifferential({ rating: 70.5, slope: 130 }, holes9, 10);
-  // base = (42 - 70.5) * 113 / 130 = -24.77
-  // expected9(10) = 6.4
-  // total = -18.4 (rounded)
-  near(diff, -18.4, 0.1);
+  near(diff, 12.3, 0.05);
 });
 
 test("estimateRoundDifferential: 9-hole with no currentIndex uses fallback doubling", () => {
   const holes9 = Array.from({ length: 9 }, (_, i) => ({ score: i < 6 ? 5 : 4, par: 4 }));
   const diffNullIndex = G.estimateRoundDifferential({ rating: 70.5, slope: 130 }, holes9, null);
-  // base = -24.77, fallbackIndex = max(0, -24.77 * 2) = 0
-  // expected9(0) = 1.2
-  // total = -24.77 + 1.2 = -23.57 -> -23.6
-  near(diffNullIndex, -23.6, 0.1);
+  // base = 5.87, fallbackIndex = 5.87 * 2 = 11.73, expected9 = 0.52*11.73 + 1.2 = 7.30
+  // total = 13.17 -> 13.2
+  near(diffNullIndex, 13.2, 0.05);
+});
+
+test("estimateRoundDifferential: a nine with its own 9-hole rating (Deerwood) uses it as-is", () => {
+  // Deerwood Buck (blue) rates 35.8 / 119 for nine holes. 6 fives + 3 fours = 42.
+  // base = (42 - 35.8) * 113 / 119 = 5.89; expected9(10) = 6.4 -> 12.29 -> 12.3
+  const holes9 = Array.from({ length: 9 }, (_, i) => ({ score: i < 6 ? 5 : 4, par: 4 }));
+  near(G.estimateRoundDifferential({ rating: 35.8, slope: 119 }, holes9, 10), 12.3, 0.05);
+});
+
+test("ratedHoleCount / courseRatingFor: 18-hole vs 9-hole ratings, explicit override wins", () => {
+  assert.equal(G.ratedHoleCount({ rating: 71.2 }), 18);
+  assert.equal(G.ratedHoleCount({ rating: 35.8 }), 9);
+  assert.equal(G.ratedHoleCount({ rating: 44, ratedHoles: 18 }), 18); // an 18-hole par-3 course
+  assert.equal(G.ratedHoleCount({ rating: 48, ratedHoles: 9 }), 9);
+  assert.equal(G.courseRatingFor({ rating: 71.2 }, 18), 71.2);
+  assert.equal(G.courseRatingFor({ rating: 71.2 }, 9), 35.6);
+  assert.equal(G.courseRatingFor({ rating: 35.8 }, 9), 35.8);
+  assert.equal(G.courseRatingFor({ rating: 35.8 }, 18), 71.6); // a nine played twice
+  assert.equal(G.courseRatingFor({ rating: 44, ratedHoles: 18 }, 9), 22);
+});
+
+test("calculateHandicapEstimate: nines on an 18-hole course no longer zero the index (2026-10-16 bug)", () => {
+  // Eight 18s around 84 at 71.2 / 128 plus two ordinary nines (44, 45) on the
+  // SAME course id. Before the fix the nines scored -22.8 / -21.9 against the
+  // 18-hole rating and the index read 0.0; with the 18s alone it is 9.9.
+  const PARS = [4, 4, 3, 5, 4, 4, 3, 4, 5, 4, 4, 3, 5, 4, 4, 3, 4, 5];
+  const mk = (id, date, gross, n) => {
+    const pars = PARS.slice(0, n);
+    const scores = pars.slice();
+    let extra = gross - pars.reduce((a, b) => a + b, 0);
+    for (let i = 0; extra > 0; i = (i + 1) % n, extra -= 1) scores[i] += 1;
+    return { id, date, courseId: "rv", holes: scores.map((score, i) => ({ number: i + 1, par: pars[i], score })) };
+  };
+  const eighteens = [84, 86, 83, 85, 84, 87, 82, 85].map((g, i) => mk(`r${i}`, `2026-05-0${i + 1}`, g, 18));
+  const nines = [mk("n1", "2026-06-01", 44, 9), mk("n2", "2026-06-08", 45, 9)];
+  const lookup = () => ({ rating: 71.2, slope: 128 });
+  const only18 = G.calculateHandicapEstimate(eighteens, lookup);
+  const both = G.calculateHandicapEstimate(eighteens.concat(nines), lookup);
+  assert.equal(only18.index, 9.9);
+  assert.equal(both.index, 10.4);
+  both.eligible.filter((e) => e.holes === 9).forEach((e) => assert.ok(e.differential > 10, `nine differential ${e.differential}`));
+  assert.equal(both.used.filter((e) => e.holes === 9).length, 0);
+});
+
+test("courseHandicapFor: 18 holes as before; a nine halves the index and the rating", () => {
+  // 18 at 71.2 / 128, par 72, index 10.4: 10.4 * 128/113 + (71.2 - 72) = 11.0 -> 11
+  assert.equal(G.courseHandicapFor(10.4, { rating: 71.2, slope: 128 }, 18, 72), 11);
+  // Front nine of that course (par 36): 5.2 * 128/113 + (35.6 - 36) = 5.49 -> 5.
+  // The old formula gave 10.4 * 128/113 + (71.2 - 36) = 47.
+  assert.equal(G.courseHandicapFor(10.4, { rating: 71.2, slope: 128 }, 9, 36), 5);
+  // Deerwood Buck (blue) 35.8 / 119, par 36: 5.2 * 119/113 + (35.8 - 36) = 5.3 -> 5
+  assert.equal(G.courseHandicapFor(10.4, { rating: 35.8, slope: 119 }, 9, 36), 5);
+  assert.equal(G.courseHandicapFor(null, { rating: 71.2, slope: 128 }, 18, 72), null);
+  assert.equal(G.courseHandicapFor(10.4, { rating: null, slope: 128 }, 18, 72), null);
+});
+
+test("calculateHandicapEstimate: 18-hole rounds on 18-hole ratings are unchanged", () => {
+  const holes = (gross) => Array.from({ length: 18 }, (_, i) => ({ score: i < gross - 72 ? 5 : 4, par: 4 }));
+  const rounds = [80, 84, 88].map((g, i) => ({ id: `x${i}`, date: `2024-02-0${i + 1}`, courseId: "rv", holes: holes(g) }));
+  const res = G.calculateHandicapEstimate(rounds, () => ({ rating: 70.5, slope: 130 }));
+  // best 1 of 3 = (80 - 70.5) * 113 / 130 = 8.26 -> 8.3, minus 2 = 6.3
+  assert.equal(res.index, 6.3);
 });
 
 test("estimateRoundDifferential: missing course/rating/slope/holes returns null", () => {

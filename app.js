@@ -67,6 +67,7 @@
     metersToYards,
     expectedNineHoleDifferential,
     handicapRuleForCount,
+    courseHandicapFor,
     estimateRoundDifferential: estimateRoundDifferentialPure,
     calculateHandicapEstimate: calculateHandicapEstimatePure
   } = window.GolfMath;
@@ -5333,9 +5334,10 @@
 
     const nextCourse = getSelectedRoundCourse();
     const par = nextCourse ? nextCourse.holes.reduce((sum, hole) => sum + hole.par, 0) : NaN;
-    const courseHandicap = nextCourse && nextCourse.rating && nextCourse.slope
-      ? Math.round(estimate.index * (nextCourse.slope / 113) + (nextCourse.rating - par))
-      : null;
+    // A front or back nine on an 18-hole course keeps the 18-hole rating:
+    // courseHandicapFor halves the index and the rating for nine holes.
+    const nextHoles = nextCourse && Array.isArray(nextCourse.holes) ? nextCourse.holes.length : 18;
+    const courseHandicap = courseHandicapFor(estimate.index, nextCourse, nextHoles, par);
     // Plain-English walk-through with the user's real numbers. estimate.rule
     // is the WHS best-N-of-M table row; estimate.used are the rounds that
     // actually made the cut.
@@ -5393,7 +5395,7 @@
       </div>
       <ul class="handicap-round-list">${rows}</ul>
       <div class="handicap-details">
-        <div class="handicap-detail-row"><span>Next course handicap</span><strong>${courseHandicap === null ? "--" : courseHandicap}</strong></div>
+        <div class="handicap-detail-row"><span>Next course handicap${nextHoles < 18 ? " (9 holes)" : ""}</span><strong>${courseHandicap === null ? "--" : courseHandicap}</strong></div>
         <div class="handicap-detail-row"><span>9-hole estimates</span><strong>${estimate.approximateNineCount}</strong></div>
       </div>
       <p class="handicap-note">${estimate.note}</p>
