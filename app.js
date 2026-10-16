@@ -633,6 +633,12 @@
     nineteenthShare: document.getElementById("nineteenthShare"),
     nineteenthDone: document.getElementById("nineteenthDone"),
     eclecticPanel: document.getElementById("eclecticPanel"),
+    seasonPanel: document.getElementById("seasonPanel"),
+    seasonSheetOverlay: document.getElementById("seasonSheetOverlay"),
+    seasonSheetBackdrop: document.getElementById("seasonSheetBackdrop"),
+    seasonSheetClose: document.getElementById("seasonSheetClose"),
+    seasonSheetTitle: document.getElementById("seasonSheetTitle"),
+    seasonSheetBody: document.getElementById("seasonSheetBody"),
     metricSg: document.getElementById("metricSg"),
     metricHandicap: document.getElementById("metricHandicap"),
     homeInsights: document.getElementById("homeInsights"),
@@ -9135,6 +9141,575 @@
     return true;
   }
 
+  // ---- Season Story (2026-10-16, wave 2) ---------------------------------
+  // A calendar year of golf from saved rounds (lib/season.js): one hero card,
+  // the moments that mattered, and a drill sheet behind every number. Uses
+  // every saved round (Home filters don't apply, same as the Eclectic board).
+  // Marks are glyphs + words (★ ▲ ◆ ✚ ● ◎ ⌂) and trends say up/down in words,
+  // so nothing depends on hue.
+  const Season = window.FairwaySeason;
+  let seasonYear = null;
+  let seasonStory = null;
+  let seasonSheetReturnFocus = null;
+  let seasonSheetKeyHandler = null;
+
+  function seasonOpts() {
+    return {
+      eclecticOpts: eclecticOpts(),
+      handicapOf: (rounds) => {
+        const result = calculateHandicapEstimate(rounds);
+        return result && Number.isFinite(result.index) ? result.index : null;
+      },
+      trophies: computeTrophies,
+      today: todayLocal()
+    };
+  }
+
+  const snFmt1 = (x) => (Number.isFinite(x) ? x.toFixed(1) : "—");
+  const snPlural = (n, word, many) => `${n} ${n === 1 ? word : (many || `${word}s`)}`;
+  const snHole = (label) => (/^\d+$/.test(String(label)) ? `Hole ${label}` : String(label));
+  function snDate(d) {
+    try {
+      const date = new Date(`${d}T12:00:00`);
+      return Number.isNaN(date.getTime()) ? String(d || "") : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    } catch { return String(d || ""); }
+  }
+  function snMonth(ym) {
+    try { return new Date(`${ym}-15T12:00:00`).toLocaleDateString(undefined, { month: "short" }); } catch { return ym; }
+  }
+  // "▼ 3.6 from 88.2": a glyph and a word for direction, never a colour.
+  // lowerBetter: scores, index and putts; greens are higher-better.
+  function snTrend(start, now, change, lowerBetter, unit, format) {
+    if (change == null) return null;
+    const u = unit || "";
+    const f = format || snFmt1;
+    if (change === 0) return { better: false, worse: false, text: `level with ${f(start)}${u}` };
+    const down = change < 0;
+    const better = lowerBetter ? down : !down;
+    return {
+      better,
+      worse: !better,
+      text: `${down ? "▼ down" : "▲ up"} ${f(Math.abs(change))}${u} from ${f(start)}${u}`
+    };
+  }
+  function snFindRound(id) {
+    return state.rounds.find((r) => String(r.id) === String(id)) || null;
+  }
+
+  function renderSeasonPanel() {
+    if (!els.seasonPanel) return;
+    if (!Season) {
+      els.seasonPanel.innerHTML = emptyState("The season story couldn't load. Reload the app to try again.");
+      return;
+    }
+    const years = Season.seasonYears(state.rounds);
+    if (!years.length) {
+      seasonStory = null;
+      els.seasonPanel.innerHTML = emptyState("Save a round and your season story starts here: rounds, your best, the hole you got better at, and the records that fell.");
+      return;
+    }
+    if (!seasonYear || !years.includes(seasonYear)) seasonYear = years[0];
+    let story = null;
+    try { story = Season.buildSeason(state.rounds, seasonYear, seasonOpts()); } catch (error) {
+      console.warn("Season story failed", error);
+      story = null;
+    }
+    seasonStory = story && story.state === "ready" ? story : null;
+    if (!seasonStory) {
+      els.seasonPanel.innerHTML = emptyState("No rounds to tell a story about this year yet.");
+      return;
+    }
+    els.seasonPanel.innerHTML = buildSeasonHtml(seasonStory, years);
+  }
+
+  // Records that say the same thing twice: a new low gross already means the
+  // to-par record fell (same rule as the 19th Hole).
+  function seasonRecords(story) {
+    let fell = story.records.fell.slice();
+    const ids = new Set(fell.map((rec) => rec.id));
+    if (ids.has("low-18-gross")) fell = fell.filter((rec) => rec.id !== "low-18-topar");
+    if (ids.has("low-9-gross")) fell = fell.filter((rec) => rec.id !== "low-9-topar");
+    return fell;
+  }
+
+  function buildSeasonHtml(story, years) {
+    const headline = Season.headline(story);
+    const p = story.played;
+    const s = story.scoring;
+    const h = story.handicap;
+    const months = p.byMonth;
+    const span = months.length > 1 ? `${snMonth(months[0].month)} – ${snMonth(months[months.length - 1].month)}` : (months[0] ? snMonth(months[0].month) : "");
+
+    const stat = (drill, label, big, sub, tone) => `
+      <button type="button" class="sn-stat${tone ? ` is-${tone}` : ""}" data-sn-drill="${drill}">
+        <span class="sn-stat-label">${label}<span class="sn-chev" aria-hidden="true">›</span></span>
+        <strong class="sn-stat-big">${big}</strong>
+        <span class="sn-stat-sub">${sub}</span>
+      </button>`;
+
+    const best = story.best;
+    const bestCourse = best ? physicalCourseName((snFindRound(best.roundId) || {}).courseId) || best.courseKey || "" : "";
+    const scoringTrend = snTrend(s.start, s.now, s.change, true);
+    const indexTrend = snTrend(h.start, h.now, h.change, true);
+    const indexStartWord = h.startKind === "carried" ? "Jan 1" : h.startRef ? `round ${h.startRef.roundNumber}` : "";
+    const stats = [
+      stat("rounds", "Rounds", String(p.rounds), `${snPlural(p.holes, "hole")}${span ? ` · ${span}` : ""}`),
+      best
+        ? stat("best", best.holes === 9 ? "Best 9" : "Best round", `${best.gross}<small>${eclecticToPar(best.gross, best.par)}</small>`, `${escapeHtml(bestCourse)} · ${escapeHtml(snDate(best.date))}`)
+        : stat("rounds", "Best round", "—", "finish an 18 or a 9"),
+      s.change != null
+        ? stat("scoring", "Scoring avg", snFmt1(s.now), `${scoringTrend.text}`, scoringTrend.better ? "better" : "")
+        : stat("scoring", "Scoring avg", s.avg != null ? snFmt1(s.avg) : "—", s.rounds ? `${snPlural(s.rounds, "complete 18")} · 4 for a trend` : "no complete 18s yet"),
+      h.change != null
+        ? stat("index", "Index", snFmt1(h.now), `${indexTrend.text}${indexStartWord ? ` (${indexStartWord})` : ""}`, indexTrend.better ? "better" : "")
+        : stat("index", "Index", h.now != null ? snFmt1(h.now) : "—", h.now != null ? "estimate" : "needs 3 rated rounds")
+    ].join("");
+
+    // Moments: a row per thing worth telling, tap for the evidence.
+    const moments = [];
+    const moment = (m) => moments.push(m);
+    const fell = seasonRecords(story);
+    if (fell.length) {
+      const lead = fell.find((rec) => rec.id === "low-18-gross") || fell.find((rec) => rec.id === "low-9-gross") || fell[0];
+      moment({
+        drill: "records", mark: "★", kind: "record",
+        title: story.firstSeason ? `${snPlural(fell.length, "record")} set` : `${snPlural(fell.length, "record")} fell`,
+        sub: `${escapeHtml(lead.label)}${fell.length > 1 ? ` + ${fell.length - 1} more` : ""}`,
+        value: lead.from != null && lead.from !== "" && !story.firstSeason ? `${escapeHtml(String(lead.from))} → ${escapeHtml(String(lead.to))}` : escapeHtml(String(lead.to))
+      });
+    }
+    const imp = story.improvement;
+    if (imp.hole) {
+      const course = imp.hole.courseKey || "";
+      moment({
+        drill: "improvement", mark: "▲", kind: "improve", title: "Most improved hole",
+        sub: `${escapeHtml(snHole(imp.hole.label))} · ${escapeHtml(course)} · ${imp.hole.plays} plays`,
+        value: `${snFmt1(imp.hole.earlyAvg)} → ${snFmt1(imp.hole.lateAvg)}`
+      });
+    } else {
+      moment({
+        drill: null, mark: "▲", kind: "improve", title: "Most improved hole",
+        sub: imp.reason === "none-repeated"
+          ? "No hole played 4+ times this year yet"
+          : `No hole improved by 0.3+ a play yet (${snPlural(imp.candidates, "hole")} played 4+ times)`,
+        value: ""
+      });
+    }
+    const nem = story.nemesis;
+    if (nem.events.length) {
+      const first = nem.events[0];
+      moment({
+        drill: "nemesis", mark: "◆", kind: "nemesis",
+        title: nem.holes === 1 ? "Nemesis beaten" : `${nem.holes} nemeses beaten`,
+        sub: `${escapeHtml(snHole(first.label))} · ${escapeHtml(first.courseKey || "")} · ${escapeHtml(snDate(first.date))}${nem.events.length > 1 ? ` + ${nem.events.length - 1} more` : ""}`,
+        value: nem.events.length > 1 ? `${nem.events.length}×` : `${first.score} on ${first.par}`
+      });
+    }
+    const ec = story.eclectic;
+    if (ec.courses.length) {
+      moment({
+        drill: "eclectic", mark: "✚", kind: "eclectic", title: "Eclectic",
+        sub: ec.holesImproved
+          ? `${snPlural(ec.holesImproved, "hole")} improved${ec.newHoles ? ` · ${ec.newHoles} new` : ""} · ${snPlural(ec.courses.length, "course")}`
+          : `${snPlural(ec.newHoles, "new hole")} on your boards · ${snPlural(ec.courses.length, "course")}`,
+        value: ec.strokes ? `${ec.strokes} off` : (ec.newHoles ? `+${ec.newHoles}` : "held")
+      });
+    }
+    const d = story.detail;
+    const putt = d.putting;
+    if (putt.rounds) {
+      const t = snTrend(putt.start, putt.now, putt.change, true);
+      moment({
+        drill: "putting", mark: "●", kind: "putting", title: "Putting",
+        sub: t ? `per 18 · ${t.text.replace(/ from .*/, "")} · ${snPlural(putt.rounds, "detail round")}` : `per 18 · ${snPlural(putt.rounds, "detail round")} (4 for a trend)`,
+        value: t ? `${snFmt1(putt.start)} → ${snFmt1(putt.now)}` : snFmt1(putt.season)
+      });
+    }
+    const gir = d.greens;
+    if (gir.rounds) {
+      const t = gir.change == null ? null : snTrend(Math.round(gir.start), Math.round(gir.now), Math.round(gir.now) - Math.round(gir.start), false, " pts", String);
+      moment({
+        drill: "greens", mark: "◎", kind: "greens", title: "Greens in regulation",
+        sub: t ? `${t.text.replace(/ from .*/, "")} · ${snPlural(gir.rounds, "detail round")}` : `${snPlural(gir.rounds, "detail round")} (4 for a trend)`,
+        value: t ? `${Math.round(gir.start)}% → ${Math.round(gir.now)}%` : `${Math.round(gir.season)}%`
+      });
+    }
+    if (!putt.rounds && !gir.rounds) {
+      moment({ drill: null, mark: "●", kind: "putting", title: "Putting & greens", sub: d.speedRounds ? "Speed rounds only: putts weren't entered" : "No putts entered this year", value: "" });
+    }
+    const top = story.courses.top;
+    if (top) {
+      moment({
+        drill: "courses", mark: "⌂", kind: "course", title: "Most played",
+        sub: `${escapeHtml(top.courseKey)}${story.courses.courses.length > 1 ? ` · ${snPlural(story.courses.courses.length, "course")} in all` : ""}`,
+        value: snPlural(top.rounds, "round")
+      });
+    }
+    const momentHtml = (m) => {
+      const inner = `<span class="sn-mark" aria-hidden="true">${m.mark}</span>
+        <span class="sn-moment-text"><strong>${m.title}</strong><small>${m.sub}</small></span>
+        ${m.value ? `<span class="sn-moment-value">${m.value}</span>` : ""}`;
+      return m.drill
+        ? `<li><button type="button" class="sn-moment sn-${m.kind}" data-sn-drill="${m.drill}">${inner}<span class="sn-chev" aria-hidden="true">›</span></button></li>`
+        : `<li><div class="sn-moment sn-${m.kind} is-quiet">${inner}</div></li>`;
+    };
+
+    const basis = [];
+    basis.push("Scoring average: complete 18s only.");
+    if (d.detailRounds || d.speedRounds) {
+      basis.push(`Putting and greens: ${snPlural(putt.rounds, "detail round")}${d.speedRounds ? `; ${snPlural(d.speedRounds, "speed round")} left out` : ""}.`);
+    }
+    basis.push("Index is a WHS-style estimate.");
+
+    const yearChips = years.length > 1
+      ? `<div class="sn-years" role="group" aria-label="Season">${years.map((y) => `<button type="button" class="sn-year${y === story.year ? " is-on" : ""}" data-sn-year="${y}" aria-pressed="${y === story.year}">${y}</button>`).join("")}</div>`
+      : "";
+
+    return `
+      ${yearChips}
+      <section class="sn-hero" aria-labelledby="snHeadline">
+        <p class="sn-eyebrow">Your ${story.year} in golf${story.inProgress ? " · so far" : ""}</p>
+        <h2 id="snHeadline" class="sn-headline">${escapeHtml(headline ? headline.text : "")}</h2>
+        <div class="sn-stats">${stats}</div>
+      </section>
+      <ul class="sn-moments">${moments.map(momentHtml).join("")}</ul>
+      <div class="sn-actions">
+        <button type="button" class="primary-button" data-sn-share>Share my season</button>
+        <button type="button" class="ghost-button" data-sn-print>Save as PDF</button>
+      </div>
+      <p class="sn-basis">${basis.join(" ")}</p>`;
+  }
+
+  // ---- Season drill sheets --------------------------------------------------
+
+  function snRoundRow(round, value, sub) {
+    if (!round) return "";
+    const totals = roundTotals(round);
+    const course = physicalCourseName(round.courseId) || "";
+    const holes = round.holes.filter((hole) => Number.isFinite(hole.score) && hole.score > 0).length;
+    return `<button type="button" class="sn-row" data-sn-round="${escapeHtml(String(round.id))}">
+      <span class="sn-row-main"><strong>${escapeHtml(snDate(round.date))}</strong><small>${escapeHtml(sub != null ? sub : `${course} · ${holes} holes`)}</small></span>
+      <span class="sn-row-value">${value != null ? value : `${totals.gross}<small>${eclecticToPar(totals.gross, totals.par)}</small>`}</span>
+      <span class="sn-chev" aria-hidden="true">›</span>
+    </button>`;
+  }
+
+  // Horizontal bars: length + a printed number, never colour.
+  function snBars(items, ariaLabel) {
+    const max = Math.max(1e-9, ...items.map((it) => it.value));
+    return `<div class="sn-bars" role="list" aria-label="${escapeHtml(ariaLabel)}">${items.map((it) => `
+      <div class="sn-bar-row" role="listitem">
+        <span class="sn-bar-label">${escapeHtml(it.label)}</span>
+        <span class="sn-bar" aria-hidden="true"><span style="width:${Math.max(it.value > 0 ? 3 : 0, (it.value / max) * 100).toFixed(1)}%"></span></span>
+        <span class="sn-bar-value">${escapeHtml(it.text)}</span>
+      </div>`).join("")}</div>`;
+  }
+
+  // Column strip for a start -> now story: the first and last windows are
+  // marked by luminance AND a printed bracket label; the best round gets ★.
+  function snColumns(values, opts) {
+    const o = opts || {};
+    const finite = values.filter((v) => Number.isFinite(v.value));
+    if (!finite.length) return "";
+    const min = Math.min(...finite.map((v) => v.value));
+    const max = Math.max(...finite.map((v) => v.value));
+    const n = values.length;
+    const w = o.window || 0;
+    const cols = values.map((v, i) => {
+      const ok = Number.isFinite(v.value);
+      const pct = ok ? 18 + (max === min ? 41 : ((v.value - min) / (max - min)) * 82) : 0;
+      const zone = w && i < w ? " is-first" : w && i >= n - w ? " is-last" : "";
+      return `<span class="sn-col${zone}${ok ? "" : " is-none"}${v.star ? " is-star" : ""}" style="--h:${pct.toFixed(1)}%">${v.star ? "<i>★</i>" : ""}</span>`;
+    }).join("");
+    const brackets = w
+      ? `<div class="sn-col-keys"><span class="sn-key-first">First ${w} · ${escapeHtml(o.startText || "")}</span><span class="sn-key-last">Last ${w} · ${escapeHtml(o.nowText || "")}</span></div>`
+      : "";
+    const fmt = o.format || snFmt1;
+    const caption = o.caption ? `<p class="sn-note">${escapeHtml(o.caption)}: ${escapeHtml(fmt(min))} to ${escapeHtml(fmt(max))}. Shorter is better.</p>` : "";
+    return `<div class="sn-cols" aria-hidden="true" style="--n:${n}">${cols}</div>${brackets}${caption}`;
+  }
+
+  function seasonSheetContent(kind, story) {
+    const year = story.year;
+    if (kind === "rounds") {
+      const p = story.played;
+      const rows = story.roundIds.slice().reverse().map((id) => snRoundRow(snFindRound(id))).join("");
+      return {
+        title: `${snPlural(p.rounds, "round")} in ${year}`,
+        html: `<p class="sn-lede">${snPlural(p.holes, "hole")} played${p.nines && p.eighteens ? `: ${snPlural(p.eighteens, "18-hole round")} and ${snPlural(p.nines, "9-hole round")}` : p.nines ? `, all 9-hole rounds` : `, every one an 18`}.</p>
+          ${snBars(p.byMonth.map((m) => ({ label: snMonth(m.month), value: m.rounds, text: String(m.rounds) })), "Rounds by month")}
+          <h4 class="sn-sheet-h">Every round, newest first</h4><div class="sn-rows">${rows}</div>`
+      };
+    }
+    if (kind === "scoring") {
+      const s = story.scoring;
+      const bestId = story.best ? story.best.roundId : null;
+      const chart = snColumns(s.series.map((row) => ({ value: row.gross, star: row.roundId === bestId })), {
+        window: s.window, startText: `avg ${snFmt1(s.start)}`, nowText: `avg ${snFmt1(s.now)}`,
+        caption: "Each bar is one complete 18, oldest first, gross", format: String
+      });
+      const t = snTrend(s.start, s.now, s.change, true);
+      const lede = s.rounds
+        ? `${t ? `Your first ${s.window} complete 18s averaged ${snFmt1(s.start)}; your last ${s.window} averaged ${snFmt1(s.now)} (${t.text.replace(/ from .*/, "")}). ` : `${snPlural(s.rounds, "complete 18")} so far; a trend needs 4. `}Season average ${snFmt1(s.avg)} (${s.avgToPar > 0 ? "+" : ""}${snFmt1(s.avgToPar)} to par).`
+        : "No complete 18-hole rounds this year. Nines and unfinished rounds are left out so the average stays comparable.";
+      const rows = s.series.slice().reverse().map((row) => snRoundRow(snFindRound(row.roundId))).join("");
+      return {
+        title: "Scoring average",
+        html: `<p class="sn-lede">${lede}</p>${chart}${rows ? `<h4 class="sn-sheet-h">Complete 18s, newest first</h4><div class="sn-rows">${rows}</div>` : ""}`
+      };
+    }
+    if (kind === "index") {
+      const h = story.handicap;
+      const trail = h.trail.filter((t) => t.index != null);
+      const startText = h.startKind === "carried"
+        ? `You started ${year} at ${snFmt1(h.start)}, carried over from earlier seasons.`
+        : h.startKind === "first" ? `Your first estimate this year was ${snFmt1(h.start)}, after round ${h.startRef.roundNumber} (${snDate(h.startRef.date)}).` : "";
+      const t = snTrend(h.start, h.now, h.change, true);
+      const chart = snColumns(trail.map((row) => ({ value: row.index })), { caption: "Your index after each round, oldest first" });
+      const rows = h.trail.slice().reverse().map((row) => {
+        const round = snFindRound(row.roundId);
+        if (!round) return "";
+        return snRoundRow(round, row.index != null ? snFmt1(row.index) : "—", `${physicalCourseName(round.courseId) || ""} · index after`);
+      }).join("");
+      return {
+        title: "Handicap index",
+        html: `<p class="sn-lede">${h.now != null ? `${startText} ${t ? `Now ${snFmt1(h.now)} (${t.text.replace(/ from .*/, "")}).` : `Now ${snFmt1(h.now)}.`}` : "An index needs at least three rounds on courses with a Course Rating and Slope."}</p>
+          ${chart}
+          <p class="sn-note">Estimate only: WHS-style from gross score, Course Rating and Slope (PCC 0). Your official GHIN index can differ.</p>
+          ${rows ? `<h4 class="sn-sheet-h">Index after each round</h4><div class="sn-rows">${rows}</div>` : ""}`
+      };
+    }
+    if (kind === "improvement") {
+      const hole = story.improvement.hole;
+      if (!hole) return null;
+      const half = hole.half;
+      const playGrid = (plays) => `<div class="sn-plays">${plays.map((play) => {
+        const round = snFindRound(play.roundId);
+        if (!round) return "";
+        return `<button type="button" class="sn-play" data-sn-round="${escapeHtml(String(round.id))}" aria-label="${escapeHtml(snDate(play.date))}: ${play.score} on a par ${play.par}">${renderScoreMark(play.score, play.par)}<small>${escapeHtml(snDate(play.date))}</small></button>`;
+      }).join("")}</div>`;
+      const early = hole.series.slice(0, half);
+      const late = hole.series.slice(hole.series.length - half);
+      return {
+        title: `${snHole(hole.label)} · ${hole.courseKey || ""}`,
+        html: `<p class="sn-lede">Par ${hole.par}. Your first ${half} plays this year averaged <strong>${snFmt1(hole.earlyAvg)}</strong>; your last ${half} averaged <strong>${snFmt1(hole.lateAvg)}</strong>: ${snFmt1(hole.gain)} a play better.</p>
+          <h4 class="sn-sheet-h">First ${half} · avg ${snFmt1(hole.earlyAvg)}</h4>${playGrid(early)}
+          <h4 class="sn-sheet-h">Last ${half} · avg ${snFmt1(hole.lateAvg)}</h4>${playGrid(late)}
+          <button type="button" class="ghost-button sn-sheet-cta" data-sn-hole="1">Full hole history ›</button>`
+      };
+    }
+    if (kind === "nemesis") {
+      const events = story.nemesis.events;
+      const rows = events.map((e) => {
+        const round = snFindRound(e.roundId);
+        return round ? snRoundRow(round, renderScoreMark(e.score, e.par), `${snHole(e.label)} · par ${e.par} · ${e.courseKey || ""}`) : "";
+      }).join("");
+      return {
+        title: events.length === 1 ? "Nemesis beaten" : "Nemeses beaten",
+        html: `<p class="sn-lede">Your nemesis is the hole on a course with your worst average (3+ plays). Par or better on it is revenge.</p><div class="sn-rows">${rows}</div>`
+      };
+    }
+    if (kind === "records") {
+      const fell = seasonRecords(story);
+      const rows = fell.map((rec) => {
+        const round = snFindRound(rec.roundId);
+        const value = rec.from != null && rec.from !== "" && !story.firstSeason
+          ? `<span class="sn-was">${escapeHtml(String(rec.from))} →</span> ${escapeHtml(String(rec.to))}`
+          : `${escapeHtml(String(rec.to))}${story.firstSeason ? "" : `<small>new</small>`}`;
+        return round ? snRoundRow(round, value, rec.label) : "";
+      }).join("");
+      return {
+        title: story.firstSeason ? "Records set" : "Records that fell",
+        html: `<p class="sn-lede">${story.firstSeason ? `Your first season on the Ledger, so every record is new.` : `From where each record stood on Jan 1 to where it stands now.`} Tap one for the round.</p><div class="sn-rows">${rows}</div>`
+      };
+    }
+    if (kind === "eclectic") {
+      const blocks = story.eclectic.courses.map((c) => {
+        const sameCoverage = c.before && c.before.holes === c.after.holes;
+        const head = sameCoverage
+          ? `${c.before.total} → ${c.after.total}`
+          : `${c.after.total} <small>${eclecticToPar(c.after.total, c.after.par)} · ${c.before ? `${c.before.holes} → ` : ""}${snPlural(c.after.holes, "hole")}</small>`;
+        const rows = c.improved.map((cell) => {
+          const round = snFindRound(cell.roundId);
+          return round ? snRoundRow(round, `<span class="sn-was">${cell.from} →</span> ${cell.to}`, `${snHole(cell.label)} · par ${cell.par}`) : "";
+        }).join("");
+        return `<div class="sn-ec-block">
+          <div class="sn-ec-head"><strong>${escapeHtml(c.courseKey)}</strong><span>${head}</span></div>
+          <p class="sn-note">${c.improved.length ? `${snPlural(c.strokes, "stroke")} off ${snPlural(c.improved.length, "hole")} you'd already played.` : "No old hole bettered this year."}${c.newHoles ? ` ${snPlural(c.newHoles, "hole")} added for the first time.` : ""}</p>
+          ${rows ? `<div class="sn-rows">${rows}</div>` : ""}
+          <button type="button" class="ghost-button sn-sheet-cta" data-sn-eclectic="${escapeHtml(c.courseKey)}">Open the ${escapeHtml(c.courseKey)} board ›</button>
+        </div>`;
+      }).join("");
+      return { title: `Your eclectics in ${year}`, html: `<p class="sn-lede">Your eclectic is your best-ever score on every hole of a course. Here's what this year moved.</p>${blocks}` };
+    }
+    if (kind === "putting" || kind === "greens") {
+      const d = story.detail;
+      const isPutt = kind === "putting";
+      const tr = isPutt ? d.putting : d.greens;
+      const rows = d.series
+        .filter((row) => (isPutt ? row.puttHoles : row.girHoles) > 0)
+        .reverse()
+        .map((row) => {
+          const round = snFindRound(row.roundId);
+          if (!round) return "";
+          const holes = isPutt ? row.puttHoles : row.girHoles;
+          const value = isPutt
+            ? (holes === 18 ? String(row.putts) : `${row.putts}<small>on ${holes}</small>`)
+            : `${row.girMade}/${holes}`;
+          return snRoundRow(round, value, physicalCourseName(round.courseId) || "");
+        }).join("");
+      const fmt = (x) => (isPutt ? snFmt1(x) : `${Math.round(x)}%`);
+      const t = tr.change == null ? null : isPutt
+        ? snTrend(tr.start, tr.now, tr.change, true)
+        : snTrend(Math.round(tr.start), Math.round(tr.now), Math.round(tr.now) - Math.round(tr.start), false, " pts", String);
+      const lede = t
+        ? `First ${tr.window} detail rounds: ${fmt(tr.start)}${isPutt ? " putts per 18" : " of greens"}. Last ${tr.window}: ${fmt(tr.now)} (${t.text.replace(/ from .*/, "")}). `
+        : `${snPlural(tr.rounds, "detail round")} so far; a trend needs 4. `;
+      return {
+        title: isPutt ? "Putting" : "Greens in regulation",
+        html: `<p class="sn-lede">${lede}Season: ${fmt(tr.season)}${isPutt ? " per 18" : ""} over ${snPlural(tr.holes, "hole")}.</p>
+          <p class="sn-note">Only holes where putts were entered count${d.speedRounds ? `; ${snPlural(d.speedRounds, "speed round")} left out` : ""}.</p>
+          <div class="sn-rows">${rows}</div>`
+      };
+    }
+    if (kind === "courses") {
+      const list = story.courses.courses;
+      const rows = list.map((c) => `<button type="button" class="sn-row" data-open-course-name="${escapeHtml(c.courseKey)}">
+        <span class="sn-row-main"><strong>${escapeHtml(c.courseKey)}</strong><small>${snPlural(c.holes, "hole")} · last ${escapeHtml(snDate(c.lastDate))}</small></span>
+        <span class="sn-row-value">${c.rounds}</span><span class="sn-chev" aria-hidden="true">›</span></button>`).join("");
+      return {
+        title: `Where you played in ${year}`,
+        html: `${snBars(list.map((c) => ({ label: c.courseKey, value: c.rounds, text: snPlural(c.rounds, "round") })), "Rounds by course")}
+          <h4 class="sn-sheet-h">Open a course</h4><div class="sn-rows">${rows}</div>`
+      };
+    }
+    return null;
+  }
+
+  function openSeasonSheet(kind, trigger) {
+    if (!seasonStory || !els.seasonSheetOverlay || !els.seasonSheetBody) return;
+    if (kind === "best") {
+      const round = seasonStory.best ? snFindRound(seasonStory.best.roundId) : null;
+      if (round) showRoundDetail(round);
+      return;
+    }
+    const content = seasonSheetContent(kind, seasonStory);
+    if (!content) return;
+    els.seasonSheetOverlay.dataset.kind = kind;
+    if (els.seasonSheetTitle) els.seasonSheetTitle.textContent = content.title;
+    els.seasonSheetBody.innerHTML = content.html;
+    els.seasonSheetBody.scrollTop = 0;
+    const wasOpen = !els.seasonSheetOverlay.hidden;
+    if (!wasOpen) seasonSheetReturnFocus = trigger || document.activeElement;
+    els.seasonSheetOverlay.hidden = false;
+    document.body.classList.add("hole-picker-open");
+    if (!seasonSheetKeyHandler) {
+      // Capture phase: runs before the app's global Escape handler, so one
+      // Escape closes only the top sheet (hole detail / round detail first).
+      seasonSheetKeyHandler = (event) => {
+        if (event.key !== "Escape") return;
+        const above = [els.roundDetailOverlay, els.heatmapDrilldownOverlay, els.destructiveConfirmOverlay];
+        if (above.some((overlay) => overlay && !overlay.hidden)) return;
+        closeSeasonSheet();
+      };
+      document.addEventListener("keydown", seasonSheetKeyHandler, true);
+    }
+    if (els.seasonSheetClose) els.seasonSheetClose.focus({ preventScroll: true });
+  }
+
+  function closeSeasonSheet(options) {
+    if (!els.seasonSheetOverlay || els.seasonSheetOverlay.hidden) return;
+    els.seasonSheetOverlay.hidden = true;
+    const otherOpen = Array.from(document.querySelectorAll(".hole-picker-overlay")).some((overlay) => !overlay.hidden);
+    if (!otherOpen) document.body.classList.remove("hole-picker-open");
+    if (seasonSheetKeyHandler) {
+      document.removeEventListener("keydown", seasonSheetKeyHandler, true);
+      seasonSheetKeyHandler = null;
+    }
+    const target = seasonSheetReturnFocus;
+    seasonSheetReturnFocus = null;
+    if (!(options && options.restoreFocus === false) && target && document.contains(target) && typeof target.focus === "function") {
+      target.focus({ preventScroll: true });
+    }
+  }
+
+  function onSeasonSheetClick(event) {
+    const roundBtn = event.target.closest("[data-sn-round]");
+    if (roundBtn) {
+      const round = snFindRound(roundBtn.dataset.snRound);
+      if (round) showRoundDetail(round);
+      else showToast("Round not found.");
+      return;
+    }
+    const holeBtn = event.target.closest("[data-sn-hole]");
+    if (holeBtn && seasonStory && seasonStory.improvement.hole) {
+      const ref = seasonStory.improvement.hole.ref;
+      const round = snFindRound(ref.roundId);
+      const hole = round ? round.holes.find((h) => h.number === ref.number) : null;
+      if (round && hole) openHeatmapDrilldown(physicalHoleId(round.courseId, hole));
+      return;
+    }
+    const boardBtn = event.target.closest("[data-sn-eclectic]");
+    if (boardBtn) {
+      eclecticCourse = boardBtn.dataset.snEclectic;
+      closeSeasonSheet({ restoreFocus: false });
+      renderEclecticPanel();
+      setActiveSubsection("records", "eclectic");
+      const panel = document.querySelector('[data-panel-id="eclectic"]');
+      if (panel) panel.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+  }
+
+  async function shareSeason() {
+    if (!seasonStory) return;
+    const text = Season.shareLine(seasonStory);
+    try {
+      if (navigator.share) { await navigator.share({ text }); return; }
+      await navigator.clipboard.writeText(text);
+      showToast("Copied. Paste it anywhere.");
+    } catch (error) {
+      if (error && error.name === "AbortError") return;
+      showToast(text);
+    }
+  }
+
+  // Print just the season card: a clone in a print-only root, everything else
+  // hidden by the @media print rules for body.sn-printing.
+  function printSeason() {
+    if (!els.seasonPanel || !seasonStory) return;
+    let rootEl = document.getElementById("snPrintRoot");
+    if (!rootEl) {
+      rootEl = document.createElement("div");
+      rootEl.id = "snPrintRoot";
+      rootEl.className = "sn-print-root";
+      document.body.appendChild(rootEl);
+    }
+    rootEl.innerHTML = `<div class="sn-panel">${els.seasonPanel.innerHTML}</div><p class="sn-print-foot">Fairway Ledger · printed ${escapeHtml(snDate(todayLocal()))}</p>`;
+    rootEl.querySelectorAll("button").forEach((b) => b.setAttribute("tabindex", "-1"));
+    const done = () => {
+      document.body.classList.remove("sn-printing");
+      window.removeEventListener("afterprint", done);
+    };
+    document.body.classList.add("sn-printing");
+    window.addEventListener("afterprint", done);
+    try { window.print(); } catch { done(); }
+  }
+
+  function onSeasonPanelClick(event) {
+    const yearBtn = event.target.closest("[data-sn-year]");
+    if (yearBtn) {
+      seasonYear = yearBtn.dataset.snYear;
+      renderSeasonPanel();
+      const again = els.seasonPanel.querySelector(`[data-sn-year="${seasonYear}"]`);
+      if (again) again.focus({ preventScroll: true });
+      return;
+    }
+    if (event.target.closest("[data-sn-share]")) { shareSeason(); return; }
+    if (event.target.closest("[data-sn-print]")) { printSeason(); return; }
+    const drill = event.target.closest("[data-sn-drill]");
+    if (drill) openSeasonSheet(drill.dataset.snDrill, drill);
+  }
+
   function renderTrophyRoom() {
     if (!els.trophyRoomGrid) return;
     const trophies = computeTrophies(state.rounds);
@@ -9243,7 +9818,8 @@
     "putting-by-distance": "clubs",
     "scrambling": "clubs",
     "trophy-room": "records",
-    "eclectic": "records"
+    "eclectic": "records",
+    "season": "records"
     // "stats-explorer": "explorer" — Explorer chip + panel temporarily
     // removed from Home (Jeff: "don't really like it right now"). The
     // computeStatsExplorer / renderStatsExplorer functions stay as dead
@@ -9259,7 +9835,7 @@
     trends: "recent-rounds",
     holes: "heatmap",
     clubs: "tee-club-performance",
-    records: "trophy-room"
+    records: "season"
   };
 
   let activeHomeSection = (() => {
@@ -10063,6 +10639,7 @@
     renderProfileBag();
     renderTrophyRoom();
     renderEclecticPanel();
+    renderSeasonPanel();
     renderStatsExplorer();
     renderSnapshotPanel();
     tagHomePanelsWithSections();
@@ -11292,7 +11869,7 @@
     const link = event.target.closest("[data-open-course-name]");
     if (!link) return;
     const name = link.dataset.openCourseName;
-    [els.roundDetailOverlay, els.bucketSheetOverlay, els.parTypeSheetOverlay].forEach((overlay) => {
+    [els.roundDetailOverlay, els.bucketSheetOverlay, els.parTypeSheetOverlay, els.seasonSheetOverlay].forEach((overlay) => {
       if (overlay && !overlay.hidden) {
         overlay.hidden = true;
       }
@@ -11357,6 +11934,9 @@
     // UI preference only: a full localStorage must not abort tab switching/init.
     try { localStorage.setItem(ACTIVE_TAB_KEY, targetName); } catch {}
     updateFloatingNavVisibility();
+    // A season drill sheet belongs to Home; "Edit this round" and course
+    // links jump tabs, so it must not float over the new tab.
+    if (targetName !== "home") closeSeasonSheet({ restoreFocus: false });
     // Refresh the snapshot panel on Profile entry so timestamps don't drift
     // (e.g. "2 min ago" should re-evaluate without a full reload).
     if (targetName === "profile") renderSnapshotPanel();
@@ -12173,6 +12753,10 @@
   }
   if (els.parTypeSheetBackdrop) els.parTypeSheetBackdrop.addEventListener("click", closeParTypeDetail);
   if (els.eclecticPanel) els.eclecticPanel.addEventListener("click", onEclecticPanelClick);
+  if (els.seasonPanel) els.seasonPanel.addEventListener("click", onSeasonPanelClick);
+  if (els.seasonSheetBody) els.seasonSheetBody.addEventListener("click", onSeasonSheetClick);
+  if (els.seasonSheetClose) els.seasonSheetClose.addEventListener("click", () => closeSeasonSheet());
+  if (els.seasonSheetBackdrop) els.seasonSheetBackdrop.addEventListener("click", () => closeSeasonSheet());
   if (els.parTypeSheetClose) els.parTypeSheetClose.addEventListener("click", closeParTypeDetail);
   if (els.parStats) {
     els.parStats.addEventListener("click", (event) => {
