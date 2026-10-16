@@ -8652,3 +8652,253 @@ body.storage-blocked { padding-top: 120px; }
   color: var(--muted);
 }
 .metric-basis[hidden] { display: none; }
+
+/* ==== Quick entry (2026-10-16) ===========================================
+   One screen per hole. Meaning is carried by shape + word + luminance,
+   never hue alone: under par = circle, over = square, double+ = double
+   square; anything selected is a dark fill with white text. */
+.scorecard-cards[data-entry-mode="quick"] .scorecard-card.active {
+  position: relative;
+  gap: 10px;
+  padding: 12px 12px 14px;
+}
+.scorecard-cards[data-entry-mode="quick"] .card-extra { display: none; }
+.scorecard-cards[data-entry-mode="quick"] .scorecard-card.quick-more-open .card-extra {
+  display: block;
+  border-top: 1px solid #edf1eb;
+  padding-top: 4px;
+}
+.scorecard-cards[data-entry-mode="quick"] .card-headline {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 12px;
+  row-gap: 2px;
+  padding-bottom: 8px;
+}
+.quick-run {
+  order: 5;
+  flex-basis: 100%;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--green-dark);
+  font-variant-numeric: tabular-nums;
+}
+.scorecard-cards[data-entry-mode="quick"] .card-pill-row.quick-row {
+  display: grid;
+  gap: 6px;
+  border-top: 0;
+  padding-top: 0;
+}
+.scorecard-cards[data-entry-mode="quick"] .quick-options {
+  display: grid;
+  gap: 6px;
+}
+.quick-score-row .quick-options,
+.quick-putts-row .quick-options { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.quick-tee-row .quick-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.pill.quick-score {
+  min-height: 66px;
+  min-width: 0;
+  padding: 6px 2px 5px;
+  border-radius: 14px;
+  flex-direction: column;
+  gap: 3px;
+  background: #fff;
+  border: 1.5px solid var(--line);
+  color: var(--ink);
+  box-shadow: none;
+}
+.pill.quick-score::after { display: none; }
+.quick-score .qs-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 1.15rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.quick-score-under .qs-num { border: 2px solid currentColor; border-radius: 50%; }
+.quick-score-over .qs-num { border: 2px solid currentColor; border-radius: 4px; }
+.quick-score-way-over .qs-num {
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  width: 27px;
+  height: 27px;
+}
+.quick-score small {
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pill.quick-score.pill-par:not(.active) {
+  border: 2px solid var(--green-dark);
+  background: #fbf7ea;
+  color: var(--green-dark);
+}
+.pill.quick-score.active {
+  background: var(--green-dark);
+  border-color: var(--green-dark);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(17, 66, 44, 0.28);
+}
+.pill.quick-score.active small { color: rgba(255, 255, 255, 0.82); }
+/* Selected is always a dark fill (luminance), whatever the tier; the tier
+   itself is the shape + word. Over par uses ink, not red. */
+.pill.quick-score-over.active,
+.pill.quick-score-way-over.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(28, 36, 31, 0.28);
+}
+
+.pill.quick-putt {
+  min-height: 54px;
+  min-width: 0;
+  border-radius: 12px;
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+.pill.quick-putt:disabled { opacity: 0.28; cursor: not-allowed; }
+.pill.quick-tee {
+  min-height: 56px;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 12px;
+  gap: 6px;
+  font-size: 0.92rem;
+}
+.pill.quick-tee span { font-size: 0.72rem; }
+
+.quick-club-row { display: grid; gap: 6px; }
+.quick-club-row .card-pill-label em {
+  font-style: normal;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.8;
+}
+.quick-club-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.quick-club {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 2px 4px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 800;
+  line-height: 1.05;
+  cursor: pointer;
+}
+.quick-club small {
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.quick-club.is-usual:not(.active) { border-style: dashed; border-color: var(--green-dark); }
+.quick-club.active { background: var(--green-dark); border-color: var(--green-dark); color: #fff; }
+.quick-club.active small { color: rgba(255, 255, 255, 0.82); }
+
+.quick-more-bar { display: flex; }
+.quick-more-toggle {
+  flex: 1;
+  min-height: 44px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.scorecard-card.quick-more-open .quick-more-toggle { border-style: solid; color: var(--green-dark); }
+.quick-more-misc {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0 4px;
+  border-top: 1px solid #edf1eb;
+}
+
+/* Auto-advance: overlays the More bar so nothing shifts while it fills. */
+.quick-advance {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 14px;
+  z-index: 3;
+  display: block;
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #e9f1ec;
+  color: var(--green-dark);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.quick-advance-fill {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 66, 44, 0.2);
+  transform-origin: left center;
+  animation: quickAdvanceFill linear forwards;
+}
+.quick-advance-text { position: relative; }
+@keyframes quickAdvanceFill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) { .quick-advance-fill { animation: none; transform: scaleX(1); opacity: 0.5; } }
+
+.quick-intro {
+  border: 1px solid #e6dcc0;
+  border-radius: 10px;
+  background: #fbf6e8;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+.quick-intro p { margin: 0 0 6px; }
+.quick-intro-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.quick-intro-actions button {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.quick-intro-alt { border: 1px solid var(--line); background: #fff; color: var(--ink); }
+.quick-intro-ok { border: 1px solid var(--green-dark); background: var(--green-dark); color: #fff; }
+
+@media (max-height: 700px) {
+  .scorecard-cards[data-entry-mode="quick"] .quick-club-row:not(.is-par3) { display: none; }
+  .pill.quick-score { min-height: 60px; }
+  .pill.quick-putt { min-height: 48px; }
+  .pill.quick-tee { min-height: 50px; }
+}

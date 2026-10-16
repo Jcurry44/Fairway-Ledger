@@ -455,6 +455,7 @@
                 <label id="roundEntryModeField" class="has-chips">
                   Entry mode
                   <select id="roundEntryMode" data-use-chips="true">
+                    <option value="quick">Quick (score, putts, tee shot)</option>
                     <option value="detailed">Detailed (everything)</option>
                     <option value="speed">Speed (score only)</option>
                   </select>
@@ -679,11 +680,15 @@
               </div>
             </div>
             <p class="profile-bag-hint">
-              Speed mode shows just the score on each hole — no clubs,
-              fairways, or putts. You can still override per round in the
-              setup banner.
+              Quick asks for score, putts and tee shot on one screen and
+              keeps everything else under More. Speed is score only. You
+              can still override per round in the setup banner.
             </p>
             <div class="card-flow-options">
+              <label class="card-flow-option">
+                <input type="radio" name="entryModeDefault" value="quick" id="entryModeQuickDefault">
+                <span><strong>Quick</strong> <span class="option-hint">3 taps a hole</span></span>
+              </label>
               <label class="card-flow-option">
                 <input type="radio" name="entryModeDefault" value="detailed" id="entryModeDetailedDefault">
                 <span><strong>Detailed</strong> <span class="option-hint">track everything</span></span>

@@ -132,12 +132,15 @@
   // setup banner. Default to "detailed" so anyone who already had the app
   // before this feature sees no behavior change.
   const ENTRY_MODE_DEFAULT_KEY = "fairwayLedger.entryModeDefault.v1";
+  const ENTRY_MODES = ["quick", "detailed", "speed"];
+  // "quick" (2026-10-16) is the default for anyone who never picked a mode
+  // in Profile. An explicit Detailed or Speed choice is kept as-is.
   let entryModeDefault = (() => {
     try {
       const saved = localStorage.getItem(ENTRY_MODE_DEFAULT_KEY);
-      if (saved === "speed") return "speed";
-      return "detailed";
-    } catch { return "detailed"; }
+      if (ENTRY_MODES.includes(saved)) return saved;
+      return "quick";
+    } catch { return "quick"; }
   })();
   // Entry mode for the round currently being entered / edited. Seeded from
   // the per-installation default on start, swappable in the setup banner
@@ -473,6 +476,7 @@
   // Skipped in edit mode so saved rounds keep their captured selections.
   function seedDefaultClubs(course) {
     if (editingRoundId || !course || !Array.isArray(course.holes)) return;
+    if (currentEntryMode === "quick") return; // Quick shows the usual club; it never pre-picks it
     course.holes.forEach((hole) => {
       if (getHoleClubs(hole.number).length > 0) return;
       const learned = mostUsedTeeClubForHole(course.id, hole, state.rounds);
@@ -655,6 +659,7 @@
     roundTagField: document.getElementById("roundTagField"),
     roundEntryMode: document.getElementById("roundEntryMode"),
     roundEntryModeField: document.getElementById("roundEntryModeField"),
+    entryModeQuickDefault: document.getElementById("entryModeQuickDefault"),
     entryModeDetailedDefault: document.getElementById("entryModeDetailedDefault"),
     entryModeSpeedDefault: document.getElementById("entryModeSpeedDefault"),
     filterTag: document.getElementById("filterTag"),
@@ -1517,8 +1522,8 @@
     // and the scorecard is live (not the setup placeholder).
     roundStarted = true;
     SETUP_CHIP_ROW_IDS.forEach((id) => setupChipRowsTapped.add(id));
-    if (data.entryMode === "speed" || data.entryMode === "detailed") {
-      setCurrentEntryMode(data.entryMode);
+    if (ENTRY_MODES.includes(data.entryMode)) {
+      setCurrentEntryMode(data.entryMode, { rerender: false });
     }
     if (data.date) els.roundDate.value = data.date;
     if (data.course) els.roundCourse.value = data.course;
@@ -2653,6 +2658,7 @@
     updateRoundPreview();
     if (viewMode === "card") syncAllPillActiveStates();
     if (viewMode === "card") prefillActiveCardPar();
+    if (viewMode === "card") syncQuickCardStates();
     // Initial GIR auto-derive + Putter auto-add for whatever values just landed.
     syncAllDerivedFlags();
     refreshReviewVisibility();
@@ -2744,7 +2750,9 @@
   }
 
   function puttsInputCell(hole) {
-    return `<input class="putts-input compact-input" data-hole="${hole.number}" type="number" min="0" max="8" inputmode="numeric" value="2" aria-label="${escapeHtml(hole.label || `Hole ${hole.number}`)} putts">`;
+    // Quick starts putts unknown; Detailed/Speed keep the historic 2 default.
+    const initial = currentEntryMode === "quick" ? "" : "2";
+    return `<input class="putts-input compact-input" data-hole="${hole.number}" type="number" min="0" max="8" inputmode="numeric" value="${initial}" aria-label="${escapeHtml(hole.label || `Hole ${hole.number}`)} putts">`;
   }
 
   function girInputCell(hole) {
@@ -3310,7 +3318,323 @@
       </div>`;
   }
 
+  // ---- Quick entry (2026-10-16) -----------------------------------------
+  // One screen per hole: Score, Putts, then Tee shot (par 4/5) or Club
+  // (par 3). Nothing is preselected and an untouched field stays unknown.
+  // "More" only reveals the card's existing detail rows, so every tap still
+  // writes the same hidden inputs: autosave, resume, review and save are
+  // the same code paths as Detailed.
+  const QUICK_INTRO_KEY = "fairwayLedger.quickIntro.v1";
+  const QUICK_ADVANCE_MS = 700;
+  let quickAdvanceTimer = null;
+
+  function quickScoreWord(score, par) {
+    if (score === 1) return "Ace";
+    const d = score - par;
+    if (d <= -2) return "Eagle";
+    if (d === -1) return "Birdie";
+    if (d === 0) return "Par";
+    if (d === 1) return "Bogey";
+    if (d === 2) return "Double";
+    if (d === 3) return "Triple";
+    return `+${d}`;
+  }
+
+  function renderQuickIntro() {
+    let seen = false;
+    try { seen = localStorage.getItem(QUICK_INTRO_KEY) === "1"; } catch {}
+    if (seen) return "";
+    return `
+      <div class="quick-intro" data-quick-intro>
+        <p><strong>New: Quick entry.</strong> Tap score, putts and tee shot. More holds the rest.</p>
+        <div class="quick-intro-actions">
+          <button type="button" class="quick-intro-alt" data-quick-intro-detailed>Use Detailed instead</button>
+          <button type="button" class="quick-intro-ok" data-quick-intro-ok>Got it</button>
+        </div>
+      </div>`;
+  }
+
+  function renderQuickBody(hole, course) {
+    const par = Number(hole.par) || 4;
+    const scoreButtons = [];
+    for (let v = Math.max(1, par - 2); v <= par + 3; v += 1) {
+      const d = v - par;
+      const tone = d < 0 ? "under" : d === 0 ? "even" : d === 1 ? "over" : "way-over";
+      const word = quickScoreWord(v, par);
+      scoreButtons.push(`<button type="button" class="pill quick-score quick-score-${tone}${d === 0 ? " pill-par" : ""}" data-pill-value="${v}" aria-label="${v}, ${word}"><span class="qs-num">${v}</span><small>${word}</small></button>`);
+    }
+    const puttButtons = [0, 1, 2, 3, 4, 5].map((v) =>
+      `<button type="button" class="pill quick-putt" data-pill-value="${v}" aria-label="${v} putt${v === 1 ? "" : "s"}">${v}</button>`).join("");
+    const teeShot = par === 3 ? "" : `
+      <div class="card-pill-row quick-row quick-tee-row" data-pill-group="fairway-input" data-hole="${hole.number}">
+        <span class="card-pill-label">Tee shot</span>
+        <div class="card-pill-options quick-options">
+          <button type="button" class="pill quick-tee" data-pill-value="left" aria-label="Missed left"><span aria-hidden="true">◀</span> Left</button>
+          <button type="button" class="pill quick-tee quick-tee-hit" data-pill-value="hit" aria-label="Fairway hit"><span aria-hidden="true">●</span> Fairway</button>
+          <button type="button" class="pill quick-tee" data-pill-value="right" aria-label="Missed right">Right <span aria-hidden="true">▶</span></button>
+        </div>
+      </div>`;
+    return `
+      <div class="card-pill-row quick-row quick-score-row" data-pill-group="score-input" data-hole="${hole.number}">
+        <span class="card-pill-label">Score</span>
+        <div class="card-pill-options quick-options">${scoreButtons.join("")}</div>
+      </div>
+      <div class="card-pill-row quick-row quick-putts-row" data-pill-group="putts-input" data-hole="${hole.number}">
+        <span class="card-pill-label">Putts</span>
+        <div class="card-pill-options quick-options">${puttButtons}</div>
+      </div>
+      ${teeShot}
+      ${renderQuickClubRow(hole, course)}
+      <div class="quick-more-bar">
+        <button type="button" class="quick-more-toggle" data-quick-more="${hole.number}" aria-expanded="false">More: penalty, bunker, 1st putt, clubs, note</button>
+      </div>`;
+  }
+
+  function renderQuickMore(hole) {
+    return `
+      <div class="quick-more-rows">
+        ${renderFairwayPills(hole)}
+        ${renderFirstPuttPills(hole)}
+        ${renderPenPills(hole)}
+        ${renderPenaltyClubRow(hole)}
+        ${renderBunkerPills(hole)}
+        <div class="quick-more-misc">
+          <span class="card-pill-label">Putts from the fringe</span>
+          <button type="button" class="pill pill-fringe-toggle" data-fringe-toggle="${hole.number}" aria-label="Toggle fringe putt count for this hole">Fringe</button>
+        </div>
+        ${renderClubsHitPills(hole)}
+        ${renderShotTracker(hole)}
+        <div class="quick-more-other-score">${renderScorePills(hole)}</div>
+        <label class="card-note-field">
+          <span>What happened on this hole?</span>
+          <textarea class="card-note-input" data-hole="${hole.number}" rows="2" placeholder="Drove left, chipped twice… (tap the mic on your keyboard for voice)">${escapeHtml(getHoleNote(hole.number))}</textarea>
+        </label>
+      </div>`;
+  }
+
+  // The 4 clubs you actually use here, most-used first: this physical hole
+  // weighs 10x, then any hole of the same kind (par 3 vs not). "usual" is
+  // outlined, never preselected.
+  function quickTeeClubChoices(courseId, hole) {
+    const physId = physicalHoleId(courseId, hole);
+    const isPar3 = Number(hole.par) === 3;
+    const counts = new Map();
+    (state.rounds || []).forEach((round) => {
+      if (!isDetailRound(round) || !Array.isArray(round.holes)) return;
+      round.holes.forEach((h) => {
+        if (!Array.isArray(h.clubsHit) || !h.clubsHit.length) return;
+        const tee = h.clubsHit.find((c) => c !== "Putter");
+        if (!tee) return;
+        if (physicalHoleId(round.courseId, h) === physId) counts.set(tee, (counts.get(tee) || 0) + 10);
+        else if ((Number(h.par) === 3) === isPar3) counts.set(tee, (counts.get(tee) || 0) + 1);
+      });
+    });
+    const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([club]) => club);
+    const fallback = isPar3 ? ["7i", "8i", "6i", "9i", "PW", "5i", "Hybrid"] : ["Driver", "3W", "Hybrid", "5W", "4i", "5i"];
+    const clubs = [];
+    [...ranked, ...fallback].forEach((club) => {
+      if (clubs.length < 4 && isInBag(club) && !clubs.includes(club)) clubs.push(club);
+    });
+    const usual = mostUsedTeeClubForHole(courseId, hole, state.rounds || [], 2);
+    return { clubs, usual: usual && clubs.includes(usual) ? usual : null };
+  }
+
+  function renderQuickClubRow(hole, course) {
+    const courseId = course && course.id;
+    const { clubs, usual } = quickTeeClubChoices(courseId, hole);
+    const current = getHoleClubs(hole.number).find((c) => c !== "Putter") || "";
+    if (current && !clubs.includes(current)) {
+      if (clubs.length >= 4) clubs.pop();
+      clubs.push(current);
+    }
+    const isPar3 = Number(hole.par) === 3;
+    const chips = clubs.map((club) => {
+      const on = club === current;
+      return `<button type="button" class="quick-club${on ? " active" : ""}${club === usual ? " is-usual" : ""}" data-quick-club="${escapeHtml(club)}" data-hole="${hole.number}" aria-pressed="${on}">${escapeHtml(club)}${club === usual ? `<small>usual</small>` : ""}</button>`;
+    }).join("");
+    return `
+      <div class="quick-club-row${isPar3 ? " is-par3" : ""}" data-quick-club-row="${hole.number}">
+        <span class="card-pill-label">${isPar3 ? "Club" : "Tee club"} <em>optional</em></span>
+        <div class="quick-club-options">${chips}</div>
+      </div>`;
+  }
+
+  function refreshQuickClubUi(holeNumber) {
+    const course = getSelectedRoundCourse();
+    const courseObj = typeof course === "string" ? getCourse(course) : course;
+    const hole = courseObj && Array.isArray(courseObj.holes)
+      ? courseObj.holes.find((h) => String(h.number) === String(holeNumber))
+      : null;
+    const row = els.scorecardGrid.querySelector(`[data-quick-club-row="${holeNumber}"]`);
+    if (row && hole) row.outerHTML = renderQuickClubRow(hole, courseObj);
+    const grid = els.scorecardGrid.querySelector(`.card-clubs-row[data-hole="${holeNumber}"]`);
+    if (grid) grid.outerHTML = renderClubsHitPills({ number: Number(holeNumber) });
+  }
+
+  function quickInputs(holeNumber) {
+    const q = (cls) => els.scorecardGrid.querySelector(`.${cls}[data-hole="${holeNumber}"]`);
+    return { score: q("score-input"), putts: q("putts-input"), fairway: q("fairway-input") };
+  }
+
+  function quickHoleComplete(holeNumber) {
+    const { score, putts, fairway } = quickInputs(holeNumber);
+    if (!score || score.value.trim() === "") return false;
+    if (!putts || putts.value.trim() === "") return false;
+    const par = Number(score.dataset.par);
+    if (par !== 3 && (!fairway || !fairway.value || fairway.value === "na")) return false;
+    return true;
+  }
+
+  // Putts can't exceed strokes; an ace has none.
+  function syncQuickPuttLimits(holeNumber) {
+    const { score } = quickInputs(holeNumber);
+    const row = els.scorecardGrid.querySelector(`.quick-putts-row[data-hole="${holeNumber}"]`);
+    if (!row || !score) return;
+    const strokes = score.value.trim() === "" ? NaN : Number(score.value);
+    row.querySelectorAll(".pill[data-pill-value]").forEach((pill) => {
+      pill.disabled = Number.isFinite(strokes) && Number(pill.dataset.pillValue) > strokes;
+    });
+  }
+
+  function setQuickInput(input, value) {
+    if (!input || input.value === value) return;
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function quickAfterTap(holeNumber, kind) {
+    if (currentEntryMode !== "quick") return;
+    const { score, putts } = quickInputs(holeNumber);
+    if (kind === "score-input" && score && putts) {
+      const strokes = Number(score.value);
+      if (strokes === 1) setQuickInput(putts, "0");
+      else if (putts.value.trim() !== "" && Number(putts.value) > strokes) setQuickInput(putts, "");
+    }
+    syncQuickPuttLimits(holeNumber);
+    updateQuickRunLines();
+    const card = score && score.closest(".scorecard-card");
+    if (!card || !card.classList.contains("active")) return;
+    if (card.classList.contains("quick-more-open") || editingRoundId) return;
+    if (!["score-input", "putts-input", "fairway-input", "club"].includes(kind)) return;
+    if (quickHoleComplete(holeNumber)) armQuickAdvance(card);
+  }
+
+  function cancelQuickAdvance() {
+    if (quickAdvanceTimer) { clearTimeout(quickAdvanceTimer); quickAdvanceTimer = null; }
+    if (els.scorecardGrid) els.scorecardGrid.querySelectorAll(".quick-advance").forEach((bar) => bar.remove());
+  }
+
+  function armQuickAdvance(card) {
+    cancelQuickAdvance();
+    const index = Number(card.dataset.cardIndex);
+    const bar = document.createElement("button");
+    bar.type = "button";
+    bar.className = "quick-advance";
+    bar.dataset.quickStay = "";
+    bar.setAttribute("aria-label", "Stay on this hole");
+    bar.innerHTML = `<span class="quick-advance-fill" style="animation-duration:${QUICK_ADVANCE_MS}ms"></span><span class="quick-advance-text">Next hole · tap to stay</span>`;
+    card.prepend(bar);
+    quickAdvanceTimer = setTimeout(() => {
+      quickAdvanceTimer = null;
+      bar.remove();
+      if (currentEntryMode !== "quick" || viewMode !== "card" || getActiveCardIndex() !== index) return;
+      goToNextQuickHole(index);
+    }, QUICK_ADVANCE_MS);
+  }
+
+  // Next hole without a score, wrapping to any skipped earlier hole; when
+  // every hole has a score, the review is the next step.
+  function goToNextQuickHole(fromIndex) {
+    const stack = els.scorecardGrid.querySelector(".scorecard-cards");
+    if (!stack) return;
+    const cards = [...stack.querySelectorAll(".scorecard-card")];
+    const empty = (c) => { const si = c.querySelector(".score-input"); return si && si.value.trim() === ""; };
+    for (let k = fromIndex + 1; k < cards.length; k += 1) if (empty(cards[k])) { setActiveCardIndex(k); return; }
+    for (let k = 0; k < fromIndex; k += 1) if (empty(cards[k])) { setActiveCardIndex(k); return; }
+    openReviewSection();
+  }
+
+  // "Thru 6 · +5 · 11 putts" on every Quick card header.
+  function updateQuickRunLines() {
+    if (!els.scorecardGrid || currentEntryMode !== "quick") return;
+    const lines = els.scorecardGrid.querySelectorAll("[data-quick-run]");
+    if (!lines.length) return;
+    let holes = [];
+    try { holes = readScorecard(false); } catch { holes = []; }
+    const scored = holes.filter((h) => Number.isFinite(h.score) && h.score > 0);
+    let text = "Not started";
+    if (scored.length) {
+      const gross = scored.reduce((sum, h) => sum + h.score, 0);
+      const par = scored.reduce((sum, h) => sum + h.par, 0);
+      const putted = scored.filter(puttsKnown);
+      const putts = putted.reduce((sum, h) => sum + h.putts, 0);
+      const toPar = gross - par;
+      text = `Thru ${scored.length} · ${toPar === 0 ? "E" : formatSigned(toPar, 0)} · ${gross}${putted.length ? ` · ${putts} putt${putts === 1 ? "" : "s"}` : ""}`;
+    }
+    lines.forEach((line) => { line.textContent = text; });
+  }
+
+  function syncQuickCardStates() {
+    if (!els.scorecardGrid || currentEntryMode !== "quick") return;
+    els.scorecardGrid.querySelectorAll(".quick-putts-row[data-hole]").forEach((row) => syncQuickPuttLimits(row.dataset.hole));
+    updateQuickRunLines();
+  }
+
+  // Quick-only taps, checked before the shared pill handler.
+  function handleQuickClick(event, stack) {
+    if (currentEntryMode !== "quick") return false;
+    if (event.target.closest("[data-quick-stay]")) {
+      event.preventDefault();
+      cancelQuickAdvance();
+      return true;
+    }
+    cancelQuickAdvance();
+    const intro = event.target.closest("[data-quick-intro-ok], [data-quick-intro-detailed]");
+    if (intro) {
+      event.preventDefault();
+      try { localStorage.setItem(QUICK_INTRO_KEY, "1"); } catch {}
+      if (intro.hasAttribute("data-quick-intro-detailed")) {
+        setEntryModeDefault("detailed");
+        setCurrentEntryMode("detailed");
+        showToast("Detailed entry is back. Switch any time in Profile.");
+      } else {
+        const box = stack.querySelector("[data-quick-intro]");
+        if (box) box.remove();
+      }
+      return true;
+    }
+    const more = event.target.closest("[data-quick-more]");
+    if (more) {
+      event.preventDefault();
+      const card = more.closest(".scorecard-card");
+      if (!card) return true;
+      const open = card.classList.toggle("quick-more-open");
+      more.setAttribute("aria-expanded", String(open));
+      more.textContent = open ? "Less" : "More: penalty, bunker, 1st putt, clubs, note";
+      return true;
+    }
+    const clubChip = event.target.closest("[data-quick-club]");
+    if (clubChip) {
+      event.preventDefault();
+      const holeNumber = clubChip.dataset.hole;
+      const club = clubChip.dataset.quickClub;
+      const clubs = getHoleClubs(holeNumber);
+      const current = clubs.find((c) => c !== "Putter") || "";
+      const rest = [...clubs];
+      if (current) rest.splice(rest.indexOf(current), 1);
+      setHoleClubs(holeNumber, current === club ? rest : [club, ...rest]);
+      roundTouched = true;
+      refreshQuickClubUi(holeNumber);
+      scheduleInProgressSave();
+      quickAfterTap(holeNumber, "club");
+      return true;
+    }
+    return false;
+  }
+
   function renderScorecardCardMode(course) {
+    const quick = currentEntryMode === "quick";
     const sections = getScorecardSections(course.holes);
     const sectionByHoleNumber = new Map();
     sections.forEach((section) => {
@@ -3331,6 +3655,7 @@
             <button type="button" class="card-step" data-card-nav="next" aria-label="Next hole">›</button>
           </div>
           <div class="card-headline">
+            ${quick ? `<div class="quick-run" data-quick-run aria-live="polite"></div>` : ""}
             <span class="card-hole-mark" data-hole="${hole.number}" hidden></span>
             <h3 class="card-hole-label">${escapeHtml(hole.label || `Hole ${hole.number}`)}</h3>
             <div class="card-hole-meta">
@@ -3340,6 +3665,7 @@
             </div>
             ${!isDeerwoodCourseId(course.id) && Array.isArray(hole.hazards) && hole.hazards.length ? `<ul class="hazard-chip-list hazard-chip-list-compact">${hole.hazards.map((h) => renderHazardChip(h)).join("")}</ul>` : ""}
           </div>
+          ${quick && index === 0 ? renderQuickIntro() : ""}
           <div class="card-hidden-inputs" hidden>
             ${scoreInputCell(hole)}
             ${puttsInputCell(hole)}
@@ -3350,9 +3676,9 @@
             ${penaltyInputCell(hole)}
             ${girInputCell(hole)}
           </div>
-          ${renderScorePills(hole)}${renderPuttsPills(hole)}
+          ${quick ? renderQuickBody(hole, course) : `${renderScorePills(hole)}${renderPuttsPills(hole)}`}
           <div class="card-extra">
-            ${cardFlowMode === "narrative" ? `
+            ${quick ? renderQuickMore(hole) : cardFlowMode === "narrative" ? `
               ${renderClubsHitPills(hole)}
               ${renderShotTracker(hole)}
               ${renderFairwayPills(hole)}
@@ -3399,7 +3725,8 @@
   // check still catches skipped holes. Disabled in edit mode, where exact
   // fidelity to the saved round matters.
   function prefillActiveCardPar() {
-    if (editingRoundId || viewMode !== "card") return;
+    // Quick never guesses: paging past an untouched hole records nothing.
+    if (editingRoundId || viewMode !== "card" || currentEntryMode === "quick") return;
     const activeCard = els.scorecardGrid.querySelector(".scorecard-card.active");
     if (!activeCard) return;
     const scoreInput = activeCard.querySelector(".score-input");
@@ -3425,7 +3752,9 @@
     const inCardMode = viewMode === "card";
     const hasCards = !!(els.scorecardGrid && els.scorecardGrid.querySelector(".scorecard-card"));
     const reviewOpen = !!(els.reviewSection && !els.reviewSection.hidden);
-    const visible = onRoundsTab && inCardMode && hasCards && !reviewOpen;
+    // Quick cards carry their own arrows and swipe; the floating tabs would
+    // sit on top of the score buttons.
+    const visible = onRoundsTab && inCardMode && hasCards && !reviewOpen && currentEntryMode !== "quick";
     document.body.classList.toggle("floating-card-nav-visible", visible);
     if (visible) {
       const activeIndex = getActiveCardIndex();
@@ -3436,6 +3765,7 @@
   }
 
   function setActiveCardIndex(index) {
+    cancelQuickAdvance();
     const stack = els.scorecardGrid.querySelector(".scorecard-cards");
     if (!stack) return;
     const cards = [...stack.querySelectorAll(".scorecard-card")];
@@ -3520,8 +3850,29 @@
       if (Number.isFinite(index) && index !== getActiveCardIndex()) setActiveCardIndex(index);
     });
 
+    // Quick: swipe between holes (horizontal, clearly not a scroll).
+    let swipeX = null;
+    let swipeY = null;
+    stack.addEventListener("touchstart", (event) => {
+      if (currentEntryMode !== "quick") return;
+      const t = event.changedTouches[0];
+      swipeX = t.clientX;
+      swipeY = t.clientY;
+    }, { passive: true });
+    stack.addEventListener("touchend", (event) => {
+      if (currentEntryMode !== "quick" || swipeX === null) return;
+      const t = event.changedTouches[0];
+      const dx = t.clientX - swipeX;
+      const dy = t.clientY - swipeY;
+      swipeX = null;
+      if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.8) {
+        setActiveCardIndex(getActiveCardIndex() + (dx < 0 ? 1 : -1));
+      }
+    }, { passive: true });
+
     stack.addEventListener("click", (event) => {
       roundTouched = true;
+      if (handleQuickClick(event, stack)) return;
       const positionButton = event.target.closest("[data-open-hole-picker]");
       if (positionButton) {
         event.preventDefault();
@@ -3642,6 +3993,14 @@
         const customField = row.querySelector(".card-pill-custom");
         if (customField) customField.value = "";
         syncPillActiveStateForRow(row);
+        if (currentEntryMode === "quick") {
+          if (inputClass === "score-input") {
+            const scoreInput = stack.querySelector(`.score-input[data-hole="${holeNumber}"]`);
+            if (scoreInput) delete scoreInput.dataset.autoScore;
+          }
+          quickAfterTap(holeNumber, inputClass);
+          return;
+        }
         // The Score row's active pill is driven by the score input value;
         // for OTHER pill rows, an entry implies a stroke total update.
         if (inputClass !== "score-input") {
@@ -3688,6 +4047,7 @@
         if (row) {
           row.outerHTML = renderClubsHitPills({ number: Number(holeNumber) });
         }
+        if (currentEntryMode === "quick") refreshQuickClubUi(holeNumber);
         scheduleInProgressSave();
         recalculateScoreForHole(holeNumber);
         return;
@@ -3769,6 +4129,8 @@
   // value sticks until the user clears it.
   function recalculateScoreForHole(holeKey) {
     if (!els.scorecardGrid) return;
+    // In Quick the Score tap is the score; clubs and putts never rewrite it.
+    if (currentEntryMode === "quick") return;
     const scoreInput = els.scorecardGrid.querySelector(`.score-input[data-hole="${holeKey}"]`);
     if (!scoreInput) return;
 
@@ -3844,7 +4206,9 @@
       // and putts auto-added Putter, which would weirdly suggest blaming
       // the putter for a penalty.
       const tee = getHoleClubs(hole).find((c) => c !== "Putter");
-      const fallback = bag.includes("Driver") ? "Driver" : (bag.find((c) => c !== "Putter") || "");
+      // Quick never guesses a club: no tee club tagged = the picker starts blank.
+      const fallback = currentEntryMode === "quick" ? ""
+        : bag.includes("Driver") ? "Driver" : (bag.find((c) => c !== "Putter") || "");
       const defaultClub = tee || fallback;
       const optionsHtml = clubsForHole(hole)
         .map((club) => `<option value="${escapeHtml(club)}">${escapeHtml(club)}</option>`)
@@ -4078,6 +4442,7 @@
     const missingScore = [];
     const missingPutts = [];
     const missingFirstPutt = [];
+    const quickMode = currentEntryMode === "quick";
     allHoles.forEach((hole) => {
       const hasScore = Number.isFinite(hole.score) && hole.score > 0;
       if (!hasScore) {
@@ -4094,13 +4459,19 @@
 
     els.completionCheck.hidden = false;
 
+    // Quick: a hole without putts saves as "not entered" and simply stays
+    // out of putting stats. Say so; don't block.
+    const quickPuttNote = quickMode && missingPutts.length
+      ? ` Putts entered on ${allHoles.length - missingScore.length - missingPutts.length} of ${allHoles.length - missingScore.length}; the rest save as not entered.`
+      : "";
+    if (quickMode) missingPutts.length = 0;
     if (!missingScore.length && !missingPutts.length) {
       els.completionCheck.innerHTML = `
         <div class="completion-banner completion-ok">
           <span class="completion-icon" aria-hidden="true">✓</span>
           <div>
             <strong>All ${allHoles.length} holes complete.</strong>
-            <span>Ready to save${missingFirstPutt.length ? ` (${missingFirstPutt.length} hole${missingFirstPutt.length === 1 ? "" : "s"} without first-putt distance)` : ""}.</span>
+            <span>Ready to save${!quickMode && missingFirstPutt.length ? ` (${missingFirstPutt.length} hole${missingFirstPutt.length === 1 ? "" : "s"} without first-putt distance)` : ""}.${quickPuttNote}</span>
           </div>
         </div>`;
       return;
@@ -4219,7 +4590,8 @@
         // fact updates the score; explicit score taps win.
         scoreInput.dataset.autoScore = String(values.score);
       }
-      if (puttsInput && values.putts !== "") puttsInput.value = values.putts;
+      // "" is a real value now (unknown in Quick); only skip a missing one.
+      if (puttsInput && values.putts != null) puttsInput.value = values.putts;
       if (fairwayInput && values.fairway && [...fairwayInput.options].some((option) => option.value === values.fairway)) {
         fairwayInput.value = values.fairway;
       }
@@ -4317,8 +4689,10 @@
     // means the user only flips this on the holes where sand was actually
     // a factor. Mirrors the Penalty input which defaults to 0 for the
     // same reason.
+    const quick = currentEntryMode === "quick";
     const options = [
-      `<option value="none" selected>No</option>`,
+      ...(quick ? [`<option value="" selected>—</option>`] : []),
+      `<option value="none"${quick ? "" : " selected"}>No</option>`,
       `<option value="fairway">Fairway</option>`,
       `<option value="greenside">Greenside</option>`,
       `<option value="both">Both</option>`
@@ -4452,6 +4826,7 @@
     const sgValue = sgTotal === null ? "--" : formatSigned(sgTotal);
     const diffValue = differential === null ? "--" : differential.toFixed(1);
 
+    if (currentEntryMode === "quick") updateQuickRunLines();
     els.roundLiveSummary.innerHTML = `
       <div class="live-summary-card"><span>${grossLabel}</span><strong>${grossValue}</strong></div>
       <div class="live-summary-card"><span>To par</span><strong>${toParValue}</strong></div>
@@ -10822,7 +11197,7 @@
     // Restore the entry mode this round was originally saved with so the
     // edited card layout matches what's on file. Legacy rounds (no
     // entryMode field) default to "detailed" via the shape normalizer.
-    setCurrentEntryMode(round.entryMode === "speed" ? "speed" : "detailed");
+    setCurrentEntryMode(ENTRY_MODES.includes(round.entryMode) ? round.entryMode : "detailed", { rerender: false });
 
     // Hydrate the optional reflection survey from the saved round (if any).
     resetPendingSurvey();
@@ -11253,23 +11628,45 @@
   // lives in the hidden inputs / pendingHole map, nothing already entered
   // is lost in the switch.
   function setEntryModeDefault(next) {
-    if (next !== "detailed" && next !== "speed") return;
+    if (!ENTRY_MODES.includes(next)) return;
     if (entryModeDefault === next) return;
     entryModeDefault = next;
     try { localStorage.setItem(ENTRY_MODE_DEFAULT_KEY, next); } catch {}
     syncEntryModeDefaultRadios();
   }
 
-  function setCurrentEntryMode(next) {
-    if (next !== "detailed" && next !== "speed") return;
+  function setCurrentEntryMode(next, { rerender = true } = {}) {
+    if (!ENTRY_MODES.includes(next)) return;
     if (currentEntryMode === next) return;
+    const prev = currentEntryMode;
     currentEntryMode = next;
     if (els.roundEntryMode && els.roundEntryMode.value !== next) {
       els.roundEntryMode.value = next;
       // Repaint the chip-style picker so the new selection is reflected.
       els.roundEntryMode.dispatchEvent(new Event("change", { bubbles: true }));
     }
+    // Speed <-> Detailed is CSS-only. Quick renders a different card, so a
+    // mid-round switch re-renders, carrying every entered value across.
+    const structural = (prev === "quick") !== (next === "quick");
+    if (rerender && structural && (roundStarted || editingRoundId) && els.scorecardGrid
+      && els.scorecardGrid.querySelector(".score-input[data-hole]")) {
+      const snapshot = captureScorecardSnapshot();
+      const index = getActiveCardIndex();
+      cancelQuickAdvance();
+      renderScorecard(getSelectedRoundCourse());
+      applyScorecardSnapshot(snapshot);
+      syncAllDerivedFlags();
+      if (viewMode === "card") {
+        syncAllPillActiveStates();
+        setActiveCardIndex(index);
+      }
+      updateRoundPreview();
+    }
     applyEntryModeToScorecard();
+    updateFloatingNavVisibility();
+    // The draft carries the mode; without a save a relaunch resumed the
+    // round in whatever mode it was last autosaved in.
+    if (rerender && roundStarted && !editingRoundId) scheduleInProgressSave();
   }
 
   function applyEntryModeToScorecard() {
@@ -11280,10 +11677,14 @@
   }
 
   function syncEntryModeDefaultRadios() {
+    if (els.entryModeQuickDefault) els.entryModeQuickDefault.checked = entryModeDefault === "quick";
     if (els.entryModeDetailedDefault) els.entryModeDetailedDefault.checked = entryModeDefault === "detailed";
     if (els.entryModeSpeedDefault) els.entryModeSpeedDefault.checked = entryModeDefault === "speed";
   }
   syncEntryModeDefaultRadios();
+  if (els.entryModeQuickDefault) els.entryModeQuickDefault.addEventListener("change", () => {
+    if (els.entryModeQuickDefault.checked) setEntryModeDefault("quick");
+  });
   if (els.entryModeDetailedDefault) els.entryModeDetailedDefault.addEventListener("change", () => {
     if (els.entryModeDetailedDefault.checked) setEntryModeDefault("detailed");
   });
