@@ -3496,9 +3496,9 @@
       <div class="card-pill-row quick-row quick-tee-row" data-pill-group="fairway-input" data-hole="${hole.number}">
         <span class="card-pill-label">Tee shot</span>
         <div class="card-pill-options quick-options">
-          <button type="button" class="pill quick-tee" data-pill-value="left" aria-label="Missed left"><span aria-hidden="true">◀</span> Left</button>
+          <button type="button" class="pill quick-tee" data-pill-value="left" aria-label="Missed left"><span aria-hidden="true">◀&#xFE0E;</span> Left</button>
           <button type="button" class="pill quick-tee quick-tee-hit" data-pill-value="hit" aria-label="Fairway hit"><span aria-hidden="true">●</span> Fairway</button>
-          <button type="button" class="pill quick-tee" data-pill-value="right" aria-label="Missed right">Right <span aria-hidden="true">▶</span></button>
+          <button type="button" class="pill quick-tee" data-pill-value="right" aria-label="Missed right">Right <span aria-hidden="true">▶&#xFE0E;</span></button>
         </div>
       </div>`;
     return `
@@ -9822,6 +9822,7 @@
     if (!els.missCostPanel) return;
     try {
       renderMissCostBody(rounds);
+      refreshOpenMissSheet();
     } catch (error) {
       console.warn("Miss cost failed", error);
       missResult = null;
@@ -9846,6 +9847,7 @@
     }
 
     const best = res.biggest;
+    const lead = res.earlyLeader;
     const famRounds = (bucket) => {
       const fam = res.families.find((f) => f.id === bucket.family);
       return fam ? fam.rounds : 0;
@@ -9854,7 +9856,13 @@
       ? `<section class="mc-hero" aria-labelledby="mcHeadline">
           <p class="mc-eyebrow">What your misses cost</p>
           <h2 id="mcHeadline" class="mc-headline">${escapeHtml(MC_HEADLINE_NOUN[best.id] || best.label)} cost you ${best.per18.toFixed(1)} strokes per 18.</h2>
-          <p class="mc-sub">${mcSigned(best.perMiss)} a miss vs ${escapeHtml(best.baselineLabel)} · ${best.freq18.toFixed(1)} per 18 holes · from ${snPlural(famRounds(best), "round")}</p>
+          <p class="mc-sub">${mcSigned(best.perMiss)} a miss vs ${escapeHtml(best.baselineLabel)} · happens ${best.freq18.toFixed(1)}× per 18 · ${snPlural(famRounds(best), "round")}</p>
+        </section>`
+      : lead
+      ? `<section class="mc-hero" aria-labelledby="mcHeadline">
+          <p class="mc-eyebrow">What your misses cost · early read</p>
+          <h2 id="mcHeadline" class="mc-headline">${escapeHtml(MC_HEADLINE_NOUN[lead.id] || lead.label)} look like your costliest miss.</h2>
+          <p class="mc-sub">About ${lead.per18.toFixed(1)} strokes per 18 (${mcSigned(lead.perMiss)} a miss, happens ${lead.freq18.toFixed(1)}× per 18) from ${snPlural(lead.matched, "hole")}; it firms up at ${MissCost.EARLY_SAMPLE}.</p>
         </section>`
       : `<section class="mc-hero" aria-labelledby="mcHeadline">
           <p class="mc-eyebrow">What your misses cost</p>
@@ -9869,16 +9877,24 @@
       let bar = "";
       if (kind === "costs") {
         value = `<strong>${b.per18.toFixed(1)}</strong><small>per 18</small>`;
-        sub = `${mcSigned(b.perMiss)} a miss · ${b.freq18.toFixed(1)} per 18 holes · ${snPlural(b.n, "hole")}`;
+        sub = `${mcSigned(b.perMiss)} a miss · happens ${b.freq18.toFixed(1)}× per 18 · ${snPlural(b.n, "hole")}${b.early ? ` <span class="mc-tag">early read</span>` : ""}`;
         bar = `<span class="mc-bar" aria-hidden="true"><span style="width:${Math.max(4, (b.per18 / max) * 100).toFixed(1)}%"></span></span>`;
       } else if (kind === "thin") {
-        value = `<small>${Math.min(b.matched, res.minSample)} of ${res.minSample}</small>`;
-        sub = b.matched < res.minSample
-          ? `${snPlural(b.n, "hole")} so far; needs ${res.minSample} to price`
-          : `needs ${res.minSample} ${escapeHtml(b.baselineLabel)} holes on the same par (has ${b.baseline})`;
+        // Say which side is short, with numbers that agree with each other.
+        if (b.matched < res.minSample) {
+          value = `<small>${b.matched} of ${res.minSample}</small>`;
+          sub = b.unmatched
+            ? `${b.matched} can be compared; ${b.unmatched} on a par with too few ${escapeHtml(b.baselineLabel)} holes`
+            : `${snPlural(b.n, "hole")} so far; needs ${res.minSample} to price`;
+        } else {
+          value = `<small>${b.baseline} of ${res.minSample} clean</small>`;
+          sub = `needs ${res.minSample} ${escapeHtml(b.baselineLabel)} holes on the same par (has ${b.baseline})`;
+        }
       } else {
         value = `<strong>0</strong><small>per 18</small>`;
-        sub = `you score as well as with ${escapeHtml(b.baselineLabel)} · ${snPlural(b.n, "hole")}`;
+        sub = b.perMiss > 0
+          ? `${mcSigned(b.perMiss)} a miss but rare (${b.freq18.toFixed(1)}× per 18) · ${snPlural(b.n, "hole")}`
+          : `you score as well as with ${escapeHtml(b.baselineLabel)} · ${snPlural(b.n, "hole")}`;
       }
       return `<li><button type="button" class="mc-row is-${kind}" data-mc-bucket="${escapeHtml(b.id)}">
         <span class="mc-mark" aria-hidden="true">${b.glyph}</span>
@@ -9891,14 +9907,14 @@
     const groups = [];
     if (res.ranked.length) groups.push(`<ol class="mc-list" aria-label="Misses ranked by strokes per 18">${res.ranked.map((b) => row(b, "costs")).join("")}</ol>`);
     if (res.thin.length) groups.push(`<h3 class="mc-group-h">Not enough yet</h3><ul class="mc-list">${res.thin.map((b) => row(b, "thin")).join("")}</ul>`);
-    if (res.free.length) groups.push(`<h3 class="mc-group-h">Costs you nothing</h3><ul class="mc-list">${res.free.map((b) => row(b, "free")).join("")}</ul>`);
+    if (res.free.length) groups.push(`<h3 class="mc-group-h">No cost so far</h3><ul class="mc-list">${res.free.map((b) => row(b, "free")).join("")}</ul>`);
 
     const missing = MissCost.missingData(res) || [];
     const logHints = { tee: "tee shots (Left / Fairway / Right)", sand: "sand (More › Bunker)", putting: "putts" };
     const hints = missing.map((id) => logHints[id]).filter(Boolean);
     const basis = [
-      `Each miss is compared with your clean holes on the same par: fairway hit, no sand, 1–2 putts, no penalty.`,
-      `${snPlural(res.rounds, "detail round")}${res.speedRounds ? `; ${snPlural(res.speedRounds, "speed round")} left out` : ""}; blank fields are skipped and penalties count where you recorded one.`
+      `Each miss is compared with your holes on the same par where it didn't happen: fairway hit, no sand, 1–2 putts, or no penalty. Under ${MissCost.EARLY_SAMPLE} holes it's an early read.`,
+      `${snPlural(res.rounds, "round")} with details${res.speedRounds ? `; ${snPlural(res.speedRounds, "score-only round")} left out` : ""}; blank fields are skipped and penalties count where you recorded one.`
     ];
     if (hints.length) basis.push(`Not logged yet: ${hints.join(", ")}.`);
 
@@ -9917,21 +9933,25 @@
     const noun = MC_HEADLINE_NOUN[b.id] || b.label;
     let lede;
     if (b.status === "costs") {
-      lede = `${escapeHtml(noun)} cost you <strong>${mcSigned(b.perMiss)} a miss</strong> compared with ${escapeHtml(b.baselineLabel)} on the same par. It happens ${b.freq18.toFixed(1)} times per 18 holes, so about <strong>${b.per18.toFixed(1)} strokes per 18</strong>.`;
+      lede = `${escapeHtml(noun)} cost you <strong>${mcSigned(b.perMiss)} a miss</strong> compared with ${escapeHtml(b.baselineLabel)} on the same par. It happens ${b.freq18.toFixed(1)} times per 18 holes, so about <strong>${b.per18.toFixed(1)} strokes per 18</strong>.${b.early ? ` <span class="mc-tag">early read</span> From ${snPlural(b.matched, "hole")} with the miss and ${b.baseline} without; it firms up at ${MissCost.EARLY_SAMPLE} a side.` : ""}`;
     } else if (b.status === "free") {
-      lede = `${escapeHtml(noun)} cost you nothing so far: you score ${b.perMiss < 0 ? `${Math.abs(b.perMiss).toFixed(1)} better` : "the same"} than with ${escapeHtml(b.baselineLabel)} on the same par.`;
+      lede = b.perMiss > 0
+        ? `${escapeHtml(noun)} cost you ${mcSigned(b.perMiss)} a miss, but happen only ${b.freq18.toFixed(1)} times per 18 holes, so it comes to less than 0.1 strokes a round so far.`
+        : `${escapeHtml(noun)} cost you nothing so far: you score ${b.perMiss < 0 ? `${Math.abs(b.perMiss).toFixed(1)} better` : "the same"} than with ${escapeHtml(b.baselineLabel)} on the same par.`;
     } else {
       lede = `${snPlural(b.n, "hole")} so far. A price shows after ${res.minSample} holes with this miss and ${res.minSample} ${escapeHtml(b.baselineLabel)} holes on the same par.`;
     }
     // Per-par comparison: two labelled bars (with the miss = solid, clean =
     // hatched) so the gap reads by length and pattern, never by colour.
     const maxAvg = Math.max(1, ...b.pars.map((p) => Math.max(p.missAvg || 0, p.cleanAvg || 0)));
-    const parRows = b.pars.map((p) => {
+    const parRows = b.status === "thin"
+      ? b.pars.map((p) => `<div class="mc-par is-thin"><div class="mc-par-head"><strong>Par ${p.par}</strong><span>${snPlural(p.misses, "hole")} with the miss · ${p.clean} without</span></div></div>`).join("")
+      : b.pars.map((p) => {
       const pct = (x) => (x == null ? 0 : Math.max(4, (x / maxAvg) * 100)).toFixed(1);
       return `<div class="mc-par">
-        <div class="mc-par-head"><strong>Par ${p.par}</strong><span>${p.diff == null ? "no clean holes to compare" : b.status === "thin" ? "too few to price" : `${mcSigned(p.diff)} a hole`}</span></div>
-        <div class="mc-par-bar"><span class="mc-par-label">With the miss</span><span class="mc-par-track"><span class="mc-par-fill is-miss" style="width:${pct(p.missAvg)}%"></span></span><span class="mc-par-num">${p.missAvg.toFixed(2)} <small>(${p.misses})</small></span></div>
-        <div class="mc-par-bar"><span class="mc-par-label">${escapeHtml(b.baselineLabel.charAt(0).toUpperCase() + b.baselineLabel.slice(1))}</span><span class="mc-par-track"><span class="mc-par-fill is-clean" style="width:${pct(p.cleanAvg)}%"></span></span><span class="mc-par-num">${p.cleanAvg == null ? "—" : p.cleanAvg.toFixed(2)} <small>(${p.clean})</small></span></div>
+        <div class="mc-par-head"><strong>Par ${p.par}</strong><span>${p.diff == null ? `too few ${escapeHtml(b.baselineLabel)} holes to compare` : `${mcSigned(p.diff)} a hole`}</span></div>
+        <div class="mc-par-bar"><span class="mc-par-label">With the miss</span><span class="mc-par-track"><span class="mc-par-fill is-miss" style="width:${pct(p.missAvg)}%"></span></span><span class="mc-par-num">${p.missAvg.toFixed(2)} <small>(${snPlural(p.misses, "hole")})</small></span></div>
+        <div class="mc-par-bar"><span class="mc-par-label">${escapeHtml(b.baselineLabel.charAt(0).toUpperCase() + b.baselineLabel.slice(1))}</span><span class="mc-par-track"><span class="mc-par-fill is-clean" style="width:${pct(p.cleanAvg)}%"></span></span><span class="mc-par-num">${p.cleanAvg == null ? "—" : p.cleanAvg.toFixed(2)} <small>(${snPlural(p.clean, "hole")})</small></span></div>
       </div>`;
     }).join("");
     const rows = b.holes.map((h) => {
@@ -9939,7 +9959,7 @@
       if (!round) return "";
       const course = physicalCourseName(round.courseId) || "";
       return `<button type="button" class="sn-row" data-sn-round="${escapeHtml(String(round.id))}">
-        <span class="sn-row-main"><strong>${escapeHtml(snDate(h.date))} · ${escapeHtml(snHole(h.label))}</strong><small>${escapeHtml(course)} · par ${h.par}</small></span>
+        <span class="sn-row-main"><strong>${escapeHtml(snDate(h.date))} · ${escapeHtml(snHole(h.label))}</strong><small>${escapeHtml([course, `par ${h.par}`].filter(Boolean).join(" · "))}</small></span>
         <span class="sn-row-value">${renderScoreMark(h.score, h.par)}</span>
         <span class="sn-chev" aria-hidden="true">›</span>
       </button>`;
@@ -9951,9 +9971,24 @@
       <div class="sn-rows">${rows}</div>`;
   }
 
+  let missSheetBucketId = null;
+
+  // renderMissCost recomputes the buckets; an open sheet re-renders from the
+  // new numbers, or closes if its miss is gone (e.g. a round was deleted).
+  function refreshOpenMissSheet() {
+    if (!els.missSheetOverlay || els.missSheetOverlay.hidden || !missSheetBucketId) return;
+    const b = missBucketById(missSheetBucketId);
+    if (!b) { closeMissSheet({ restoreFocus: false }); return; }
+    if (els.missSheetTitle) els.missSheetTitle.textContent = b.label;
+    const keep = els.missSheetBody.scrollTop;
+    els.missSheetBody.innerHTML = missSheetHtml(b);
+    els.missSheetBody.scrollTop = keep;
+  }
+
   function openMissSheet(id, trigger) {
     const b = missBucketById(id);
     if (!b || !els.missSheetOverlay || !els.missSheetBody) return;
+    missSheetBucketId = id;
     if (els.missSheetTitle) els.missSheetTitle.textContent = b.label;
     els.missSheetBody.innerHTML = missSheetHtml(b);
     els.missSheetBody.scrollTop = 0;
@@ -10145,6 +10180,20 @@
       const parsed = raw ? JSON.parse(raw) : null;
       return (parsed && typeof parsed === "object") ? parsed : {};
     } catch { return {}; }
+  })();
+
+  // One time only (2026-10-16): someone who had already picked a Records or
+  // Clubs sub-chip would never see Season or Miss cost, the new defaults.
+  // Land them there once; after that their own choice sticks again.
+  (() => {
+    const NEW_VIEWS_KEY = "fairwayLedger.newViews.2026-10-16";
+    try {
+      if (localStorage.getItem(NEW_VIEWS_KEY)) return;
+      activeHomeSubsections.records = "season";
+      activeHomeSubsections.clubs = "miss-cost";
+      localStorage.setItem(HOME_SUBSECTIONS_KEY, JSON.stringify(activeHomeSubsections));
+      localStorage.setItem(NEW_VIEWS_KEY, "1");
+    } catch {}
   })();
 
   function getActiveSubsection(section) {

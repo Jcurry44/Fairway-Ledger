@@ -9566,3 +9566,16 @@ body:has(#missSheetOverlay:not([hidden])) { overflow: hidden; }
 .mc-par-fill.is-clean { background: repeating-linear-gradient(135deg, #7e8f82 0 3px, #cfd4c4 3px 6px); }
 .mc-par-num { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .mc-par-num small { font-weight: 600; color: var(--muted); }
+.mc-tag {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 0 6px;
+  border: 1px dashed var(--muted);
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.mc-par.is-thin { padding: 7px 10px; }
