@@ -8637,3 +8637,18 @@ summary:focus-visible {
 }
 .storage-banner .storage-banner-free { background: transparent; color: #fff; }
 body.storage-blocked { padding-top: 120px; }
+
+/* Honest-data basis lines (2026-10-16): quiet, never alarming. */
+.basis-note {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.metric-basis {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+.metric-basis[hidden] { display: none; }

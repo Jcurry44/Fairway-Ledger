@@ -282,3 +282,14 @@ test("ROUND_DEFAULTS is frozen", () => {
   assert.equal(Object.isFrozen(S.ROUND_DEFAULTS), true);
   assert.equal(Object.isFrozen(S.ROUND_DEFAULTS.holes), true);
 });
+
+test("honest data: makeHole keeps putts null and normalizeRound keeps entryMode quick", () => {
+  const S = require("../lib/shapes.js");
+  const hole = S.makeHole({ number: 1, par: 4, score: 5, putts: null });
+  assert.equal(hole.putts, null);
+  const round = S.normalizeRound({ id: "r1", date: "2026-10-16", courseId: "x", entryMode: "quick", holes: [hole] });
+  assert.equal(round.entryMode, "quick");
+  assert.equal(round.holes[0].putts, null);
+  const roundTrip = S.normalizeRound(JSON.parse(JSON.stringify(round)));
+  assert.equal(roundTrip.holes[0].putts, null);
+});

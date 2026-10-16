@@ -157,6 +157,65 @@ test("roundTotals: GIR and FIR counts (par 3s excluded from fairways)", () => {
   assert.equal(t.firTotal, 2); // par 3 excluded
 });
 
+test("roundTotals: a blank fairway is not entered, not a miss", () => {
+  const round = {
+    holes: [
+      { par: 4, score: 4, putts: 2, gir: true, fairway: "hit" },
+      { par: 4, score: 5, putts: 2, gir: false, fairway: "" },
+      { par: 5, score: 5, putts: 2, gir: true, fairway: "right" }
+    ]
+  };
+  const t = G.roundTotals(round);
+  assert.equal(t.firMade, 1);
+  assert.equal(t.firTotal, 2);
+});
+
+test("roundTotals: null putts are unknown, not zero, and drop out of GIR", () => {
+  const round = {
+    holes: [
+      { par: 4, score: 4, putts: 2, gir: true, fairway: "hit" },
+      { par: 4, score: 4, putts: null, gir: false, fairway: "" },
+      { par: 3, score: 3, putts: 1, gir: true, fairway: "na" }
+    ]
+  };
+  const t = G.roundTotals(round);
+  assert.equal(t.putts, 3);
+  assert.equal(t.puttsKnown, 2);
+  assert.equal(t.girMade, 2);
+  assert.equal(t.girTotal, 2);
+  assert.equal(t.holeCount, 3);
+});
+
+test("roundTotals: speed rounds carry no putts/GIR/FIR (score only)", () => {
+  const round = {
+    entryMode: "speed",
+    holes: [
+      { par: 4, score: 5, putts: 2, gir: false, fairway: "hit" },
+      { par: 3, score: 3, putts: 2, gir: true, fairway: "na" }
+    ]
+  };
+  const t = G.roundTotals(round);
+  assert.equal(t.gross, 8);
+  assert.equal(t.putts, 0);
+  assert.equal(t.puttsKnown, 0);
+  assert.equal(t.girTotal, 0);
+  assert.equal(t.firTotal, 0);
+});
+
+test("detail helpers: isDetailRound / puttsKnown / girKnown / fairwayKnown", () => {
+  assert.equal(G.isDetailRound({ entryMode: "detailed" }), true);
+  assert.equal(G.isDetailRound({ entryMode: "quick" }), true);
+  assert.equal(G.isDetailRound({}), true);
+  assert.equal(G.isDetailRound({ entryMode: "speed" }), false);
+  assert.equal(G.puttsKnown({ putts: 0 }), true);
+  assert.equal(G.puttsKnown({ putts: null }), false);
+  assert.equal(G.girKnown({ putts: 2, score: 4 }), true);
+  assert.equal(G.girKnown({ putts: 2, score: null }), false);
+  assert.equal(G.fairwayKnown({ par: 4, fairway: "left" }), true);
+  assert.equal(G.fairwayKnown({ par: 4, fairway: "" }), false);
+  assert.equal(G.fairwayKnown({ par: 3, fairway: "hit" }), false);
+});
+
 // ---- scoreMarkClass ------------------------------------------------------
 
 test("scoreMarkClass: each scoring tier", () => {

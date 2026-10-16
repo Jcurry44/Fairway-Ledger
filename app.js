@@ -55,6 +55,10 @@
     holeStrokesGained,
     roundStrokesGained,
     roundTotals,
+    isDetailRound,
+    puttsKnown,
+    girKnown,
+    fairwayKnown,
     scoreMarkClass,
     derivedGir,
     isDeerwoodCourseId,
@@ -610,6 +614,7 @@
     metricBestRound: document.getElementById("metricBestRound"),
     metricBestRoundCard: document.getElementById("metricBestRoundCard"),
     metricGir: document.getElementById("metricGir"),
+    metricGirBasis: document.getElementById("metricGirBasis"),
     metricSg: document.getElementById("metricSg"),
     metricHandicap: document.getElementById("metricHandicap"),
     homeInsights: document.getElementById("homeInsights"),
@@ -4417,10 +4422,14 @@
     const complete = entered.length === allHoles.length;
     const gross = committed.reduce((sum, hole) => sum + hole.score, 0);
     const par = committed.reduce((sum, hole) => sum + hole.par, 0);
-    const putts = committed.reduce((sum, hole) => sum + hole.putts, 0);
+    // Speed mode logs score only: its hidden putts are placeholders.
+    const detailLive = currentEntryMode !== "speed";
+    const puttHoles = detailLive ? committed.filter(puttsKnown) : [];
+    const putts = puttHoles.reduce((sum, hole) => sum + hole.putts, 0);
     const penalties = committed.reduce((sum, hole) => sum + hole.penalties, 0);
-    const girMade = committed.filter((hole) => hole.gir).length;
-    const fairwayHoles = committed.filter((hole) => hole.fairway && hole.fairway !== "na");
+    const girHoles = detailLive ? committed.filter(girKnown) : [];
+    const girMade = girHoles.filter((hole) => hole.gir).length;
+    const fairwayHoles = detailLive ? committed.filter(fairwayKnown) : [];
     const fairwaysHit = fairwayHoles.filter((hole) => hole.fairway === "hit").length;
     // Differential is a round-level number that only makes sense once every
     // hole is in — keep gating on `entered` so it appears the moment the
@@ -4430,15 +4439,15 @@
     const throughSuffix = committed.length ? (complete ? "" : ` | thru ${committed.length}/${allHoles.length}`) : "";
 
     els.roundPreview.textContent = committed.length
-      ? `${gross} (${formatSigned(gross - par, 0)}) | ${putts} putts${throughSuffix}`
+      ? `${gross} (${formatSigned(gross - par, 0)})${puttHoles.length ? ` | ${putts} putts` : ""}${throughSuffix}`
       : "--";
 
     const grossLabel = !committed.length ? "Gross" : complete ? "Gross" : `Gross (thru ${committed.length})`;
     const grossValue = committed.length ? gross : "--";
     const toParValue = committed.length ? formatSigned(gross - par, 0) : "--";
-    const puttsValue = committed.length ? putts : "--";
+    const puttsValue = puttHoles.length ? putts : "--";
     const firValue = fairwayHoles.length ? percentage(fairwaysHit, fairwayHoles.length) : "--";
-    const girValue = girMade ? percentage(girMade, committed.length) : "--";
+    const girValue = girHoles.length ? percentage(girMade, girHoles.length) : "--";
     const penValue = committed.length ? penalties : "--";
     const sgValue = sgTotal === null ? "--" : formatSigned(sgTotal);
     const diffValue = differential === null ? "--" : differential.toFixed(1);
@@ -4468,7 +4477,10 @@
       const fringePuttsInput = els.scorecardGrid.querySelector(`.fringe-putts-input[data-hole="${holeNumber}"]`);
       const scoreRaw = scoreInput.value.trim();
       const scoreValue = scoreRaw === "" ? null : Number(scoreRaw);
-      const puttsValue = Number(puttsInput.value);
+      // An empty putts input is "not entered" (Quick mode never seeds a
+      // guess), not a chip-in: keep it null instead of Number("") = 0.
+      const puttsRaw = puttsInput.value.trim();
+      const puttsValue = puttsRaw === "" ? null : Number(puttsRaw);
       const penaltyValue = Number(penaltyInput.value);
       const firstPuttRaw = firstPuttInput ? firstPuttInput.value.trim() : "";
       const firstPuttValue = firstPuttRaw === "" ? null : Number(firstPuttRaw);
@@ -4492,7 +4504,7 @@
         yards: Number(scoreInput.dataset.yards || 0),
         hcp: Number(scoreInput.dataset.hcp || 0) || null,
         score: scoreValue,
-        putts: Number.isFinite(puttsValue) ? puttsValue : 0,
+        putts: Number.isFinite(puttsValue) ? puttsValue : null,
         fairway: fairwayInput.value,
         gir: girInput.checked,
         penalties: Number.isFinite(penaltyValue) ? penaltyValue : 0,
@@ -4562,6 +4574,11 @@
       }
     }
     els.metricGir.textContent = percentage(girMade, girTotal);
+    if (els.metricGirBasis) {
+      const girRounds = totals.filter((t) => t.girTotal > 0).length;
+      els.metricGirBasis.hidden = !rounds.length || girRounds >= rounds.length;
+      els.metricGirBasis.textContent = `from ${girRounds} of ${rounds.length} rounds`;
+    }
     els.metricSg.textContent = Number.isFinite(avgSg) ? formatSigned(avgSg) : "--";
     // Handicap tile moved into the hero stat — the element no longer exists
     // in the metrics grid, but keep the guard in case a future layout
@@ -4955,7 +4972,7 @@
           score: hole.score,
           par: hole.par,
           toPar: hole.score - hole.par,
-          putts: Number.isFinite(hole.putts) ? hole.putts : null,
+          putts: isDetailRound(round) && puttsKnown(hole) ? hole.putts : null,
           gir: !!hole.gir,
           fairway: hole.fairway || "na",
           penalties: Number(hole.penalties) || 0,
@@ -5909,7 +5926,7 @@
           date: round.date,
           score: hole.score,
           par: hole.par,
-          putts: Number.isFinite(hole.putts) ? hole.putts : null,
+          putts: isDetailRound(round) && puttsKnown(hole) ? hole.putts : null,
           gir: !!hole.gir,
           fairway: hole.fairway || "",
           penalties: Number.isFinite(hole.penalties) ? hole.penalties : 0,
@@ -6123,9 +6140,10 @@
       threeJacks: 0
     }));
     rounds.forEach((round) => {
+      if (!isDetailRound(round)) return;
       round.holes.forEach((hole) => {
         if (!Number.isFinite(hole.firstPuttDistance) || hole.firstPuttDistance < 0) return;
-        if (!Number.isFinite(hole.putts)) return;
+        if (!puttsKnown(hole)) return;
         const bucket = buckets.find((b) => hole.firstPuttDistance >= b.min && hole.firstPuttDistance < b.max);
         if (!bucket) return;
         bucket.attempts += 1;
@@ -6136,6 +6154,17 @@
     const totalAttempts = buckets.reduce((sum, b) => sum + b.attempts, 0);
     return { buckets, totalAttempts };
   }
+
+  // The visible honesty signal: when a stat rests on only some rounds (speed
+  // rounds log score only; Quick leaves untouched fields unknown), say so.
+  function basisNote(rounds, hasData, what) {
+    const total = Array.isArray(rounds) ? rounds.length : 0;
+    if (!total) return "";
+    const known = rounds.filter((round) => isDetailRound(round) && hasData(round)).length;
+    if (known >= total) return "";
+    return `<p class="basis-note">From ${known} of ${total} round${total === 1 ? "" : "s"}${what ? ` ${escapeHtml(what)}` : ""}.</p>`;
+  }
+  const roundHasPutts = (round) => Array.isArray(round.holes) && round.holes.some(puttsKnown);
 
   function renderPuttingPanel(rounds) {
     if (!els.puttingPanel) return;
@@ -6169,7 +6198,8 @@
           <div class="putting-row-meta">${escapeHtml(meta)}</div>
         </div>`;
     }).join("");
-    els.puttingPanel.innerHTML = headline + `<div class="putting-rows">${rows}</div>`;
+    els.puttingPanel.innerHTML = headline + `<div class="putting-rows">${rows}</div>`
+      + basisNote(rounds, (r) => r.holes.some((h) => puttsKnown(h) && Number.isFinite(h.firstPuttDistance)), "with first-putt distances");
   }
 
   // Scrambling = saves from off the green (missed GIR, but scored par or
@@ -6188,9 +6218,10 @@
     let sandSaveAttempts = 0;
     let sandSaves = 0;
     rounds.forEach((round) => {
-      if (!Array.isArray(round.holes)) return;
+      if (!Array.isArray(round.holes) || !isDetailRound(round)) return;
       round.holes.forEach((hole) => {
         if (!Number.isFinite(hole.score) || hole.score <= 0) return;
+        if (!girKnown(hole)) return;
         totalHoles += 1;
         const toPar = hole.score - hole.par;
         const isGreensideBunker = hole.bunker === "greenside" || hole.bunker === "both";
@@ -6243,7 +6274,7 @@
     const bunkerLine = stats.anyBunkerHoles > 0
       ? `<strong>${fmtPct(stats.bunkerFreqPct)}</strong><span>${stats.anyBunkerHoles} of ${stats.totalHoles} holes found sand · ${stats.fairwayBunkerHoles} fairway, ${stats.greensideBunkerHoles} greenside${stats.bothBunkerHoles ? `, ${stats.bothBunkerHoles} both` : ""}</span>`
       : `<strong class="scrambling-muted">—</strong><span>No bunker data logged yet.</span>`;
-    els.scramblingPanel.innerHTML = `
+    els.scramblingPanel.innerHTML = basisNote(rounds, roundHasPutts, "with putts entered") + `
       <div class="scrambling-rows">
         <div class="scrambling-row">
           <div class="scrambling-row-label">Scrambling</div>
@@ -6645,6 +6676,7 @@
   function computeTeeClubPerformance(rounds, parFilter = null) {
     const grouped = new Map();
     rounds.forEach((round) => {
+      if (!isDetailRound(round)) return;
       round.holes.forEach((hole) => {
         if (!Number.isFinite(hole.score) || hole.score <= 0) return;
         if (parFilter !== null && hole.par !== parFilter) return;
@@ -6865,6 +6897,7 @@
 
     els.teeClubPanel.innerHTML = `
       <p class="tee-club-total">${total} tee shot${total === 1 ? "" : "s"} tagged across ${allData.length} club${allData.length === 1 ? "" : "s"}.</p>
+      ${basisNote(rounds, (r) => r.holes.some((h) => Array.isArray(h.clubsHit) && h.clubsHit.length), "with tee clubs tagged")}
       ${sectionHtml("Par 3s", par3Data)}
       ${sectionHtml("Par 4s", par4Data)}
       ${sectionHtml("Par 5s", par5Data)}
@@ -7301,9 +7334,11 @@
   // paragraph stays a tight 2-3 sentences.
   function buildNarrativeStory(round, valid, allRounds) {
     const lines = [];
+    // Speed rounds logged score only; their putts/GIR/clubs are guesses.
+    if (!isDetailRound(round)) return lines;
 
     // Tee game — fairway rate.
-    const fairwayHoles = valid.filter((h) => h.fairway && h.fairway !== "na");
+    const fairwayHoles = valid.filter(fairwayKnown);
     if (fairwayHoles.length >= 4) {
       const hit = fairwayHoles.filter((h) => h.fairway === "hit").length;
       const rate = hit / fairwayHoles.length;
@@ -7324,10 +7359,11 @@
     }
 
     // GIR — iron play.
-    const girRate = valid.filter((h) => h.gir).length / valid.length;
-    const girMade = valid.filter((h) => h.gir).length;
-    if (girRate >= 0.45) lines.push({ priority: girRate, text: `Iron play held up — ${girMade}/${valid.length} greens in regulation` });
-    else if (girRate <= 0.15 && valid.length >= 9) lines.push({ priority: 1 - girRate, text: `Approach play was thin (${girMade}/${valid.length} GIRs)` });
+    const girHoles = valid.filter(girKnown);
+    const girMade = girHoles.filter((h) => h.gir).length;
+    const girRate = girHoles.length ? girMade / girHoles.length : 0;
+    if (girHoles.length >= 6 && girRate >= 0.45) lines.push({ priority: girRate, text: `Iron play held up — ${girMade}/${girHoles.length} greens in regulation` });
+    else if (girHoles.length >= 9 && girRate <= 0.15) lines.push({ priority: 1 - girRate, text: `Approach play was thin (${girMade}/${girHoles.length} GIRs)` });
 
     // Scrambling.
     const missedGir = valid.filter((h) => !h.gir);
@@ -7348,7 +7384,7 @@
     }
 
     // Putting.
-    const puttHoles = valid.filter((h) => Number.isFinite(h.putts) && h.putts > 0);
+    const puttHoles = valid.filter((h) => puttsKnown(h) && h.putts > 0);
     if (puttHoles.length >= 9) {
       const totalPutts = puttHoles.reduce((s, h) => s + h.putts, 0);
       const avg = totalPutts / puttHoles.length;
@@ -7562,7 +7598,7 @@
     const totals = courseRounds.map(roundTotals);
     const avgGross = average(totals.map((entry) => entry.gross));
     const avgToPar = average(totals.map((entry) => entry.toPar));
-    const avgPutts = average(totals.map((entry) => entry.putts));
+    const avgPutts = average(totals.filter((entry) => entry.puttsKnown > 0 && entry.puttsKnown === entry.holeCount).map((entry) => entry.putts));
 
     const allTotals = state.rounds.map(roundTotals);
     const overallAvgToPar = average(allTotals.map((entry) => entry.toPar));
@@ -8000,7 +8036,7 @@
     ).length, "max");
     if (b && b.value > 0) trophy("most-pars", "Most pars-or-better (18-hole round)", String(b.value), b.round);
 
-    b = pickBest(has18, (r) => { const t = roundTotals(r); return t.putts > 0 ? t.putts : null; }, "min");
+    b = pickBest(has18, (r) => { const t = roundTotals(r); return t.putts > 0 && t.puttsKnown === r.holes.length ? t.putts : null; }, "min");
     if (b) trophy("low-putts", "Lowest putts (18 holes)", String(b.value), b.round);
 
     b = pickBest(has18, (r) => { const t = roundTotals(r); return t.firTotal > 0 ? t.firMade : null; }, "max");
@@ -8009,7 +8045,7 @@
       trophy("most-firs", "Most fairways (18-hole round)", `${b.value} / ${t.firTotal}`, b.round);
     }
 
-    b = pickBest(has18, (r) => r.holes.filter((h) => h.gir).length, "max");
+    b = pickBest(has18, (r) => { const t = roundTotals(r); return t.girTotal === r.holes.length ? t.girMade : null; }, "max");
     if (b && b.value > 0) trophy("most-girs", "Most GIR (18-hole round)", `${b.value} / ${b.round.holes.length}`, b.round);
 
     // Best 3-hole stretch is hole-level, fine to mix 9 and 18.
@@ -8054,28 +8090,30 @@
         hole: h,
         isPar: Number.isFinite(h.par) && h.score <= h.par,
         isBirdie: Number.isFinite(h.par) && h.score <= h.par - 1,
+        puttsKnown: isDetailRound(r) && puttsKnown(h),
         isNo3Putt: !(Number.isFinite(h.putts) && h.putts >= 3)
       });
     }));
 
-    function longestRun(predicate, id, label) {
+    function longestRun(predicate, id, label, pool = events) {
       let bestRun = 0;
       let bestEnd = null;
       let curr = 0;
-      events.forEach((e, idx) => {
+      pool.forEach((e, idx) => {
         if (predicate(e)) {
           curr++;
           if (curr > bestRun) { bestRun = curr; bestEnd = idx; }
         } else { curr = 0; }
       });
       if (bestRun >= 2 && bestEnd != null) {
-        const endRound = events[bestEnd].round;
+        const endRound = pool[bestEnd].round;
         trophy(id, label, `${bestRun}`, endRound, `ended ${fmtDate(endRound.date)}`);
       }
     }
     longestRun((e) => e.isPar, "streak-pars", "Longest pars-or-better streak");
     longestRun((e) => e.isBirdie, "streak-birdies", "Longest birdies streak");
-    longestRun((e) => e.isNo3Putt, "streak-no3putt", "Longest no-3-putt streak");
+    // Holes without entered putts neither extend nor break the streak.
+    longestRun((e) => e.isNo3Putt, "streak-no3putt", "Longest no-3-putt streak", events.filter((e) => e.puttsKnown));
 
     let aceCount = 0;
     let lastAceRound = null;
@@ -10690,7 +10728,7 @@
         <button class="brief-toggle" type="button" aria-expanded="${collapsed ? "false" : "true"}">${collapsed ? "Show" : "Hide"}</button>
       </div>
       <div class="brief-body" ${collapsed ? "hidden" : ""}>
-        <p class="brief-summary"><strong>${brief.roundCount}</strong> round${brief.roundCount === 1 ? "" : "s"} here, averaging <strong>${brief.avgGross.toFixed(1)}</strong> (${formatSigned(brief.avgToPar)}) with <strong>${brief.avgPutts.toFixed(1)}</strong> putts — ${deltaText}.</p>
+        <p class="brief-summary"><strong>${brief.roundCount}</strong> round${brief.roundCount === 1 ? "" : "s"} here, averaging <strong>${brief.avgGross.toFixed(1)}</strong> (${formatSigned(brief.avgToPar)})${Number.isFinite(brief.avgPutts) ? ` with <strong>${brief.avgPutts.toFixed(1)}</strong> putts` : ""} — ${deltaText}.</p>
         <div class="brief-grid">
           <div class="brief-block">
             <p class="brief-block-title">Recent rounds</p>
