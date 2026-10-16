@@ -8,7 +8,7 @@ Last updated: 2026-10-16 (revamp wave 1 — see below)
 
 ---
 
-## 2026-10-16 — Revamp wave 1 (branch `ledger-revamp-2026-10-16`, NOT pushed)
+## 2026-10-16 — Revamp wave 1 (LIVE: main `9266315`, deployed 2026-10-16a with Joe's go)
 
 Joe: "make it something I want to use again — easier logging that still gives
 good analytics, better UI/UX, fun things that keep me coming back." Full idea
@@ -25,8 +25,9 @@ list with verdicts: `docs/IDEAS-2026-10-16.md`. Shipped on the branch:
 5. The 19th Hole payoff after every save + Records › Eclectic board (lib/eclectic.js).
 6. Ghost match vs your best round here, pace, hole memory line on the Quick card.
 
-Deploy: ASSET_VERSION / busters 2026-10-16a. Needs Joe's go before pushing (wife +
-dad get Quick as their default unless they chose a mode).
+Deploy: ASSET_VERSION / busters 2026-10-16a, live-verified (sw.js, app.js, eclectic.js
+200; no console errors). Each phone needs one online open to pick up the new SW. Wife +
+dad get Quick as their default unless they chose a mode in Profile.
 
 **Wave 2 (in order):** Season Story (timely — WNY season ends in weeks), Miss Cost
 map, One Thing focus (port Haven's engine), "vs you" baseline for the Home SG tile,
