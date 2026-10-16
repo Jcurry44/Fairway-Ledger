@@ -28,10 +28,14 @@ GO WITH FIXES, final look = GO WITH RIDE-ALONGS, all applied. Each phone needs o
 - Builds only while Records › Season is on screen (cached per year): the story
   replays every round, ~190 ms at 300 rounds on a desktop CPU.
 
-**Found, not fixed (separate follow-up):** a 9-hole round on an 18-hole non-Deerwood
-course keeps the 18-hole course id, and lib/golf-math.js rates it against the 18-hole
-Course Rating (differential ≈ −21), dragging the index down in Trends › Handicap and
-the Season's index alike.
+**Handicap fix (branch `ledger-hcp9-2026-10-16`, e5fb3a0, deploy 2026-10-16c, NOT live yet):**
+a 9-hole round on an 18-hole non-Deerwood course kept the 18-hole course id, so
+lib/golf-math.js scored it against the 18-hole Course Rating (a 44 vs 71.2 = −22).
+Two ordinary nines took a 9.9 index to 0.0 (Trends › Handicap, the live in-round
+estimate and the Season index), and "Next course handicap" for a front nine read 35.
+Now a 45+ rating is an 18-hole rating (or `course.ratedHoles`), a nine uses half of it
+with the same Slope, and the nine's course handicap halves the index: 10.4 and 5.
+Golf Haven vendors golf-math and still has the old formula (separate app).
 
 ---
 
