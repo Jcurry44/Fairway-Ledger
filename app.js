@@ -3347,6 +3347,99 @@
     return `+${d}`;
   }
 
+  // History for the card being played: a one-line memory per physical hole
+  // and a "ghost" = your best full round on these exact holes. Built once per
+  // render from saved rounds (the round being edited is left out).
+  let quickContext = { memory: new Map(), avg: new Map(), ghost: null };
+
+  function buildQuickContext(course) {
+    const ctx = { memory: new Map(), avg: new Map(), ghost: null };
+    if (!course || !Array.isArray(course.holes)) return ctx;
+    const rounds = (state.rounds || []).filter((r) => r && r.id !== editingRoundId && Array.isArray(r.holes));
+    const ids = course.holes.map((hole) => physicalHoleId(course.id, hole));
+    const wanted = new Set(ids);
+    const stats = new Map();
+    rounds.forEach((round) => {
+      round.holes.forEach((h) => {
+        if (!Number.isFinite(h.score) || h.score <= 0) return;
+        const id = physicalHoleId(round.courseId, h);
+        if (!wanted.has(id)) return;
+        let st = stats.get(id);
+        if (!st) { st = { n: 0, sum: 0, best: Infinity, fw: 0, left: 0, right: 0 }; stats.set(id, st); }
+        st.n += 1;
+        st.sum += h.score;
+        st.best = Math.min(st.best, h.score);
+        if (isDetailRound(round) && fairwayKnown(h)) {
+          st.fw += 1;
+          if (h.fairway === "left") st.left += 1;
+          if (h.fairway === "right") st.right += 1;
+        }
+      });
+    });
+    course.holes.forEach((hole, i) => {
+      const st = stats.get(ids[i]);
+      if (!st) return;
+      const avg = st.sum / st.n;
+      ctx.avg.set(hole.number, avg);
+      if (st.n < 2) return;
+      const bits = [`avg ${avg.toFixed(1)}`, `best ${st.best}`];
+      if (st.fw >= 3) {
+        const side = st.right >= st.left ? "right" : "left";
+        const misses = Math.max(st.left, st.right);
+        if (misses / st.fw >= 0.5) bits.push(`misses ${side} ${misses} of ${st.fw}`);
+      }
+      ctx.memory.set(hole.number, `${bits.join(" · ")} · ${st.n} plays`);
+    });
+    // Ghost: the lowest full round that played every one of these holes.
+    let ghost = null;
+    rounds.forEach((round) => {
+      if (round.holes.length !== course.holes.length) return;
+      const byId = new Map();
+      round.holes.forEach((h) => {
+        if (Number.isFinite(h.score) && h.score > 0) byId.set(physicalHoleId(round.courseId, h), h.score);
+      });
+      if (!ids.every((id) => byId.has(id))) return;
+      const gross = ids.reduce((sum, id) => sum + byId.get(id), 0);
+      if (!ghost || gross < ghost.gross) ghost = { gross, date: round.date, byNumber: new Map(course.holes.map((hole, i) => [hole.number, byId.get(ids[i])])) };
+    });
+    ctx.ghost = ghost;
+    return ctx;
+  }
+
+  function quickMemoryLine(hole) {
+    const text = quickContext.memory.get(hole.number);
+    return text ? `<p class="quick-memory">${escapeHtml(text)}</p>` : "";
+  }
+
+  // Match play against the ghost over the holes scored so far, plus a pace:
+  // gross so far + your average on each remaining hole (par when unplayed).
+  function quickGhostLine(holes) {
+    const ghost = quickContext.ghost;
+    const scored = holes.filter((h) => Number.isFinite(h.score) && h.score > 0);
+    if (!scored.length) return ghost ? `Ghost to beat: your ${ghost.gross} from ${fmtShortDate(ghost.date)}` : "";
+    const gross = scored.reduce((sum, h) => sum + h.score, 0);
+    const remaining = holes.filter((h) => !(Number.isFinite(h.score) && h.score > 0));
+    const pace = Math.round(gross + remaining.reduce((sum, h) => sum + (quickContext.avg.get(h.number) || h.par), 0));
+    const bits = [];
+    if (ghost) {
+      let margin = 0;
+      scored.forEach((h) => {
+        const g = ghost.byNumber.get(h.number);
+        if (!Number.isFinite(g)) return;
+        if (h.score < g) margin += 1;
+        else if (h.score > g) margin -= 1;
+      });
+      const status = margin === 0 ? "all square" : margin > 0 ? `${margin} UP` : `${-margin} DN`;
+      bits.push(`vs your ${ghost.gross}: ${status}`);
+    }
+    if (remaining.length) bits.push(`pace ${pace}`);
+    return bits.join(" · ");
+  }
+
+  function fmtShortDate(iso) {
+    try { return new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" }); } catch { return iso; }
+  }
+
   function renderQuickIntro() {
     let seen = false;
     try { seen = localStorage.getItem(QUICK_INTRO_KEY) === "1"; } catch {}
@@ -3580,6 +3673,12 @@
       text = `Thru ${scored.length} · ${toPar === 0 ? "E" : formatSigned(toPar, 0)} · ${gross}${putted.length ? ` · ${putts} putt${putts === 1 ? "" : "s"}` : ""}`;
     }
     lines.forEach((line) => { line.textContent = text; });
+    let ghostText = "";
+    try { ghostText = quickGhostLine(holes); } catch { ghostText = ""; }
+    els.scorecardGrid.querySelectorAll("[data-quick-ghost]").forEach((line) => {
+      line.textContent = ghostText;
+      line.hidden = !ghostText;
+    });
   }
 
   function syncQuickCardStates() {
@@ -3642,6 +3741,9 @@
 
   function renderScorecardCardMode(course) {
     const quick = currentEntryMode === "quick";
+    if (quick) {
+      try { quickContext = buildQuickContext(course); } catch { quickContext = { memory: new Map(), avg: new Map(), ghost: null }; }
+    }
     const sections = getScorecardSections(course.holes);
     const sectionByHoleNumber = new Map();
     sections.forEach((section) => {
@@ -3662,7 +3764,7 @@
             <button type="button" class="card-step" data-card-nav="next" aria-label="Next hole">›</button>
           </div>
           <div class="card-headline">
-            ${quick ? `<div class="quick-run" data-quick-run aria-live="polite"></div>` : ""}
+            ${quick ? `<div class="quick-run" data-quick-run aria-live="polite"></div><div class="quick-ghost" data-quick-ghost></div>${quickMemoryLine(hole)}` : ""}
             <span class="card-hole-mark" data-hole="${hole.number}" hidden></span>
             <h3 class="card-hole-label">${escapeHtml(hole.label || `Hole ${hole.number}`)}</h3>
             <div class="card-hole-meta">

@@ -8659,8 +8659,8 @@ body.storage-blocked { padding-top: 120px; }
    square; anything selected is a dark fill with white text. */
 .scorecard-cards[data-entry-mode="quick"] .scorecard-card.active {
   position: relative;
-  gap: 10px;
-  padding: 12px 12px 14px;
+  gap: 8px;
+  padding: 10px 12px 12px;
 }
 .scorecard-cards[data-entry-mode="quick"] .card-extra { display: none; }
 .scorecard-cards[data-entry-mode="quick"] .scorecard-card.quick-more-open .card-extra {
@@ -9109,3 +9109,19 @@ body.storage-blocked { padding-top: 120px; }
   cursor: pointer;
 }
 .eclectic-chip.is-on { background: var(--green-dark); border-color: var(--green-dark); color: #fff; }
+
+.quick-ghost {
+  order: 6;
+  flex-basis: 100%;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.quick-memory {
+  order: 7;
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
