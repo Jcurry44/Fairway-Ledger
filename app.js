@@ -184,10 +184,13 @@
   // write; restoreInProgressRound uses the same setters that pre-existed.
 
   let pendingHoles = {};
+  // Holes whose clubs are still the Detailed seed (never touched by hand).
+  const seededClubHoles = new Set();
   let gpsCaptureGeneration = 0;
 
   function resetPendingHoles() {
     pendingHoles = {};
+    seededClubHoles.clear();
     // Invalidate any geolocation request that was started for the previous
     // round/setup so a late device response cannot populate a fresh round.
     gpsCaptureGeneration += 1;
@@ -371,6 +374,7 @@
   const MAX_CLUB_USES = 5;
 
   function setHoleClubs(holeNumber, clubs) {
+    seededClubHoles.delete(String(holeNumber));
     const entry = getOrCreatePendingHole(holeNumber);
     if (Array.isArray(clubs) && clubs.length) {
       entry.clubs = normalizeClubOrder([...clubs]);
@@ -488,7 +492,10 @@
         desired = [tee];
       }
       const filtered = desired.filter(isInBag);
-      if (filtered.length) setHoleClubs(hole.number, filtered);
+      if (filtered.length) {
+        setHoleClubs(hole.number, filtered);
+        seededClubHoles.add(String(hole.number));
+      }
     });
   }
 
@@ -2630,8 +2637,10 @@
     `;
 
     seedDefaultClubs(course);
+    els.scorecardGrid.dataset.roundCourseValue = els.roundCourse ? els.roundCourse.value : "";
     els.scorecardGrid.className = `scorecard mode-${viewMode}`;
     els.scorecardGrid.dataset.entryMode = currentEntryMode;
+    if (els.roundLiveSummary) els.roundLiveSummary.classList.toggle("is-quick", currentEntryMode === "quick");
     els.scorecardGrid.innerHTML = viewMode === "card"
       ? renderScorecardCardMode(course)
       : renderScorecardGridMode(course);
@@ -2641,6 +2650,8 @@
         // Only a genuine user gesture counts — programmatic events (par/club
         // pre-fill) have isTrusted === false.
         if (event && event.isTrusted) roundTouched = true;
+        if (event && event.isTrusted && event.target && event.target.classList
+          && event.target.classList.contains("putts-input")) event.target.dataset.entered = "1";
         // Re-derive GIR + auto-add Putter for the hole this input belongs to.
         const target = event && event.target;
         if (target && target.dataset && target.dataset.hole) {
@@ -2689,6 +2700,7 @@
   }
 
   function openReviewSection() {
+    cancelQuickAdvance();
     if (!els.reviewSection) return;
     els.reviewSection.hidden = false;
     els.reviewSection.dataset.userOpened = "true";
@@ -3608,7 +3620,7 @@
     const { score, putts } = quickInputs(holeNumber);
     if (kind === "score-input" && score && putts) {
       const strokes = Number(score.value);
-      if (strokes === 1) setQuickInput(putts, "0");
+      if (strokes === 1) { putts.dataset.entered = "1"; setQuickInput(putts, "0"); }
       else if (putts.value.trim() !== "" && Number(putts.value) > strokes) setQuickInput(putts, "");
     }
     syncQuickPuttLimits(holeNumber);
@@ -4094,6 +4106,7 @@
         const value = pill.dataset.pillValue;
         const input = stack.querySelector(`.${inputClass}[data-hole="${holeNumber}"]`);
         if (input) {
+          if (inputClass === "putts-input") input.dataset.entered = "1";
           input.value = value;
           input.dispatchEvent(new Event("input", { bubbles: true }));
           input.dispatchEvent(new Event("change", { bubbles: true }));
@@ -4196,6 +4209,7 @@
       const holeNumber = custom.dataset.hole;
       const input = stack.querySelector(`.${inputClass}[data-hole="${holeNumber}"]`);
       if (input) {
+        if (inputClass === "putts-input") input.dataset.entered = "1";
         input.value = custom.value;
         input.dispatchEvent(new Event("input", { bubbles: true }));
       }
@@ -4209,7 +4223,9 @@
     if (!input) return;
     const value = input.value;
     row.querySelectorAll(".pill[data-pill-value]").forEach((p) => {
-      p.classList.toggle("active", p.dataset.pillValue !== undefined && String(p.dataset.pillValue) === String(value));
+      const isActive = p.dataset.pillValue !== undefined && String(p.dataset.pillValue) === String(value);
+      p.classList.toggle("active", isActive);
+      p.setAttribute("aria-pressed", String(isActive));
     });
     // Fringe toggle (special-case chip on the Putts row): syncs from the
     // separate fringe-putts-input.
@@ -4481,6 +4497,7 @@
     }));
     return makeRound({
       id: "__in_progress_review_preview__",
+      entryMode: currentEntryMode,
       courseId: els.roundCourse ? els.roundCourse.value : "",
       date: els.roundDate ? els.roundDate.value : todayLocal(),
       holes,
@@ -4666,7 +4683,8 @@
         gir: girInput ? girInput.checked : false,
         penalty: penaltyInput ? penaltyInput.value : "",
         firstPutt: firstPuttInput ? firstPuttInput.value : "",
-        fringePutts: fringePuttsInput ? fringePuttsInput.value : ""
+        fringePutts: fringePuttsInput ? fringePuttsInput.value : "",
+        puttsEntered: Boolean(puttsInput && puttsInput.dataset.entered === "1")
         ,shots: getHoleShots(hole)
       });
     });
@@ -4701,6 +4719,7 @@
       }
       // "" is a real value now (unknown in Quick); only skip a missing one.
       if (puttsInput && values.putts != null) puttsInput.value = values.putts;
+      if (puttsInput && values.puttsEntered) puttsInput.dataset.entered = "1";
       if (fairwayInput && values.fairway && [...fairwayInput.options].some((option) => option.value === values.fairway)) {
         fairwayInput.value = values.fairway;
       }
@@ -5457,7 +5476,7 @@
           par: hole.par,
           toPar: hole.score - hole.par,
           putts: isDetailRound(round) && puttsKnown(hole) ? hole.putts : null,
-          gir: !!hole.gir,
+          gir: isDetailRound(round) && girKnown(hole) ? !!hole.gir : null,
           fairway: hole.fairway || "na",
           penalties: Number(hole.penalties) || 0,
           bunker: hole.bunker || "",
@@ -5498,7 +5517,8 @@
     });
     const parsOrBetter = eagleOrBetter + birdies + parsCount;
 
-    const girCount = items.filter((h) => h.gir).length;
+    const girCount = items.filter((h) => h.gir === true).length;
+    const girKnownCount = items.filter((h) => h.gir !== null).length;
     // FIR only meaningful for par 4 / 5. Par 3s have no fairway (na).
     const firEligible = items.filter((h) => h.fairway && h.fairway !== "na");
     const firHit = firEligible.filter((h) => h.fairway === "hit").length;
@@ -5514,12 +5534,12 @@
 
     const bunkerHoles = items.filter((h) => h.bunker && h.bunker !== "" && h.bunker !== "none").length;
     const greensideBunker = items.filter((h) => h.bunker === "greenside" || h.bunker === "both").length;
-    const sandSaves = items.filter((h) => (h.bunker === "greenside" || h.bunker === "both") && !h.gir && h.toPar <= 0).length;
-    const sandSaveAttempts = items.filter((h) => (h.bunker === "greenside" || h.bunker === "both") && !h.gir).length;
+    const sandSaves = items.filter((h) => (h.bunker === "greenside" || h.bunker === "both") && h.gir === false && h.toPar <= 0).length;
+    const sandSaveAttempts = items.filter((h) => (h.bunker === "greenside" || h.bunker === "both") && h.gir === false).length;
 
     // Scrambling for THIS par type: missed GIR holes saved to par-or-better.
-    const missedGir = items.filter((h) => !h.gir).length;
-    const scrambleSaves = items.filter((h) => !h.gir && h.toPar <= 0).length;
+    const missedGir = items.filter((h) => h.gir === false).length;
+    const scrambleSaves = items.filter((h) => h.gir === false && h.toPar <= 0).length;
 
     const bestToPar = Math.min(...items.map((h) => h.toPar));
     const worstToPar = Math.max(...items.map((h) => h.toPar));
@@ -5532,7 +5552,7 @@
       parsOrBetter, parsOrBetterPct: parsOrBetter / count,
       birdieOrBetterPct: (eagleOrBetter + birdies) / count,
       doubleOrWorsePct: (doubles + worse) / count,
-      girCount, girPct: girCount / count,
+      girCount, girKnownCount, girPct: girKnownCount ? girCount / girKnownCount : NaN,
       firEligibleCount: firEligible.length,
       firHit, firPct: firEligible.length ? firHit / firEligible.length : NaN,
       puttHolesCount: puttHoles.length, avgPutts,
@@ -5609,7 +5629,7 @@
         <div class="par-card-dist" role="img" aria-label="Scoring distribution">${distBar}</div>
         <div class="par-card-dist-legend">${distLegend}</div>
         <div class="par-card-stats">
-          <div class="par-card-stat"><small>GIR</small><strong>${Math.round(stats.girPct * 100)}%</strong></div>
+          <div class="par-card-stat"><small>GIR</small><strong>${Number.isFinite(stats.girPct) ? `${Math.round(stats.girPct * 100)}%` : "—"}</strong></div>
           ${firCell}
           <div class="par-card-stat"><small>Putts</small><strong>${Number.isFinite(stats.avgPutts) ? stats.avgPutts.toFixed(2) : "—"}</strong></div>
           <div class="par-card-stat"><small>Pen/hole</small><strong>${stats.penPerHole.toFixed(2)}</strong></div>
@@ -5738,7 +5758,7 @@
 
     // --- Ball-striking + short-game --------------------------------------
     const skillsRows = [];
-    skillsRows.push(`<li><span>GIR</span><strong>${fmtPct(stats.girPct)}</strong><small>${stats.girCount}/${count} holes</small></li>`);
+    if (stats.girKnownCount) skillsRows.push(`<li><span>GIR</span><strong>${fmtPct(stats.girPct)}</strong><small>${stats.girCount}/${stats.girKnownCount} holes</small></li>`);
     if (par !== 3) {
       skillsRows.push(`<li><span>Fairways hit</span><strong>${fmtPct(stats.firPct)}</strong><small>${stats.firHit}/${stats.firEligibleCount} eligible</small></li>`);
     }
@@ -6411,7 +6431,7 @@
           score: hole.score,
           par: hole.par,
           putts: isDetailRound(round) && puttsKnown(hole) ? hole.putts : null,
-          gir: !!hole.gir,
+          gir: isDetailRound(round) && girKnown(hole) ? !!hole.gir : null,
           fairway: hole.fairway || "",
           penalties: Number.isFinite(hole.penalties) ? hole.penalties : 0,
           note: hole.note ? String(hole.note).trim() : "",
@@ -6439,7 +6459,8 @@
       const t = scoreTier(e.score, e.par);
       if (t && buckets[t] !== undefined) buckets[t]++;
     });
-    const girCount = entries.filter((e) => e.gir).length;
+    const girCount = entries.filter((e) => e.gir === true).length;
+    const girKnownCount = entries.filter((e) => e.gir !== null).length;
     const notes = entries.filter((e) => e.note).map((e) => ({ date: e.date, note: e.note }));
 
     return {
@@ -6455,7 +6476,8 @@
       worst: Math.max(...scores),
       avgPutts: putts.length ? average(putts) : NaN,
       girCount,
-      girPct: entries.length ? girCount / entries.length : 0,
+      girKnownCount,
+      girPct: girKnownCount ? girCount / girKnownCount : NaN,
       buckets,
       notes,
       entries,
@@ -6581,7 +6603,7 @@
           <span class="hd-stat-label">Worst</span>
         </div>
         <div class="hd-stat">
-          <span class="hd-stat-num">${(data.girPct * 100).toFixed(0)}%</span>
+          <span class="hd-stat-num">${Number.isFinite(data.girPct) ? `${(data.girPct * 100).toFixed(0)}%` : "—"}</span>
           <span class="hd-stat-label">GIR</span>
         </div>
         <div class="hd-stat">
@@ -7113,10 +7135,11 @@
     const holes = readScorecard(false).filter((h) => Number.isFinite(h.score) && h.score > 0);
     let title;
     let rows;
+    const detailLive = currentEntryMode !== "speed";
     if (kind === "fir") {
-      const drivable = holes.filter((h) => h.par !== 3);
+      const drivable = detailLive ? holes.filter(fairwayKnown) : [];
       const hitCount = drivable.filter((h) => h.fairway === "hit").length;
-      title = `Fairways hit · ${hitCount}/${drivable.length}`;
+      title = drivable.length ? `Fairways hit · ${hitCount}/${drivable.length}` : "Fairways hit · —";
       rows = holes.map((h) => {
         let flag = "none";
         let text = "—";
@@ -7129,13 +7152,17 @@
         return { label: h.label, number: h.number, par: h.par, flag, text };
       });
     } else {
-      const made = holes.filter((h) => h.gir).length;
-      title = `Greens in regulation · ${made}/${holes.length}`;
-      rows = holes.map((h) => ({
-        label: h.label, number: h.number, par: h.par,
-        flag: h.gir ? "hit" : "miss",
-        text: h.gir ? "GIR ✓" : "Missed green"
-      }));
+      const known = detailLive ? holes.filter(girKnown) : [];
+      const made = known.filter((h) => h.gir).length;
+      title = known.length ? `Greens in regulation · ${made}/${known.length}` : "Greens in regulation · —";
+      rows = holes.map((h) => {
+        const isKnown = detailLive && girKnown(h);
+        return {
+          label: h.label, number: h.number, par: h.par,
+          flag: !isKnown ? "none" : h.gir ? "hit" : "miss",
+          text: !isKnown ? "Not entered" : h.gir ? "GIR ✓" : "Missed green"
+        };
+      });
     }
     els.bucketSheetTitle.textContent = title;
     els.bucketSheetList.innerHTML = holes.length
@@ -7850,7 +7877,7 @@
     else if (girHoles.length >= 9 && girRate <= 0.15) lines.push({ priority: 1 - girRate, text: `Approach play was thin (${girMade}/${girHoles.length} GIRs)` });
 
     // Scrambling.
-    const missedGir = valid.filter((h) => !h.gir);
+    const missedGir = valid.filter((h) => girKnown(h) && !h.gir);
     if (missedGir.length >= 5) {
       const saves = missedGir.filter((h) => h.score - h.par <= 0).length;
       const sRate = saves / missedGir.length;
@@ -7860,7 +7887,7 @@
 
     // Sand saves — only if greenside bunker came into play meaningfully.
     const gsBunker = valid.filter((h) => h.bunker === "greenside" || h.bunker === "both");
-    const sandAttempts = gsBunker.filter((h) => !h.gir);
+    const sandAttempts = gsBunker.filter((h) => girKnown(h) && !h.gir);
     if (sandAttempts.length >= 2) {
       const saves = sandAttempts.filter((h) => h.score - h.par <= 0).length;
       if (saves === sandAttempts.length) lines.push({ priority: 1.5, text: `Saved sand every time (${saves}/${sandAttempts.length})` });
@@ -8707,7 +8734,7 @@
 
     (() => {
       const r = compareSubset((r) =>
-        r.holes.every((h) => !Number.isFinite(h.putts) || h.putts < 3)
+        isDetailRound(r) && r.holes.some(puttsKnown) && r.holes.every((h) => !Number.isFinite(h.putts) || h.putts < 3)
       );
       if (r) card("no-3putt", "No-3-putt rounds", r.value, r.sub, r.context);
     })();
@@ -8865,14 +8892,28 @@
   const Eclectic = window.FairwayEclectic;
   let eclecticCourse = null;
 
+  // A non-Deerwood 9-hole course (Cross Creek's three nines share one name)
+  // is its own nine: keyed and grouped by its catalog entry, labelled by its
+  // tee/variant name. 18-hole courses pool every tee under the course name.
+  function nineHoleVariant(courseId) {
+    if (isDeerwoodCourseId(courseId)) return null;
+    const course = getCourse(courseId);
+    if (!course || !Array.isArray(course.holes) || course.holes.length !== 9) return null;
+    return course.tee || course.id;
+  }
+
   function eclecticOpts() {
     return {
       courseKey: (round) => physicalCourseName(round.courseId),
-      holeKey: (round, hole) => (isDeerwoodCourseId(round.courseId)
-        ? physicalHoleId(round.courseId, hole)
-        : `${physicalCourseName(round.courseId)}:${hole.number}`),
+      holeKey: (round, hole) => {
+        if (isDeerwoodCourseId(round.courseId)) return physicalHoleId(round.courseId, hole);
+        const variant = nineHoleVariant(round.courseId);
+        return variant
+          ? `${physicalCourseName(round.courseId)}:${round.courseId}:${hole.number}`
+          : `${physicalCourseName(round.courseId)}:${hole.number}`;
+      },
       groupKey: (round, hole) => {
-        if (!isDeerwoodCourseId(round.courseId)) return null;
+        if (!isDeerwoodCourseId(round.courseId)) return nineHoleVariant(round.courseId);
         const parts = String(physicalHoleId(round.courseId, hole) || "").split(":");
         return parts.length >= 3 ? parts[1] : null;
       }
@@ -10300,9 +10341,26 @@
       // Editing loads the saved round into the same form the live round
       // uses, and save/cancel clear the draft: with a round in progress that
       // silently threw the live round away. Send the golfer to it instead.
-      if (hasLiveRound()) {
+      if (roundStarted && hasLiveRound()) {
         setActiveTab("rounds");
         showToast("You have a round in progress. Save or reset it before editing another.");
+        return;
+      }
+      if (!roundStarted && loadInProgressRound()) {
+        // An older unfinished round you chose not to resume: say what editing
+        // costs instead of blocking with nothing on screen to reset.
+        openDestructiveConfirm({
+          title: "Discard the unfinished round?",
+          message: "You have an unfinished round you didn't resume. Editing a saved round clears it.",
+          confirmLabel: "Discard and edit",
+          showBackupHint: false,
+          onConfirm: () => {
+            clearInProgressRound();
+            loadRoundIntoForm(round);
+            setActiveTab("rounds");
+            showToast("Editing round. Make changes and click Update round.");
+          }
+        });
         return;
       }
       loadRoundIntoForm(round);
@@ -11627,7 +11685,10 @@
         // pill (the pill handler clears dataset.autoScore).
         scoreInput.dataset.autoScore = String(hole.score);
       }
-      if (puttsInput && Number.isFinite(hole.putts)) puttsInput.value = hole.putts;
+      if (puttsInput && Number.isFinite(hole.putts)) {
+        puttsInput.value = hole.putts;
+        puttsInput.dataset.entered = "1";
+      }
       if (penaltyInput && Number.isFinite(hole.penalties)) penaltyInput.value = hole.penalties;
       if (firstPuttInput && Number.isFinite(hole.firstPuttDistance)) firstPuttInput.value = hole.firstPuttDistance;
       if (fringePuttsInput && Number.isFinite(hole.fringePutts)) fringePuttsInput.value = hole.fringePutts;
@@ -11654,10 +11715,32 @@
   }
 
   els.roundCourse.addEventListener("change", () => {
-    if (els.roundCourse.value === DEERWOOD_COURSE_ID) els.roundTee.value = "White";
-    clearInProgressRound();
-    resetPendingHoles(); resetReviewState();
-    refreshRoundSetup();
+    const apply = () => {
+      if (els.roundCourse.value === DEERWOOD_COURSE_ID) els.roundTee.value = "White";
+      clearInProgressRound();
+      resetPendingHoles(); resetReviewState();
+      refreshRoundSetup();
+    };
+    const previous = els.scorecardGrid ? els.scorecardGrid.dataset.roundCourseValue : "";
+    const next = els.roundCourse.value;
+    if (roundStarted && !editingRoundId && previous && previous !== next && hasLiveRound()) {
+      // One chip tap used to clear the round you're playing. Ask first.
+      els.roundCourse.value = previous;
+      syncAllChipsToSelects();
+      openDestructiveConfirm({
+        title: "Switch course and clear this round?",
+        message: "A new course starts a fresh scorecard. The holes you've entered on this round will be cleared.",
+        confirmLabel: "Switch course",
+        showBackupHint: false,
+        onConfirm: () => {
+          els.roundCourse.value = next;
+          syncAllChipsToSelects();
+          apply();
+        }
+      });
+      return;
+    }
+    apply();
   });
   // Hole count switch (9 ↔ 18) used to wipe all entered data. That broke
   // the common "I'm going to play another 9" flow. Now: preserve whatever
@@ -11979,6 +12062,29 @@
     syncEntryModeDefaultRadios();
   }
 
+  // Detailed/Speed cards carry placeholders Quick must not adopt as entered
+  // data: the active card's prefilled par (never tapped), and for holes the
+  // golfer never saw putts on (all of Speed; unscored holes in Detailed) the
+  // default "2" putts, bunker "No" and the seeded tee club.
+  function scrubPlaceholdersForQuick(snapshot, prev) {
+    const activeCard = els.scorecardGrid.querySelector(".scorecard-card.active");
+    const activeScore = activeCard ? activeCard.querySelector(".score-input") : null;
+    snapshot.forEach((values, holeNumber) => {
+      if (activeScore && activeScore.dataset.hole === String(holeNumber)
+        && activeScore.dataset.autoScore !== undefined
+        && String(values.score) === String(activeScore.dataset.par)
+        && String(activeScore.dataset.autoScore) === String(values.score)) {
+        values.score = "";
+      }
+      const unscored = String(values.score || "").trim() === "";
+      if (prev === "speed" || unscored) {
+        if (!values.puttsEntered) values.putts = "";
+        if (values.bunker === "none") values.bunker = "";
+        if (seededClubHoles.has(String(holeNumber))) setHoleClubs(holeNumber, []);
+      }
+    });
+  }
+
   function setCurrentEntryMode(next, { rerender = true } = {}) {
     if (!ENTRY_MODES.includes(next)) return;
     if (currentEntryMode === next) return;
@@ -11997,6 +12103,7 @@
       const snapshot = captureScorecardSnapshot();
       const index = getActiveCardIndex();
       cancelQuickAdvance();
+      if (next === "quick") scrubPlaceholdersForQuick(snapshot, prev);
       renderScorecard(getSelectedRoundCourse());
       applyScorecardSnapshot(snapshot);
       syncAllDerivedFlags();
@@ -12014,6 +12121,7 @@
   }
 
   function applyEntryModeToScorecard() {
+    if (els.roundLiveSummary) els.roundLiveSummary.classList.toggle("is-quick", currentEntryMode === "quick");
     if (!els.scorecardGrid) return;
     const cards = els.scorecardGrid.querySelector(".scorecard-cards");
     if (cards) cards.dataset.entryMode = currentEntryMode;

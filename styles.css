@@ -9125,3 +9125,9 @@ body.storage-blocked { padding-top: 120px; }
   font-size: 0.74rem;
   color: var(--muted);
 }
+
+/* Quick carries its running line in the card header; the 8-tile strip would
+   push hole 1 a screen down on a phone. */
+@media (max-width: 640px) {
+  .is-quick#roundLiveSummary, #roundLiveSummary.is-quick { display: none; }
+}

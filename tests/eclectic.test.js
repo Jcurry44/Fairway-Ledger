@@ -550,3 +550,22 @@ test("output cells are independent of the input holes", () => {
   assert.equal(input.holes[0].score, 4);
   assert.equal(E.buildBoards([input], OPTS).get("ridgeview").holes.get("ridgeview:1").best, 4);
 });
+
+test("9-hole variants that share a course name stay separate nines", () => {
+  // Cross Creek: three 9-hole catalog entries, one physical course name.
+  const nineOpts = {
+    courseKey: () => "Cross Creek Resort",
+    holeKey: (r, h) => `Cross Creek Resort:${r.courseId}:${h.number}`,
+    groupKey: (r) => r.courseId
+  };
+  const a = round("c1", "2026-06-01", "cross-creek-1-white", [4, 4, 3, 5, 4, 4, 3, 4, 5]);
+  const b = round("c2", "2026-06-08", "cross-creek-2-white", [5, 5, 4, 6, 5, 5, 4, 5, 6]);
+  const board = E.buildBoards([a, b], nineOpts).get("Cross Creek Resort");
+  assert.equal(board.holes.size, 18);
+  assert.equal(board.groups.get("cross-creek-1-white").total, 36);
+  assert.equal(board.groups.get("cross-creek-2-white").total, 45);
+  assert.equal(board.groups.get("cross-creek-1-white").complete, true);
+  const delta = E.roundDelta([a], b, nineOpts);
+  assert.equal(delta.moved.length, 0, "a different nine never 'moves' another nine's holes");
+  assert.equal(delta.firstPlays.length, 9);
+});
