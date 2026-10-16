@@ -9432,3 +9432,6 @@ body:has(#seasonSheetOverlay:not([hidden])) { overflow: hidden; }
 .sn-play:active { background: var(--panel-soft); }
 .sn-play:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .sn-play small { font-size: 0.64rem; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.sn-actions.is-single { grid-template-columns: 1fr; }
+/* Records are the headline moment: a brass edge on top of the star glyph. */
+.sn-moment.sn-record { border-color: var(--gold-soft); box-shadow: inset 4px 0 0 var(--gold); }

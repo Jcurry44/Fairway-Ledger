@@ -9177,7 +9177,13 @@
 
   const snFmt1 = (x) => (Number.isFinite(x) ? x.toFixed(1) : "—");
   const snPlural = (n, word, many) => `${n} ${n === 1 ? word : (many || `${word}s`)}`;
-  const snHole = (label) => (/^\d+$/.test(String(label)) ? `Hole ${label}` : String(label));
+  // A 9-hole variant (Cross Creek's nines) adds its name; Deerwood labels
+  // ("Buck 3") already carry theirs.
+  const snHole = (label, group) => (/^\d+$/.test(String(label)) ? `Hole ${label}${group ? ` (${group})` : ""}` : String(label));
+  const snMore = (n) => (n > 0 ? `&nbsp;+&nbsp;${n}&nbsp;more` : "");
+  function snJoin(parts) {
+    return parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : (parts[0] || "");
+  }
   function snDate(d) {
     try {
       const date = new Date(`${d}T12:00:00`);
@@ -9193,7 +9199,7 @@
     if (change == null) return null;
     const u = unit || "";
     const f = format || snFmt1;
-    if (change === 0) return { better: false, worse: false, text: `level with ${f(start)}${u}` };
+    if (change === 0) return { better: false, worse: false, text: `held at ${f(start)}${u}` };
     const down = change < 0;
     const better = lowerBetter ? down : !down;
     return {
@@ -9206,13 +9212,30 @@
     return state.rounds.find((r) => String(r.id) === String(id)) || null;
   }
 
+  // Built stories by year. renderAll (the data may have changed) clears it;
+  // chip, tab and year switches reuse it.
+  const seasonCache = new Map();
+
   function renderSeasonPanel(options) {
     if (!els.seasonPanel) return;
+    if (options && options.dataChanged) seasonCache.clear();
     if (!(options && options.force) && !seasonPanelVisible()) {
       seasonStale = true;
       return;
     }
     seasonStale = false;
+    try {
+      renderSeasonPanelBody();
+    } catch (error) {
+      // Never leave Home half-rendered after a save: the rounds are already
+      // stored, only this view failed.
+      console.warn("Season story failed", error);
+      seasonStory = null;
+      els.seasonPanel.innerHTML = emptyState("The season story couldn't be built for this year. Your rounds are safe.");
+    }
+  }
+
+  function renderSeasonPanelBody() {
     if (!Season) {
       els.seasonPanel.innerHTML = emptyState("The season story couldn't load. Reload the app to try again.");
       return;
@@ -9224,10 +9247,10 @@
       return;
     }
     if (!seasonYear || !years.includes(seasonYear)) seasonYear = years[0];
-    let story = null;
-    try { story = Season.buildSeason(state.rounds, seasonYear, seasonOpts()); } catch (error) {
-      console.warn("Season story failed", error);
-      story = null;
+    let story = seasonCache.get(seasonYear) || null;
+    if (!story) {
+      story = Season.buildSeason(state.rounds, seasonYear, seasonOpts());
+      seasonCache.set(seasonYear, story);
     }
     seasonStory = story && story.state === "ready" ? story : null;
     if (!seasonStory) {
@@ -9250,7 +9273,8 @@
   function buildSeasonHtml(story, years) {
     const headline = Season.headline(story);
     const p = story.played;
-    const s = story.scoring;
+    const s = Season.scoringFor(story);
+    const nineScoring = s.holes === 9;
     const h = story.handicap;
     const months = p.byMonth;
     const span = months.length > 1 ? `${snMonth(months[0].month)} – ${snMonth(months[months.length - 1].month)}` : (months[0] ? snMonth(months[0].month) : "");
@@ -9266,15 +9290,15 @@
     const bestCourse = best ? physicalCourseName((snFindRound(best.roundId) || {}).courseId) || best.courseKey || "" : "";
     const scoringTrend = snTrend(s.start, s.now, s.change, true);
     const indexTrend = snTrend(h.start, h.now, h.change, true);
-    const indexStartWord = h.startKind === "carried" ? "Jan 1" : h.startRef ? `round ${h.startRef.roundNumber}` : "";
+    const indexStartWord = h.startKind === "carried" ? "Jan 1" : h.startKind === "first" ? "1st estimate" : "";
     const stats = [
       stat("rounds", "Rounds", String(p.rounds), `${snPlural(p.holes, "hole")}${span ? ` · ${span}` : ""}`),
       best
         ? stat("best", best.holes === 9 ? "Best 9" : "Best round", `${best.gross}<small>${eclecticToPar(best.gross, best.par)}</small>`, `${escapeHtml(bestCourse)} · ${escapeHtml(snDate(best.date))}`)
         : stat("rounds", "Best round", "—", "finish an 18 or a 9"),
       s.change != null
-        ? stat("scoring", "Scoring avg", snFmt1(s.now), `${scoringTrend.text}`, scoringTrend.better ? "better" : "")
-        : stat("scoring", "Scoring avg", s.avg != null ? snFmt1(s.avg) : "—", s.rounds ? `${snPlural(s.rounds, "complete 18")} · 4 for a trend` : "no complete 18s yet"),
+        ? stat("scoring", nineScoring ? "9-hole avg" : "Scoring avg", snFmt1(s.now), `${scoringTrend.text}`, scoringTrend.better ? "better" : "")
+        : stat("scoring", nineScoring ? "9-hole avg" : "Scoring avg", s.avg != null ? snFmt1(s.avg) : "—", s.rounds ? `${snPlural(s.rounds, nineScoring ? "complete 9" : "complete 18")} · 4 for a trend` : "no complete rounds yet"),
       h.change != null
         ? stat("index", "Index", snFmt1(h.now), `${indexTrend.text}${indexStartWord ? ` (${indexStartWord})` : ""}`, indexTrend.better ? "better" : "")
         : stat("index", "Index", h.now != null ? snFmt1(h.now) : "—", h.now != null ? "estimate" : "needs 3 rated rounds")
@@ -9289,7 +9313,7 @@
       moment({
         drill: "records", mark: "★", kind: "record",
         title: story.firstSeason ? `${snPlural(fell.length, "record")} set` : `${snPlural(fell.length, "record")} fell`,
-        sub: `${escapeHtml(lead.label)}${fell.length > 1 ? ` + ${fell.length - 1} more` : ""}`,
+        sub: `${escapeHtml(lead.label)}${snMore(fell.length - 1)}`,
         value: lead.from != null && lead.from !== "" && !story.firstSeason ? `${escapeHtml(String(lead.from))} → ${escapeHtml(String(lead.to))}` : escapeHtml(String(lead.to))
       });
     }
@@ -9298,7 +9322,7 @@
       const course = imp.hole.courseKey || "";
       moment({
         drill: "improvement", mark: "▲", kind: "improve", title: "Most improved hole",
-        sub: `${escapeHtml(snHole(imp.hole.label))} · ${escapeHtml(course)} · ${imp.hole.plays} plays`,
+        sub: `${escapeHtml(snHole(imp.hole.label, imp.hole.group))} · ${escapeHtml(course)} · ${imp.hole.plays} plays`,
         value: `${snFmt1(imp.hole.earlyAvg)} → ${snFmt1(imp.hole.lateAvg)}`
       });
     } else {
@@ -9316,7 +9340,9 @@
       moment({
         drill: "nemesis", mark: "◆", kind: "nemesis",
         title: nem.holes === 1 ? "Nemesis beaten" : `${nem.holes} nemeses beaten`,
-        sub: `${escapeHtml(snHole(first.label))} · ${escapeHtml(first.courseKey || "")} · ${escapeHtml(snDate(first.date))}${nem.events.length > 1 ? ` + ${nem.events.length - 1} more` : ""}`,
+        sub: nem.events.length > 1
+          ? `${escapeHtml(snHole(first.label, first.group))} · ${escapeHtml(snDate(first.date))}${snMore(nem.events.length - 1)}`
+          : `${escapeHtml(snHole(first.label, first.group))} · ${escapeHtml(first.courseKey || "")} · ${escapeHtml(snDate(first.date))}`,
         value: nem.events.length > 1 ? `${nem.events.length}×` : `${first.score} on ${first.par}`
       });
     }
@@ -9370,11 +9396,15 @@
     };
 
     const basis = [];
-    basis.push("Scoring average: complete 18s only.");
+    basis.push(nineScoring ? "Scoring average: complete 9s (no complete 18s this year)." : "Scoring average: complete 18s only.");
     if (d.detailRounds || d.speedRounds) {
       basis.push(`Putting and greens: ${snPlural(putt.rounds, "detail round")}${d.speedRounds ? `; ${snPlural(d.speedRounds, "speed round")} left out` : ""}.`);
     }
     basis.push("Index is a WHS-style estimate.");
+    if (story.undated) basis.push(`${snPlural(story.undated, "round")} without a date ${story.undated === 1 ? "counts" : "count"} toward records but not toward any season.`);
+    // window.print() does nothing in an iPhone home-screen app, so the PDF
+    // button only shows where it works (Safari, desktop, Android).
+    const canPrint = typeof window.print === "function" && navigator.standalone !== true;
 
     const yearChips = years.length > 1
       ? `<div class="sn-years" role="group" aria-label="Season">${years.map((y) => `<button type="button" class="sn-year${y === story.year ? " is-on" : ""}" data-sn-year="${y}" aria-pressed="${y === story.year}">${y}</button>`).join("")}</div>`
@@ -9388,9 +9418,9 @@
         <div class="sn-stats">${stats}</div>
       </section>
       <ul class="sn-moments">${moments.map(momentHtml).join("")}</ul>
-      <div class="sn-actions">
+      <div class="sn-actions${canPrint ? "" : " is-single"}">
         <button type="button" class="primary-button" data-sn-share>Share my season</button>
-        <button type="button" class="ghost-button" data-sn-print>Save as PDF</button>
+        ${canPrint ? `<button type="button" class="ghost-button" data-sn-print>Save as PDF</button>` : ""}
       </div>
       <p class="sn-basis">${basis.join(" ")}</p>`;
   }
@@ -9428,11 +9458,14 @@
     if (!finite.length) return "";
     const min = Math.min(...finite.map((v) => v.value));
     const max = Math.max(...finite.map((v) => v.value));
+    // Baseline one range below the minimum (floored at 0): the lowest bar sits
+    // at about half height, so a 94 -> 79 season doesn't draw as 5x.
+    const base = Math.max(0, min - (max - min));
     const n = values.length;
     const w = o.window || 0;
     const cols = values.map((v, i) => {
       const ok = Number.isFinite(v.value);
-      const pct = ok ? 18 + (max === min ? 41 : ((v.value - min) / (max - min)) * 82) : 0;
+      const pct = ok ? (max === min ? 60 : ((v.value - base) / (max - base)) * 100) : 0;
       const zone = w && i < w ? " is-first" : w && i >= n - w ? " is-last" : "";
       return `<span class="sn-col${zone}${ok ? "" : " is-none"}${v.star ? " is-star" : ""}" style="--h:${pct.toFixed(1)}%">${v.star ? "<i>★</i>" : ""}</span>`;
     }).join("");
@@ -9448,29 +9481,35 @@
     const year = story.year;
     if (kind === "rounds") {
       const p = story.played;
+      const kinds = [];
+      if (p.eighteens) kinds.push(snPlural(p.eighteens, "complete 18"));
+      if (p.nines) kinds.push(snPlural(p.nines, "complete 9"));
+      if (p.unfinished) kinds.push(`${p.unfinished} unfinished`);
       const rows = story.roundIds.slice().reverse().map((id) => snRoundRow(snFindRound(id))).join("");
       return {
         title: `${snPlural(p.rounds, "round")} in ${year}`,
-        html: `<p class="sn-lede">${snPlural(p.holes, "hole")} played${p.nines && p.eighteens ? `: ${snPlural(p.eighteens, "18-hole round")} and ${snPlural(p.nines, "9-hole round")}` : p.nines ? `, all 9-hole rounds` : `, every one an 18`}.</p>
+        html: `<p class="sn-lede">${snPlural(p.holes, "hole")} played: ${snJoin(kinds)}.</p>
           ${snBars(p.byMonth.map((m) => ({ label: snMonth(m.month), value: m.rounds, text: String(m.rounds) })), "Rounds by month")}
           <h4 class="sn-sheet-h">Every round, newest first</h4><div class="sn-rows">${rows}</div>`
       };
     }
     if (kind === "scoring") {
-      const s = story.scoring;
+      const s = Season.scoringFor(story);
+      const nine = s.holes === 9;
+      const unitOne = nine ? "complete 9" : "complete 18";
       const bestId = story.best ? story.best.roundId : null;
       const chart = snColumns(s.series.map((row) => ({ value: row.gross, star: row.roundId === bestId })), {
         window: s.window, startText: `avg ${snFmt1(s.start)}`, nowText: `avg ${snFmt1(s.now)}`,
-        caption: "Each bar is one complete 18, oldest first, gross", format: String
+        caption: `Each bar is one ${unitOne}, oldest first, gross`, format: String
       });
       const t = snTrend(s.start, s.now, s.change, true);
       const lede = s.rounds
-        ? `${t ? `Your first ${s.window} complete 18s averaged ${snFmt1(s.start)}; your last ${s.window} averaged ${snFmt1(s.now)} (${t.text.replace(/ from .*/, "")}). ` : `${snPlural(s.rounds, "complete 18")} so far; a trend needs 4. `}Season average ${snFmt1(s.avg)} (${s.avgToPar > 0 ? "+" : ""}${snFmt1(s.avgToPar)} to par).`
-        : "No complete 18-hole rounds this year. Nines and unfinished rounds are left out so the average stays comparable.";
+        ? `${nine ? "No complete 18s this year, so this is your 9-hole story. " : ""}${t ? `Your first ${s.window} ${unitOne}s averaged ${snFmt1(s.start)}; your last ${s.window} averaged ${snFmt1(s.now)} (${t.text.replace(/ from .*/, "")}). ` : `${snPlural(s.rounds, unitOne)} so far; a trend needs 4. `}Season average ${snFmt1(s.avg)} (${s.avgToPar > 0 ? "+" : ""}${snFmt1(s.avgToPar)} to par).`
+        : "No complete rounds this year. Unfinished rounds are left out so the average stays comparable.";
       const rows = s.series.slice().reverse().map((row) => snRoundRow(snFindRound(row.roundId))).join("");
       return {
-        title: "Scoring average",
-        html: `<p class="sn-lede">${lede}</p>${chart}${rows ? `<h4 class="sn-sheet-h">Complete 18s, newest first</h4><div class="sn-rows">${rows}</div>` : ""}`
+        title: nine ? "Scoring average · 9 holes" : "Scoring average",
+        html: `<p class="sn-lede">${lede}</p>${chart}${rows ? `<h4 class="sn-sheet-h">${nine ? "Complete 9s" : "Complete 18s"}, newest first</h4><div class="sn-rows">${rows}</div>` : ""}`
       };
     }
     if (kind === "index") {
@@ -9504,20 +9543,21 @@
         return `<button type="button" class="sn-play" data-sn-round="${escapeHtml(String(round.id))}" aria-label="${escapeHtml(snDate(play.date))}: ${play.score} on a par ${play.par}">${renderScoreMark(play.score, play.par)}<small>${escapeHtml(snDate(play.date))}</small></button>`;
       }).join("")}</div>`;
       const early = hole.series.slice(0, half);
+      const middle = hole.series.slice(half, hole.series.length - half);
       const late = hole.series.slice(hole.series.length - half);
       return {
-        title: `${snHole(hole.label)} · ${hole.courseKey || ""}`,
+        title: `${snHole(hole.label, hole.group)} · ${hole.courseKey || ""}`,
         html: `<p class="sn-lede">Par ${hole.par}. Your first ${half} plays this year averaged <strong>${snFmt1(hole.earlyAvg)}</strong>; your last ${half} averaged <strong>${snFmt1(hole.lateAvg)}</strong>: ${snFmt1(hole.gain)} a play better.</p>
           <h4 class="sn-sheet-h">First ${half} · avg ${snFmt1(hole.earlyAvg)}</h4>${playGrid(early)}
-          <h4 class="sn-sheet-h">Last ${half} · avg ${snFmt1(hole.lateAvg)}</h4>${playGrid(late)}
-          <button type="button" class="ghost-button sn-sheet-cta" data-sn-hole="1">Full hole history ›</button>`
+          ${middle.length ? `<h4 class="sn-sheet-h">In between</h4>${playGrid(middle)}` : ""}
+          <h4 class="sn-sheet-h">Last ${half} · avg ${snFmt1(hole.lateAvg)}</h4>${playGrid(late)}`
       };
     }
     if (kind === "nemesis") {
       const events = story.nemesis.events;
       const rows = events.map((e) => {
         const round = snFindRound(e.roundId);
-        return round ? snRoundRow(round, renderScoreMark(e.score, e.par), `${snHole(e.label)} · par ${e.par} · ${e.courseKey || ""}`) : "";
+        return round ? snRoundRow(round, renderScoreMark(e.score, e.par), `${snHole(e.label, e.group)} · par ${e.par} · ${e.courseKey || ""}`) : "";
       }).join("");
       return {
         title: events.length === 1 ? "Nemesis beaten" : "Nemeses beaten",
@@ -9546,7 +9586,7 @@
           : `${c.after.total} <small>${eclecticToPar(c.after.total, c.after.par)} · ${c.before ? `${c.before.holes} → ` : ""}${snPlural(c.after.holes, "hole")}</small>`;
         const rows = c.improved.map((cell) => {
           const round = snFindRound(cell.roundId);
-          return round ? snRoundRow(round, `<span class="sn-was">${cell.from} →</span> ${cell.to}`, `${snHole(cell.label)} · par ${cell.par}`) : "";
+          return round ? snRoundRow(round, `<span class="sn-was">${cell.from} →</span> ${cell.to}`, `${snHole(cell.label, cell.group)} · par ${cell.par}`) : "";
         }).join("");
         return `<div class="sn-ec-block">
           <div class="sn-ec-head"><strong>${escapeHtml(c.courseKey)}</strong><span>${head}</span></div>
@@ -9656,14 +9696,6 @@
       else showToast("Round not found.");
       return;
     }
-    const holeBtn = event.target.closest("[data-sn-hole]");
-    if (holeBtn && seasonStory && seasonStory.improvement.hole) {
-      const ref = seasonStory.improvement.hole.ref;
-      const round = snFindRound(ref.roundId);
-      const hole = round ? round.holes.find((h) => h.number === ref.number) : null;
-      if (round && hole) openHeatmapDrilldown(physicalHoleId(round.courseId, hole));
-      return;
-    }
     const boardBtn = event.target.closest("[data-sn-eclectic]");
     if (boardBtn) {
       eclecticCourse = boardBtn.dataset.snEclectic;
@@ -9678,12 +9710,15 @@
   async function shareSeason() {
     if (!seasonStory) return;
     const text = Season.shareLine(seasonStory);
+    if (navigator.share) {
+      try { await navigator.share({ text }); return; } catch (error) {
+        if (error && error.name === "AbortError") return;
+      }
+    }
     try {
-      if (navigator.share) { await navigator.share({ text }); return; }
       await navigator.clipboard.writeText(text);
       showToast("Copied. Paste it anywhere.");
-    } catch (error) {
-      if (error && error.name === "AbortError") return;
+    } catch {
       showToast(text);
     }
   }
@@ -10655,7 +10690,7 @@
     renderProfileBag();
     renderTrophyRoom();
     renderEclecticPanel();
-    renderSeasonPanel();
+    renderSeasonPanel({ dataChanged: true });
     renderStatsExplorer();
     renderSnapshotPanel();
     tagHomePanelsWithSections();
@@ -11885,7 +11920,8 @@
     const link = event.target.closest("[data-open-course-name]");
     if (!link) return;
     const name = link.dataset.openCourseName;
-    [els.roundDetailOverlay, els.bucketSheetOverlay, els.parTypeSheetOverlay, els.seasonSheetOverlay].forEach((overlay) => {
+    closeSeasonSheet({ restoreFocus: false });
+    [els.roundDetailOverlay, els.bucketSheetOverlay, els.parTypeSheetOverlay].forEach((overlay) => {
       if (overlay && !overlay.hidden) {
         overlay.hidden = true;
       }
