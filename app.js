@@ -13196,6 +13196,11 @@
       renderDeerwoodByNine(rounds);
       renderParStats(rounds);
       renderHeatmap(rounds);
+      renderStrokesGained(rounds);
+      renderPuttingPanel(rounds);
+      renderScoringDistribution(rounds);
+      renderTeeClubPerformance(rounds);
+      renderScramblingPanel(rounds);
       renderMissCost(rounds);
       renderHandicapPanel();
       updateFiltersButtonState();
