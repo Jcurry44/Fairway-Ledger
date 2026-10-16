@@ -9162,6 +9162,12 @@
   let seasonStale = true;
 
   function seasonPanelVisible() {
+    // At startup renderAll runs before setActiveTab restores the last tab
+    // (Home ships .active in the HTML), so trust the saved tab first: opening
+    // the app mid-round on Add Round must not pay for the story.
+    let savedTab = null;
+    try { savedTab = localStorage.getItem(ACTIVE_TAB_KEY); } catch {}
+    if (savedTab && savedTab !== "home") return false;
     const home = document.querySelector('[data-tab-panel="home"]');
     return !!home && home.classList.contains("active")
       && activeHomeSection === "records" && getActiveSubsection("records") === "season";
@@ -9247,7 +9253,10 @@
     const years = Season.seasonYears(state.rounds);
     if (!years.length) {
       seasonStory = null;
-      els.seasonPanel.innerHTML = emptyState("Save a round and your season story starts here: rounds, your best, the hole you got better at, and the records that fell.");
+      const anyScored = state.rounds.some((r) => Array.isArray(r.holes) && r.holes.some((h) => Number.isFinite(h.score) && h.score > 0));
+      els.seasonPanel.innerHTML = emptyState(anyScored
+        ? "Your saved rounds don't have dates, so there's no season to tell yet. Rounds saved from here on carry today's date."
+        : "Save a round and your season story starts here: rounds, your best, the hole you got better at, and the records that fell.");
       return;
     }
     if (!seasonYear || !years.includes(seasonYear)) seasonYear = years[0];
@@ -9304,7 +9313,9 @@
         ? stat("scoring", nineScoring ? "9-hole avg" : "Scoring avg", snFmt1(s.now), `${scoringTrend.text}`, scoringTrend.better ? "better" : "")
         : stat("scoring", nineScoring ? "9-hole avg" : "Scoring avg", s.avg != null ? snFmt1(s.avg) : "—", s.rounds ? `${snPlural(s.rounds, nineScoring ? "complete 9" : "complete 18")} · 4 for a trend` : "no complete rounds yet"),
       h.change != null
-        ? stat("index", "Index", snFmt1(h.now), `${indexTrend.text}${indexStartWord ? ` (${indexStartWord})` : ""}`, indexTrend.better ? "better" : "")
+        ? stat("index", "Index", snFmt1(h.now), h.change === 0
+          ? `held at ${snFmt1(h.now)}${h.startKind === "carried" ? " since Jan 1" : " all season"}`
+          : `${indexTrend.text}${indexStartWord ? ` (${indexStartWord})` : ""}`, indexTrend.better ? "better" : "")
         : stat("index", "Index", h.now != null ? snFmt1(h.now) : "—", h.now != null ? "estimate" : "needs 3 rated rounds")
     ].join("");
 
@@ -9521,7 +9532,7 @@
       const trail = h.trail.filter((t) => t.index != null);
       const startText = h.startKind === "carried"
         ? `You started ${year} at ${snFmt1(h.start)}, carried over from earlier seasons.`
-        : h.startKind === "first" ? `Your first estimate this year was ${snFmt1(h.start)}, after round ${h.startRef.roundNumber} (${snDate(h.startRef.date)}).` : "";
+        : h.startKind === "first" ? `Your first estimate this year was ${snFmt1(h.start)}, after round ${h.startRef.roundNumber} (${escapeHtml(snDate(h.startRef.date))}).` : "";
       const t = snTrend(h.start, h.now, h.change, true);
       const chart = snColumns(trail.map((row) => ({ value: row.index })), { caption: "Your index after each round, oldest first" });
       const rows = h.trail.slice().reverse().map((row) => {
