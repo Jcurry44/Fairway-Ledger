@@ -9152,6 +9152,16 @@
   let seasonStory = null;
   let seasonSheetReturnFocus = null;
   let seasonSheetKeyHandler = null;
+  // The story replays every round (handicap after each one, eclectic deltas,
+  // Trophy Room before/after), so it only builds while Records › Season is on
+  // screen; otherwise renderAll just marks it stale.
+  let seasonStale = true;
+
+  function seasonPanelVisible() {
+    const home = document.querySelector('[data-tab-panel="home"]');
+    return !!home && home.classList.contains("active")
+      && activeHomeSection === "records" && getActiveSubsection("records") === "season";
+  }
 
   function seasonOpts() {
     return {
@@ -9196,8 +9206,13 @@
     return state.rounds.find((r) => String(r.id) === String(id)) || null;
   }
 
-  function renderSeasonPanel() {
+  function renderSeasonPanel(options) {
     if (!els.seasonPanel) return;
+    if (!(options && options.force) && !seasonPanelVisible()) {
+      seasonStale = true;
+      return;
+    }
+    seasonStale = false;
     if (!Season) {
       els.seasonPanel.innerHTML = emptyState("The season story couldn't load. Reload the app to try again.");
       return;
@@ -9877,6 +9892,7 @@
   }
 
   function applyHomeSectionUi() {
+    if (seasonStale && seasonPanelVisible()) renderSeasonPanel();
     const homeTab = document.querySelector('[data-tab-panel="home"]');
     const activeSub = getActiveSubsection(activeHomeSection);
     if (homeTab) {
@@ -11937,6 +11953,7 @@
     // A season drill sheet belongs to Home; "Edit this round" and course
     // links jump tabs, so it must not float over the new tab.
     if (targetName !== "home") closeSeasonSheet({ restoreFocus: false });
+    else if (seasonStale) renderSeasonPanel();
     // Refresh the snapshot panel on Profile entry so timestamps don't drift
     // (e.g. "2 min ago" should re-evaluate without a full reload).
     if (targetName === "profile") renderSnapshotPanel();
