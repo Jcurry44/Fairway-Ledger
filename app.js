@@ -1581,6 +1581,11 @@
     applyScorecardSnapshot(snapshotMap);
     // A resumed round is genuinely in progress — keep autosaving its edits.
     roundTouched = true;
+    // Re-render the start chrome: renderAll drew it while roundStarted was
+    // still false, which left "Play it again" and Start Round live above the
+    // resumed scorecard. Either one re-rendered an empty card over the
+    // restored scores, and the next tap autosaved over the draft.
+    applyRoundStartedUi();
     updateRoundPreview();
     setActiveTab("rounds");
   }
@@ -2230,6 +2235,10 @@
   }
 
   function startRound() {
+    if (hasLiveRound() && roundStarted) {
+      applyRoundStartedUi();
+      return;
+    }
     const blocker = getStartRoundBlocker();
     if (blocker) {
       showToast(blocker);
@@ -2307,6 +2316,11 @@
   }
 
   function applyQuickStart(setup) {
+    if (roundStarted && hasLiveRound()) {
+      renderQuickStart();
+      showToast("You have a round in progress. Save or reset it before starting another.");
+      return;
+    }
     // Same field order restoreInProgressRound uses — course first, then hole
     // count (which re-renders the layout options), then tee/layout.
     els.roundDate.value = todayLocal();
