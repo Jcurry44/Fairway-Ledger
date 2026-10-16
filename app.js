@@ -8517,8 +8517,12 @@
       });
     };
 
-    const has18 = scored.filter((r) => r.holes.length === 18);
-    const has9 = scored.filter((r) => r.holes.length === 9);
+    // A round competes for 18- or 9-hole records only when every hole on its
+    // card has a score: a 12-hole "18" (an import or voice draft cut short)
+    // would otherwise post a 63 as the lowest 18-hole gross.
+    const complete = (r) => r.holes.every((h) => Number.isFinite(h.score) && h.score > 0);
+    const has18 = scored.filter((r) => r.holes.length === 18 && complete(r));
+    const has9 = scored.filter((r) => r.holes.length === 9 && complete(r));
 
     function pickBest(arr, valueOf, direction) {
       let best = null;
