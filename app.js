@@ -1458,7 +1458,7 @@
         const holeShots = {};
         Object.entries(pendingHoles).forEach(([key, data]) => {
           if (data.note) holeNotes[key] = data.note;
-          if (data.clubs && data.clubs.length) holeClubs[key] = [...data.clubs];
+          if (data.clubs && data.clubs.length && !seededClubHoles.has(String(key))) holeClubs[key] = [...data.clubs];
           if (data.shots && data.shots.length) holeShots[key] = normalizeShots(data.shots);
           // Write the canonical array form. Legacy drafts wrote a single
           // string under the same key — restore handles both shapes.
@@ -2652,6 +2652,8 @@
         if (event && event.isTrusted) roundTouched = true;
         if (event && event.isTrusted && event.target && event.target.classList
           && event.target.classList.contains("putts-input")) event.target.dataset.entered = "1";
+        if (event && event.isTrusted && event.target && event.target.classList
+          && event.target.classList.contains("score-input")) delete event.target.dataset.prefilled;
         // Re-derive GIR + auto-add Putter for the hole this input belongs to.
         const target = event && event.target;
         if (target && target.dataset && target.dataset.hole) {
@@ -3854,6 +3856,7 @@
     if (!(scoreInput instanceof HTMLInputElement) || scoreInput.value.trim() !== "") return;
     const par = Number(scoreInput.dataset.par) || 4;
     scoreInput.value = String(par);
+    scoreInput.dataset.prefilled = "1";
     // Mark the prefilled value as auto-set so recalculateScoreForHole
     // can override it once the user starts logging real strokes.
     // Without this, the par value sat as a "manual" entry that blocked
@@ -4118,7 +4121,7 @@
         if (currentEntryMode === "quick") {
           if (inputClass === "score-input") {
             const scoreInput = stack.querySelector(`.score-input[data-hole="${holeNumber}"]`);
-            if (scoreInput) delete scoreInput.dataset.autoScore;
+            if (scoreInput) { delete scoreInput.dataset.autoScore; delete scoreInput.dataset.prefilled; }
           }
           quickAfterTap(holeNumber, inputClass);
           return;
@@ -4131,7 +4134,7 @@
           // User manually picked a score — mark as overridden so
           // subsequent auto-recalcs don't blow it away.
           const scoreInput = stack.querySelector(`.score-input[data-hole="${holeNumber}"]`);
-          if (scoreInput) delete scoreInput.dataset.autoScore;
+          if (scoreInput) { delete scoreInput.dataset.autoScore; delete scoreInput.dataset.prefilled; }
           maybeAutoAdvanceAfterScore(holeNumber);
         }
         return;
@@ -4210,6 +4213,7 @@
       const input = stack.querySelector(`.${inputClass}[data-hole="${holeNumber}"]`);
       if (input) {
         if (inputClass === "putts-input") input.dataset.entered = "1";
+        if (inputClass === "score-input") delete input.dataset.prefilled;
         input.value = custom.value;
         input.dispatchEvent(new Event("input", { bubbles: true }));
       }
@@ -11725,7 +11729,11 @@
     const next = els.roundCourse.value;
     if (roundStarted && !editingRoundId && previous && previous !== next && hasLiveRound()) {
       // One chip tap used to clear the round you're playing. Ask first.
+      // (A non-Deerwood tee chip lands here too, with roundTee already moved.)
+      const nextTee = els.roundTee ? els.roundTee.value : "";
+      const previousCourse = getCourse(previous);
       els.roundCourse.value = previous;
+      if (els.roundTee && previousCourse && previousCourse.tee && previous !== DEERWOOD_COURSE_ID) els.roundTee.value = previousCourse.tee;
       syncAllChipsToSelects();
       openDestructiveConfirm({
         title: "Switch course and clear this round?",
@@ -11734,6 +11742,7 @@
         showBackupHint: false,
         onConfirm: () => {
           els.roundCourse.value = next;
+          if (els.roundTee && nextTee) els.roundTee.value = nextTee;
           syncAllChipsToSelects();
           apply();
         }
@@ -12071,9 +12080,8 @@
     const activeScore = activeCard ? activeCard.querySelector(".score-input") : null;
     snapshot.forEach((values, holeNumber) => {
       if (activeScore && activeScore.dataset.hole === String(holeNumber)
-        && activeScore.dataset.autoScore !== undefined
-        && String(values.score) === String(activeScore.dataset.par)
-        && String(activeScore.dataset.autoScore) === String(values.score)) {
+        && activeScore.dataset.prefilled === "1"
+        && String(values.score) === String(activeScore.dataset.par)) {
         values.score = "";
       }
       const unscored = String(values.score || "").trim() === "";
