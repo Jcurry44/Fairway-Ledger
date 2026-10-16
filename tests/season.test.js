@@ -71,7 +71,7 @@ test("buildSeason: a year with no rounds is empty, and in progress when it is th
 
 // ---- Played + best -----------------------------------------------------------------
 
-test("played: rounds, scored holes, 18s vs 9s, and months with the gaps filled", () => {
+test("played: rounds, scored holes, complete 18s / 9s / unfinished, months with gaps filled", () => {
   const rounds = [
     round("a", "2026-04-20", "ridge-blue", gross18(90)),
     round("b", "2026-06-02", "ridge-blue", PARS9.map((p) => p + 1)),
@@ -80,8 +80,9 @@ test("played: rounds, scored holes, 18s vs 9s, and months with the gaps filled",
   const story = S.buildSeason(rounds, "2026", OPTS);
   assert.equal(story.played.rounds, 3);
   assert.equal(story.played.holes, 18 + 9 + 17);
-  assert.equal(story.played.eighteens, 2);
+  assert.equal(story.played.eighteens, 1); // the 17-hole card is unfinished, not an 18
   assert.equal(story.played.nines, 1);
+  assert.equal(story.played.unfinished, 1);
   assert.deepEqual(story.played.byMonth.map((m) => [m.month, m.rounds]), [
     ["2026-04", 1], ["2026-05", 0], ["2026-06", 2]
   ]);
@@ -211,7 +212,9 @@ test("handicap: missing or throwing estimator is reported, not guessed", () => {
   assert.equal(none.now, null);
   const boom = S.buildSeason(rounds, "2026", Object.assign({ handicapOf: () => { throw new Error("x"); } }, OPTS)).handicap;
   assert.equal(boom.now, null);
-  assert.equal(boom.reason, "too-few");
+  assert.equal(boom.reason, "unavailable");
+  const few = S.buildSeason(rounds, "2026", Object.assign({ handicapOf: () => null }, OPTS)).handicap;
+  assert.equal(few.reason, "too-few");
 });
 
 // ---- Biggest hole improvement -------------------------------------------------------------------
@@ -273,7 +276,7 @@ test("nemesis: beating the hole that usually beats you counts in the year you di
   const n = S.buildSeason(rounds, "2026", OPTS).nemesis;
   assert.equal(n.events.length, 1);
   assert.equal(n.holes, 1);
-  assert.deepEqual(n.events[0], { roundId: "rev", date: "2026-05-01", courseKey: "ridge", key: "ridge:4", label: "4", score: 5, par: 5 });
+  assert.deepEqual(n.events[0], { roundId: "rev", date: "2026-05-01", courseKey: "ridge", key: "ridge:4", group: null, label: "4", score: 5, par: 5 });
   assert.equal(S.buildSeason(rounds, "2025", OPTS).nemesis.events.length, 0);
 });
 
@@ -418,6 +421,58 @@ test("shareLine: plain text built only from facts that exist", () => {
   assert.match(line, / — Fairway Ledger$/);
   assert.doesNotMatch(line, /record/); // a first season's records aren't "fell"
   assert.equal(S.shareLine({ state: "empty" }), "");
+});
+
+// ---- Review fixes (Fable build review 2026-10-16) ----------------------------------------------------
+
+test("undated rounds are history: they hold records and eclectics but never join a season", () => {
+  const rounds = [
+    round("undated", "", "ridge-blue", gross18(72)),
+    round("a", "2026-05-01", "ridge-blue", gross18(88)),
+    round("b", "2026-06-01", "ridge-blue", gross18(82))
+  ];
+  assert.deepEqual(S.seasonYears(rounds), ["2026"]);
+  const story = S.buildSeason(rounds, "2026", Object.assign({ trophies: fakeTrophies }, OPTS));
+  assert.equal(story.undated, 1);
+  assert.equal(story.played.rounds, 2);
+  assert.equal(story.firstSeason, false);
+  // The undated 72 still holds the record, so nothing "fell" (Trophy Room agrees).
+  assert.deepEqual(story.records.fell, []);
+  // Its holes are already on the board, so this year's rounds can't be "new holes".
+  assert.equal(story.eclectic.newHoles, 0);
+});
+
+test("a season of nines tells its scoring story in 9-hole rounds", () => {
+  const rounds = [46, 45, 43, 42].map((g, i) => {
+    const scores = PARS9.slice();
+    let extra = g - 36;
+    for (let h = 0; extra > 0; h = (h + 1) % 9, extra -= 1) scores[h] += 1;
+    return round(`n${i}`, `2026-05-0${i + 1}`, "ridge-blue", scores);
+  });
+  const story = S.buildSeason(rounds, "2026", OPTS);
+  assert.equal(story.scoring.rounds, 0);
+  assert.equal(story.scoring.reason, "none");
+  assert.equal(story.scoring9.rounds, 4);
+  assert.equal(story.scoring9.start, 45.5);
+  assert.equal(story.scoring9.now, 42.5);
+  assert.equal(S.scoringFor(story), story.scoring9);
+  assert.equal(S.headline(story).text, "You shot 3 strokes better per nine, 45.5 to 42.5 on average.");
+  assert.match(S.shareLine(story), /avg \(9s\) 45\.5 → 42\.5/);
+});
+
+test("a 9-hole variant's name rides along with improvement, nemesis and eclectic holes", () => {
+  const groupKey = (r) => (r.courseId.startsWith("cross-") ? r.courseId.slice(6) : null);
+  const opts = { eclecticOpts: { courseKey: () => "cross", holeKey: (r, h) => `${r.courseId}:${h.number}`, groupKey } };
+  const scores = (h1) => PARS9.map((p, i) => (i === 0 ? h1 : p + 1));
+  const rounds = [
+    round("a", "2026-05-01", "cross-red", scores(7)),
+    round("b", "2026-05-02", "cross-red", scores(7)),
+    round("c", "2026-05-03", "cross-red", scores(4)),
+    round("d", "2026-05-04", "cross-red", scores(4))
+  ];
+  const story = S.buildSeason(rounds, "2026", opts);
+  assert.equal(story.improvement.hole.group, "red");
+  assert.equal(story.improvement.hole.label, "1");
 });
 
 // ---- Purity ----------------------------------------------------------------------------------------------------------
