@@ -4,7 +4,33 @@
 survive context resets. Each entry has the original prompt/thought + my
 take + a rough effort estimate.*
 
-Last updated: 2026-10-16 (revamp wave 1 — see below)
+Last updated: 2026-10-16 (wave 2: Season Story — see below)
+
+---
+
+## 2026-10-16 — Wave 2, item 1: Season Story (branch `ledger-season-2026-10-16`, NOT live yet)
+
+Records › Season (now the Records default): your year in golf from saved rounds.
+Engine `lib/season.js` (pure, 27 tests); UI in app.js "Season Story" block; deploy
+bump 2026-10-16b. Fable build review = GO WITH FIXES (all P1/P2 fixed), then Fable final look.
+
+- Hero: one honest headline (index fell / shot better / records fell / first season),
+  tiles for rounds, best round, scoring avg start → now, index start → now.
+- Moments: records that fell (Jan 1 → now), most improved hole (4+ plays, 0.3+/play,
+  else says so), nemeses beaten, eclectic strokes off, putting and greens trends
+  (detail rounds only), most played course. Year chips, Share line, Save as PDF
+  (season-only print; hidden in an iPhone home-screen app where print does nothing).
+- Every number drills down (month bars, start → now column strips, play grids, round
+  detail on top); Esc / backdrop close one level; focus and scroll restored.
+- Honest data: scoring uses complete 18s (a season of nines gets a 9-hole story),
+  unfinished rounds are named, undated rounds count as history only.
+- Builds only while Records › Season is on screen (cached per year): the story
+  replays every round, ~190 ms at 300 rounds on a desktop CPU.
+
+**Found, not fixed (separate follow-up):** a 9-hole round on an 18-hole non-Deerwood
+course keeps the 18-hole course id, and lib/golf-math.js rates it against the 18-hole
+Course Rating (differential ≈ −21), dragging the index down in Trends › Handicap and
+the Season's index alike.
 
 ---
 
@@ -29,7 +55,7 @@ Deploy: ASSET_VERSION / busters 2026-10-16a, live-verified (sw.js, app.js, eclec
 200; no console errors). Each phone needs one online open to pick up the new SW. Wife +
 dad get Quick as their default unless they chose a mode in Profile.
 
-**Wave 2 (in order):** Season Story (timely — WNY season ends in weeks), Miss Cost
+**Wave 2 (in order):** ~~Season Story~~ (built, see above), Miss Cost
 map, One Thing focus (port Haven's engine), "vs you" baseline for the Home SG tile,
 back-nine fade panel, Round card image, chrome-hiding focus mode during a round,
 Detailed-card More disclosure. Later: auto-conditions (catalog coordinates first).
