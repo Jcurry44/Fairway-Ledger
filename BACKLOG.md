@@ -8,10 +8,11 @@ Last updated: 2026-10-16 (wave 2: Miss Cost map — see below)
 
 ---
 
-## 2026-10-16 — Wave 2, item 2: Miss Cost map (branch `ledger-misscost-2026-10-16`, NOT live yet)
+## 2026-10-16 — Wave 2, item 2: Miss Cost map (LIVE: main `fc127fa`, deployed 2026-10-16d with Joe's go)
 
 Home › Clubs › Miss cost (now the Clubs default): what each kind of miss costs you.
-Engine `lib/misscost.js` (pure, 12 tests); deploy bump 2026-10-16d.
+Engine `lib/misscost.js` (pure, 19 tests; 305 total); deploy 2026-10-16d, live-verified at 375px (no
+console errors). Fable build review = GO WITH FIXES, final look = GO WITH RIDE-ALONGS, all applied.
 
 - Each miss is priced against your clean holes on the same par: tee shots left / right /
   short / long vs fairway hit, fairway / greenside / both bunkers vs no sand, 3-putts vs
@@ -77,7 +78,7 @@ Deploy: ASSET_VERSION / busters 2026-10-16a, live-verified (sw.js, app.js, eclec
 200; no console errors). Each phone needs one online open to pick up the new SW. Wife +
 dad get Quick as their default unless they chose a mode in Profile.
 
-**Wave 2 (in order):** ~~Season Story~~ (live), ~~Miss Cost~~ (built, see above)
+**Wave 2 (in order):** ~~Season Story~~ (live), ~~Miss Cost~~ (live)
 map, One Thing focus (port Haven's engine), "vs you" baseline for the Home SG tile,
 back-nine fade panel, Round card image, chrome-hiding focus mode during a round,
 Detailed-card More disclosure. Later: auto-conditions (catalog coordinates first).
